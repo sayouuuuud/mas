@@ -1,21 +1,16 @@
 'use client'
 
 import Image from 'next/image'
-import { useState } from 'react'
-import { Pause, Play } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
-import { Button } from '@/components/ui/button'
 import { allBrands } from '@/lib/site'
 
 export function BrandMarquee() {
   const { t, lang } = useLanguage()
-  const [paused, setPaused] = useState(false)
-  const RotationIcon = paused ? Play : Pause
 
   return (
     <section aria-label={t.brandMarquee.label} className="relative bg-background py-10 text-foreground md:py-14">
       <div className="brand-marquee-viewport" dir="ltr">
-        <div className="brand-marquee-track" data-paused={paused}>
+        <div className="brand-marquee-track">
           {[false, true].map((duplicate) => (
             <ul
               key={String(duplicate)}
@@ -42,17 +37,6 @@ export function BrandMarquee() {
           ))}
         </div>
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        className="absolute end-4 bottom-1 hidden size-11 rounded-full motion-safe:flex"
-        aria-label={paused ? t.brandMarquee.play : t.brandMarquee.pause}
-        aria-pressed={paused}
-        onClick={() => setPaused((value) => !value)}
-      >
-        <RotationIcon aria-hidden="true" />
-      </Button>
     </section>
   )
 }

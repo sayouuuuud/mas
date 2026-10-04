@@ -93,6 +93,10 @@ html[lang='en'] {
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
   }
   html {
     scroll-behavior: smooth;
@@ -155,13 +159,7 @@ html[lang='en'] {
 .brand-marquee-track {
   display: flex;
   width: max-content;
-  animation: brand-scroll 45s linear infinite;
-}
-
-.brand-marquee-track[data-paused='true'],
-.brand-marquee-viewport:hover .brand-marquee-track,
-.brand-marquee-viewport:focus-within .brand-marquee-track {
-  animation-play-state: paused;
+  animation: brand-scroll 36s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -173,7 +171,15 @@ html[lang='en'] {
     animation: none;
   }
   .brand-marquee-viewport {
-    overflow-x: auto;
+    mask-image: none;
+  }
+  .brand-marquee-track {
+    width: 100%;
+  }
+  .brand-marquee-track > ul {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
   }
   .brand-marquee-duplicate {
     display: none;
