@@ -32,12 +32,11 @@ export function HeroSlider({ children, footer }: { children: ReactNode; footer: 
 
   useEffect(() => {
     if (!api) return
-    const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
     const autoplay = api.plugins().autoplay
     const updateSlide = () => setCurrent(api.selectedScrollSnap())
     const updatePlayback = () => {
       const active = !document.hidden
-      if (active) autoplay.play(preference.matches)
+      if (active) autoplay.play(false)
       else autoplay.stop()
       setAutoplayActive(active)
     }
@@ -47,13 +46,11 @@ export function HeroSlider({ children, footer }: { children: ReactNode; footer: 
     api.on('select', updateSlide)
     api.on('reInit', updateSlide)
     api.on('reInit', updatePlayback)
-    preference.addEventListener('change', updatePlayback)
     document.addEventListener('visibilitychange', updatePlayback)
     return () => {
       api.off('select', updateSlide)
       api.off('reInit', updateSlide)
       api.off('reInit', updatePlayback)
-      preference.removeEventListener('change', updatePlayback)
       document.removeEventListener('visibilitychange', updatePlayback)
       autoplay.stop()
     }

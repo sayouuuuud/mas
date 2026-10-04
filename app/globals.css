@@ -177,8 +177,4 @@ html[lang='en'] {
   .hero-copy {
     animation: none;
   }
-  .brand-marquee-track {
-    animation-duration: calc(var(--brand-count) * 4s);
-    animation-timing-function: steps(var(--brand-count), end);
-  }
 }

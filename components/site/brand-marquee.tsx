@@ -1,7 +1,6 @@
 'use client'
 
 import Image from 'next/image'
-import type { CSSProperties } from 'react'
 import { useLanguage } from '@/components/language-provider'
 import { allBrands } from '@/lib/site'
 
@@ -11,7 +10,7 @@ export function BrandMarquee() {
   return (
     <section aria-label={t.brandMarquee.label} className="relative bg-background py-10 text-foreground md:py-14">
       <div className="brand-marquee-viewport" dir="ltr">
-        <div className="brand-marquee-track" style={{ '--brand-count': allBrands.length } as CSSProperties}>
+        <div className="brand-marquee-track">
           {[false, true].map((duplicate) => (
             <ul
               key={String(duplicate)}
