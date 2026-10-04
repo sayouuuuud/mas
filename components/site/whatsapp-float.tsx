@@ -14,7 +14,7 @@ export function WhatsAppFloat() {
       rel="noopener noreferrer"
       aria-label={t.whatsappFloat.label}
       title={t.whatsappFloat.label}
-      className="fixed end-5 bottom-5 z-50 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 ring-4 ring-background transition-transform hover:scale-105 focus-visible:ring-ring motion-reduce:transition-none"
+      className="fixed end-5 bottom-5 z-30 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-foreground"
     >
       <WhatsAppIcon className="size-7" />
     </a>

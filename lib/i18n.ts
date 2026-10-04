@@ -21,11 +21,12 @@ const ar = {
   },
   hero: {
     badge: 'الشريك الرئيسي',
-    titleStart: 'شريكك الموثوق في توزيع',
-    titleHighlight: 'الزيوت والشحوم ورمان البلي',
+    titleStart: 'خبرة هندسية.',
+    titleHighlight: 'توريد تثق به.',
     subtitle:
-      'نوفّر للمصانع والأساطيل ومراكز الخدمة منتجات أصلية من أكبر العلامات العالمية، مع دعم فني هندسي متخصص وتوصيل سريع من مخازننا في قليوب.',
-    imageAlt: 'مخزن منظم يضم براميل زيوت وعبوات شحوم على أرفف معدنية',
+      'زيوت، شحوم ورمان بلي من علامات عالمية. نوفّر لقطاع الصناعة والنقل المنتجات المناسبة، والدعم الفني الذي تحتاجه أعمالك.',
+    explore: 'اكتشف منتجاتنا',
+    imageAlt: 'فني يفحص مجموعة تروس ورمان بلي داخل ورشة صناعية',
     stockNote: 'مخزون جاهز للتوريد',
     stockPlace: 'مخازن قليوب',
     stats: [
@@ -61,8 +62,8 @@ const ar = {
   },
   products: {
     eyebrow: 'المنتجات',
-    title: 'ثلاثة خطوط منتجات لكل احتياجاتك',
-    subtitle: 'اختر خط المنتج واطلب عرض سعر مباشرة، وسيتواصل معك فريقنا في أسرع وقت.',
+    title: 'منتجات تحافظ على كفاءة أعمالك',
+    subtitle: 'من اختيار المواصفات إلى التوريد، نوفر ما تحتاجه محركاتك ومعداتك وخطوط إنتاجك.',
     request: 'اطلب عرض سعر',
     items: {
       oils: {
@@ -100,7 +101,7 @@ const ar = {
   },
   quote: {
     eyebrow: 'تواصل معنا',
-    title: 'اطلب عرض سعر خلال دقيقة',
+    title: 'لنتحدث عن احتياجاتك',
     subtitle: 'املأ البيانات وسنفتح لك واتساب برسالة جاهزة، أو تواصل معنا مباشرة بالهاتف أو البريد.',
     form: {
       title: 'نموذج طلب عرض سعر',
@@ -187,11 +188,12 @@ const en: Dictionary = {
   },
   hero: {
     badge: 'Main partner',
-    titleStart: 'Your trusted distributor of',
-    titleHighlight: 'oils, greases and bearings',
+    titleStart: 'Engineering expertise.',
+    titleHighlight: 'Supply you can trust.',
     subtitle:
-      'We supply factories, fleets and service centers with genuine products from the world’s leading brands, backed by specialist engineering support and fast delivery from our Qalyub warehouses.',
-    imageAlt: 'Organized warehouse with oil drums and grease pails on steel racks',
+      'Oils, greases and bearings from leading global brands. The right products and technical support for industry, transport and your everyday operations.',
+    explore: 'Explore our products',
+    imageAlt: 'Technician inspecting an industrial gearbox and bearing assembly in a workshop',
     stockNote: 'Stock ready to ship',
     stockPlace: 'Qalyub warehouses',
     stats: [
@@ -227,8 +229,8 @@ const en: Dictionary = {
   },
   products: {
     eyebrow: 'Products',
-    title: 'Three product lines for every need',
-    subtitle: 'Pick a product line and request a quote directly — our team will get back to you quickly.',
+    title: 'Keep your operations moving',
+    subtitle: 'From choosing the right specification to supply, we support your engines, equipment and production lines.',
     request: 'Request a quote',
     items: {
       oils: {
@@ -266,7 +268,7 @@ const en: Dictionary = {
   },
   quote: {
     eyebrow: 'Contact us',
-    title: 'Request a quote in a minute',
+    title: 'Let’s talk about what you need',
     subtitle: 'Fill in your details and we’ll open WhatsApp with a ready message — or reach us directly by phone or email.',
     form: {
       title: 'Quote request form',

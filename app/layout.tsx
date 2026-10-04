@@ -1,22 +1,21 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Cairo, IBM_Plex_Sans_Arabic } from 'next/font/google'
+import { Inter, Tajawal } from 'next/font/google'
 import { cookies } from 'next/headers'
 import { LanguageProvider } from '@/components/language-provider'
 import { LANG_COOKIE, type Lang } from '@/lib/i18n'
 import './globals.css'
 
-const cairo = Cairo({
+const tajawal = Tajawal({
   subsets: ['arabic', 'latin'],
-  weight: ['600', '700', '800'],
-  variable: '--font-cairo',
+  weight: ['400', '500', '700'],
+  variable: '--font-tajawal',
   display: 'swap',
 })
 
-const plexArabic = IBM_Plex_Sans_Arabic({
-  subsets: ['arabic', 'latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-plex',
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
   display: 'swap',
 })
 
@@ -42,7 +41,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'light',
-  themeColor: '#2A7E92',
+  themeColor: '#267F92',
   width: 'device-width',
   initialScale: 1,
 }
@@ -59,7 +58,7 @@ export default async function RootLayout({
     <html
       lang={lang}
       dir={lang === 'ar' ? 'rtl' : 'ltr'}
-      className={`${cairo.variable} ${plexArabic.variable} bg-background`}
+      className={`${tajawal.variable} ${inter.variable} bg-background`}
     >
       <body className="font-sans antialiased">
         <LanguageProvider initialLang={lang}>{children}</LanguageProvider>

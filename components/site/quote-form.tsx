@@ -85,7 +85,7 @@ export function QuoteForm() {
       noValidate
       onSubmit={handleSubmit}
       aria-labelledby="quote-form-title"
-      className="flex flex-col gap-6 rounded-2xl border bg-card p-6 shadow-sm sm:p-8"
+      className="flex flex-col gap-7 border-t pt-8"
     >
       <h3 id="quote-form-title" className="text-xl font-bold">
         {f.title}
@@ -211,8 +211,8 @@ export function QuoteForm() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <Button type="submit" className="h-12 w-full gap-2 text-base font-semibold">
-          <WhatsAppIcon className="size-5" />
+        <Button type="submit" className="h-12 w-fit rounded-full px-7">
+          <WhatsAppIcon data-icon="inline-start" />
           {f.submit}
         </Button>
         <p className="text-sm leading-relaxed text-muted-foreground">{f.hint}</p>

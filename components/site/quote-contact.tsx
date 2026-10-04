@@ -9,15 +9,15 @@ export function QuoteContact() {
   const { t } = useLanguage()
 
   return (
-    <section id="contact" aria-labelledby="contact-title" className="bg-secondary py-20 md:py-28">
-      <div className="mx-auto flex max-w-7xl flex-col gap-14 px-4 sm:px-6 lg:px-8">
+    <section id="contact" aria-labelledby="contact-title" className="py-20 md:py-28">
+      <div className="site-container flex flex-col gap-12">
         <SectionHeading
           id="contact-title"
           eyebrow={t.quote.eyebrow}
           title={t.quote.title}
           subtitle={t.quote.subtitle}
         />
-        <div className="grid items-start gap-6 lg:grid-cols-[1.45fr_1fr] lg:gap-8">
+        <div className="grid items-start gap-12 md:grid-cols-[1.3fr_1fr] lg:gap-20">
           <QuoteForm />
           <ContactInfo />
         </div>

@@ -40,14 +40,14 @@ export function ContactInfo() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div id="contact-direct" className="flex flex-col gap-4 rounded-2xl border bg-card p-6">
+      <div id="contact-direct" className="flex flex-col gap-4 border-t pt-8">
         <h3 className="text-lg font-bold">{c.title}</h3>
         <ul className="flex flex-col divide-y">
           {rows.map((row) => {
             const Icon = row.icon
             const content = (
               <>
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
+                <span className="flex size-8 shrink-0 items-center justify-center text-primary">
                   <Icon className="size-5" />
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5">
@@ -75,7 +75,7 @@ export function ContactInfo() {
             )
           })}
         </ul>
-        <p className="flex items-center gap-2 rounded-lg bg-accent/15 px-3 py-2.5 text-sm">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Headset className="size-4 shrink-0 text-foreground" aria-hidden="true" />
           <span>
             {c.support}: <span className="font-semibold">{company.support[lang]}</span>
@@ -83,14 +83,14 @@ export function ContactInfo() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-2xl border bg-card p-6">
+      <div className="flex flex-col gap-4 border-t pt-8">
         <h3 className="text-lg font-bold">{c.addressesTitle}</h3>
         <ul className="flex flex-col gap-4">
           {locations.map((location) => {
             const Icon = location.icon
             return (
               <li key={location.label} className="flex gap-4">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
+                <span className="flex size-8 shrink-0 items-center justify-center text-primary">
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
                 <span className="flex flex-col gap-0.5">

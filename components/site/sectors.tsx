@@ -1,54 +1,36 @@
 'use client'
 
-import { Factory, HardHat, Tractor, Truck, Wrench, Zap } from 'lucide-react'
+import Image from 'next/image'
 import { useLanguage } from '@/components/language-provider'
-import { SectionHeading } from '@/components/site/section-heading'
 
-const sectorIcons = {
-  factories: Factory,
-  fleets: Truck,
-  service: Wrench,
-  construction: HardHat,
-  agriculture: Tractor,
-  power: Zap,
-} as const
-
-const sectorKeys = Object.keys(sectorIcons) as (keyof typeof sectorIcons)[]
+const sectorKeys = ['factories', 'fleets', 'service', 'construction', 'agriculture', 'power'] as const
 
 export function Sectors() {
   const { t } = useLanguage()
 
   return (
-    <section id="sectors" aria-labelledby="sectors-title" className="py-20 md:py-28">
-      <div className="mx-auto flex max-w-7xl flex-col gap-14 px-4 sm:px-6 lg:px-8">
-        <SectionHeading
-          id="sectors-title"
-          eyebrow={t.sectors.eyebrow}
-          title={t.sectors.title}
-          subtitle={t.sectors.subtitle}
-          align="center"
-        />
-
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sectorKeys.map((key) => {
-            const Icon = sectorIcons[key]
-            const sector = t.sectors.items[key]
-            return (
-              <li
-                key={key}
-                className="group flex gap-5 rounded-2xl border bg-card p-6 transition-colors hover:border-primary/40 hover:bg-secondary"
-              >
-                <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <Icon className="size-6" aria-hidden="true" />
-                </span>
-                <div className="flex flex-col gap-1.5">
-                  <h3 className="text-lg font-bold">{sector.title}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{sector.body}</p>
-                </div>
+    <section id="sectors" aria-labelledby="sectors-title" className="bg-foreground text-background">
+      <div className="mx-auto flex max-w-400 flex-col lg:flex-row">
+        <div className="flex flex-col gap-10 px-6 py-20 sm:px-12 lg:w-3/5 lg:px-16 lg:py-24">
+          <div className="flex max-w-xl flex-col gap-4">
+            <p className="text-base text-background/70">{t.sectors.eyebrow}</p>
+            <h2 id="sectors-title" className="font-sans text-3xl leading-snug font-medium text-balance sm:text-4xl lg:text-5xl">
+              {t.sectors.title}
+            </h2>
+            <p className="text-lg leading-relaxed text-background/75">{t.sectors.subtitle}</p>
+          </div>
+          <ul className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+            {sectorKeys.map((key) => (
+              <li key={key} className="flex flex-col gap-2 border-t border-background/20 pt-5">
+                <h3 className="text-lg font-medium">{t.sectors.items[key].title}</h3>
+                <p className="text-sm leading-relaxed text-background/70">{t.sectors.items[key].body}</p>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+        </div>
+        <div className="relative min-h-96 overflow-hidden lg:w-2/5">
+          <Image src="/images/hero-warehouse.png" alt={t.hero.stockPlace} fill sizes="(min-width: 1024px) 40vw, 100vw" className="object-cover" />
+        </div>
       </div>
     </section>
   )
