@@ -1,5 +1,7 @@
 import { QuoteProvider } from '@/components/quote-provider'
 import { About } from '@/components/site/about'
+import { BrandMarquee } from '@/components/site/brand-marquee'
+import { CompanyOverview } from '@/components/site/company-overview'
 import { Footer } from '@/components/site/footer'
 import { Header } from '@/components/site/header'
 import { Hero } from '@/components/site/hero'
@@ -15,6 +17,8 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
+        <BrandMarquee />
+        <CompanyOverview />
         <About />
         <Products />
         <Partners />

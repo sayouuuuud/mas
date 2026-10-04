@@ -143,11 +143,39 @@ html[lang='en'] {
   animation: hero-enter 750ms ease-out both;
 }
 
+@keyframes brand-scroll {
+  to { transform: translateX(-50%); }
+}
+
+.brand-marquee-viewport {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+.brand-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: brand-scroll 45s linear infinite;
+}
+
+.brand-marquee-track[data-paused='true'],
+.brand-marquee-viewport:hover .brand-marquee-track,
+.brand-marquee-viewport:focus-within .brand-marquee-track {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .hero-copy {
+  .hero-copy,
+  .brand-marquee-track {
     animation: none;
+  }
+  .brand-marquee-viewport {
+    overflow-x: auto;
+  }
+  .brand-marquee-duplicate {
+    display: none;
   }
 }
