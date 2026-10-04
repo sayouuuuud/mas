@@ -158,30 +158,27 @@ html[lang='en'] {
 
 .brand-marquee-track {
   display: flex;
+  flex-wrap: nowrap;
   width: max-content;
   animation: brand-scroll 36s linear infinite;
+}
+
+.brand-marquee-track > ul {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .hero-copy,
-  .brand-marquee-track {
+  .hero-copy {
     animation: none;
   }
-  .brand-marquee-viewport {
-    mask-image: none;
-  }
   .brand-marquee-track {
-    width: 100%;
-  }
-  .brand-marquee-track > ul {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .brand-marquee-duplicate {
-    display: none;
+    animation-duration: calc(var(--brand-count) * 4s);
+    animation-timing-function: steps(var(--brand-count), end);
   }
 }

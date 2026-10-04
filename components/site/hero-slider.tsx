@@ -36,8 +36,8 @@ export function HeroSlider({ children, footer }: { children: ReactNode; footer: 
     const autoplay = api.plugins().autoplay
     const updateSlide = () => setCurrent(api.selectedScrollSnap())
     const updatePlayback = () => {
-      const active = !preference.matches && !document.hidden
-      if (active) autoplay.play()
+      const active = !document.hidden
+      if (active) autoplay.play(preference.matches)
       else autoplay.stop()
       setAutoplayActive(active)
     }
