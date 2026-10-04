@@ -35,7 +35,7 @@ export function Header() {
     <header
       className={cn(
         'fixed inset-x-0 top-0 z-40 transition-colors duration-300 motion-reduce:transition-none',
-        solid ? 'border-b border-border bg-background text-foreground' : 'text-background',
+        solid ? 'border-b border-border bg-background/95 text-foreground backdrop-blur-lg' : 'text-background',
       )}
     >
       <div className="site-container flex min-h-24 items-center justify-between gap-6 py-4 md:min-h-28 md:py-5">

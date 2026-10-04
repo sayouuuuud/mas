@@ -8,7 +8,7 @@ export function BrandMarquee() {
   const { t, lang } = useLanguage()
 
   return (
-    <section aria-label={t.brandMarquee.label} className="relative bg-background py-10 text-foreground md:py-14">
+    <section aria-label={t.brandMarquee.label} className="relative border-b border-primary/10 bg-background py-8 text-foreground md:py-10">
       <div className="brand-marquee-viewport" dir="ltr">
         <div className="brand-marquee-track">
           {[false, true].map((duplicate) => (

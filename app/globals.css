@@ -149,6 +149,61 @@ html[lang='en'] {
   animation: hero-enter 750ms ease-out both;
 }
 
+.hero-scene {
+  border-end-start-radius: clamp(2.5rem, 5vw, 5rem);
+}
+
+.hero-shade {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 65%, transparent), transparent 35%), linear-gradient(to left, color-mix(in srgb, var(--foreground) 88%, transparent), color-mix(in srgb, var(--foreground) 55%, transparent) 50%, color-mix(in srgb, var(--foreground) 28%, transparent));
+}
+
+html[dir='ltr'] .hero-shade {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 65%, transparent), transparent 35%), linear-gradient(to right, color-mix(in srgb, var(--foreground) 88%, transparent), color-mix(in srgb, var(--foreground) 55%, transparent) 50%, color-mix(in srgb, var(--foreground) 28%, transparent));
+}
+
+.mechanical-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url('/images/engineering-texture.png') left top / auto clamp(32rem, 70vw, 60rem) no-repeat;
+  opacity: 0.24;
+}
+
+html[dir='ltr'] .mechanical-section::before {
+  transform: scaleX(-1);
+}
+
+.product-card {
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--foreground) 5%, transparent);
+  transition: transform 300ms ease, box-shadow 300ms ease, border-color 300ms ease;
+}
+
+.product-card:focus-within {
+  border-color: var(--primary);
+}
+
+.industry-shade {
+  background: linear-gradient(to left, color-mix(in srgb, var(--foreground) 97%, transparent) 5%, color-mix(in srgb, var(--foreground) 88%, transparent) 45%, color-mix(in srgb, var(--foreground) 35%, transparent));
+}
+
+html[dir='ltr'] .industry-shade {
+  background: linear-gradient(to right, color-mix(in srgb, var(--foreground) 97%, transparent) 5%, color-mix(in srgb, var(--foreground) 88%, transparent) 45%, color-mix(in srgb, var(--foreground) 35%, transparent));
+}
+
+.quote-surface {
+  box-shadow: 0 12px 48px color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .product-card:hover {
+    transform: translateY(-6px);
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--background));
+    box-shadow: 0 18px 44px color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+}
+
 @keyframes brand-scroll {
   to { transform: translateX(-50%); }
 }
@@ -178,5 +233,8 @@ html[lang='en'] {
   }
   .hero-copy {
     animation: none;
+  }
+  .product-card {
+    transition: none;
   }
 }

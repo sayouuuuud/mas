@@ -67,7 +67,7 @@ export function HeroSlider({ children, footer }: { children: ReactNode; footer: 
         data-ready={Boolean(api)}
         data-current-slide={current + 1}
         data-autoplay={autoplayActive}
-        className="isolate flex min-h-160 overflow-hidden bg-foreground text-background md:min-h-176 lg:min-h-192"
+        className="hero-scene isolate flex min-h-160 overflow-hidden bg-foreground text-background md:min-h-176 lg:min-h-192"
       >
         <div className="absolute inset-0 -z-20 [&_[data-slot=carousel-content]]:h-full">
           <CarouselContent className="ml-0 h-full">
@@ -92,7 +92,7 @@ export function HeroSlider({ children, footer }: { children: ReactNode; footer: 
             ))}
           </CarouselContent>
         </div>
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-foreground/55" />
+        <div aria-hidden="true" className="hero-shade pointer-events-none absolute inset-0 -z-10" />
         <div className="site-container pointer-events-none flex flex-col justify-end gap-12 pt-44 pb-8 md:gap-16 md:pt-52 md:pb-10">
           {children}
           <div className="pointer-events-auto border-t border-background/25 pt-5">

@@ -26,15 +26,21 @@ export function About() {
             {t.about.supportLabel} — {company.support[lang]}
           </a>
         </div>
-        <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted md:aspect-[5/6] md:w-1/2">
+        <figure className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl rounded-ss-[4rem] bg-muted md:aspect-[5/6] md:w-1/2">
           <Image
             src="/images/about-storage.png"
             alt={t.about.imageAlt}
             fill
-            sizes="(min-width: 1024px) 45vw, 90vw"
+            sizes="(min-width: 768px) 45vw, 90vw"
             className="object-cover"
           />
-        </div>
+          <figcaption className="absolute inset-x-5 bottom-5 rounded-2xl border border-background/40 bg-background/95 p-5 text-foreground backdrop-blur-sm md:inset-x-6 md:bottom-6">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium text-primary">{t.hero.stockPlace}</p>
+              <p className="text-xl font-medium">{t.hero.stockNote}</p>
+            </div>
+          </figcaption>
+        </figure>
       </div>
     </section>
   )

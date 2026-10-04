@@ -85,7 +85,7 @@ export function QuoteForm() {
       noValidate
       onSubmit={handleSubmit}
       aria-labelledby="quote-form-title"
-      className="flex flex-col gap-7 border-t pt-8"
+      className="flex flex-col gap-7"
     >
       <h3 id="quote-form-title" className="text-xl font-bold">
         {f.title}

@@ -40,7 +40,7 @@ export function ContactInfo() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div id="contact-direct" className="flex flex-col gap-4 border-t pt-8">
+      <div id="contact-direct" className="flex flex-col gap-4">
         <h3 className="text-lg font-bold">{c.title}</h3>
         <ul className="flex flex-col divide-y">
           {rows.map((row) => {
