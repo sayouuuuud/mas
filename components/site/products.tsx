@@ -30,40 +30,38 @@ export function Products() {
           subtitle={t.products.subtitle}
         />
 
-        <ul className="grid gap-6 md:grid-cols-3 lg:gap-8">
-          {productKeys.map((key) => {
+        <ul className="grid gap-8 md:grid-cols-3">
+          {productKeys.map((key, index) => {
             const item = t.products.items[key]
             return (
-              <li key={key} className="product-card flex flex-col overflow-hidden rounded-3xl border border-primary/10 bg-card text-card-foreground">
-                <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+              <li key={key} className="product-card group flex flex-col border-t-2 border-foreground bg-background text-foreground">
+                <div className="relative aspect-square overflow-hidden bg-muted">
                   <Image
                     src={productImages[key]}
                     alt={item.imageAlt}
                     fill
                     sizes="(min-width: 1280px) 350px, (min-width: 768px) 30vw, 90vw"
-                    className="object-cover"
+                    className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                   />
+                  <span className="absolute start-5 top-5 font-mono text-sm font-medium text-primary">0{index + 1}</span>
+                  <span className="absolute end-5 top-5 size-9 rounded-full border border-foreground/20 bg-background/80 text-center text-lg leading-8 backdrop-blur-sm" aria-hidden="true">+</span>
                 </div>
-                <div className="flex-1 p-6 lg:p-8">
-                  <div className="flex h-full flex-col gap-5">
-                    <div className="flex flex-col gap-3">
-                      <h3 className="font-sans text-3xl font-medium text-balance">{item.title}</h3>
-                      <p className="leading-relaxed text-muted-foreground">{item.body}</p>
-                    </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {item.types.join(' / ')}
-                    </p>
-                    <div className="mt-auto border-t border-primary/10 pt-4">
-                      <a
-                        href="#quote"
-                        onClick={() => setProduct(key)}
-                        className={cn(buttonVariants({ variant: 'link' }), 'h-11 w-full justify-between px-0')}
-                      >
-                        {t.products.request}
-                        <Arrow data-icon="inline-end" aria-hidden="true" />
-                      </a>
-                    </div>
+                <div className="flex flex-1 flex-col gap-6 border-x border-b border-foreground/15 p-6 lg:p-7">
+                  <div className="flex flex-col gap-3">
+                    <h3 className="font-sans text-3xl font-medium text-balance">{item.title}</h3>
+                    <p className="leading-relaxed text-muted-foreground">{item.body}</p>
                   </div>
+                  <p className="border-t border-foreground/15 pt-4 text-sm leading-relaxed text-muted-foreground">
+                    {item.types.join(' / ')}
+                  </p>
+                  <a
+                    href="#quote"
+                    onClick={() => setProduct(key)}
+                    className={cn(buttonVariants({ variant: 'link' }), 'mt-auto h-10 w-fit justify-start gap-3 px-0')}
+                  >
+                    {t.products.request}
+                    <Arrow data-icon="inline-end" aria-hidden="true" />
+                  </a>
                 </div>
               </li>
             )
