@@ -27,14 +27,14 @@ export function Hero() {
         <p className="text-base font-medium text-background/85">{company.name[lang]}</p>
         <h1
           id="hero-title"
-          className={cn('font-sans leading-[1.2] font-normal text-balance', lang === 'ar' ? 'text-5xl sm:text-6xl lg:text-7xl' : 'text-4xl sm:text-5xl lg:text-6xl')}
+          className={cn('font-sans leading-[1.2] font-bold text-balance', lang === 'ar' ? 'text-5xl sm:text-6xl lg:text-7xl' : 'text-4xl sm:text-5xl lg:text-6xl')}
         >
           <span className="block">{t.hero.titleStart}</span>
           <span className="block">{t.hero.titleHighlight}</span>
         </h1>
-        <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">{t.hero.subtitle}</p>
-        <div className="flex flex-wrap items-center gap-7">
-          <a href="#quote" className={cn(buttonVariants({ variant: 'inverse', size: 'lg' }), 'h-12 rounded-full px-7')}>
+        <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/85">{t.hero.subtitle}</p>
+        <div className="flex flex-wrap items-center gap-6">
+          <a href="#quote" className={cn(buttonVariants({ size: 'lg' }), 'h-12 gap-4 rounded-lg px-6')}>
             {t.cta.quote}
             <Arrow data-icon="inline-end" aria-hidden="true" />
           </a>
@@ -42,9 +42,10 @@ export function Hero() {
             href={whatsappLink(t.hero.whatsappGreeting)}
             target="_blank"
             rel="noopener noreferrer"
-            className="py-3 text-base font-medium underline-offset-8 hover:underline"
+            className="inline-flex items-center gap-3 py-3 text-base font-medium underline-offset-8 hover:underline"
           >
             {t.cta.whatsapp}
+            <Arrow className="size-4" aria-hidden="true" />
           </a>
         </div>
       </div>

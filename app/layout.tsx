@@ -32,7 +32,14 @@ export const metadata: Metadata = {
     'bearings Egypt',
     'M.A.S Engineering For Trade',
   ],
-  generator: 'v0.app',
+  applicationName: 'M.A.S Engineering For Trade',
+  openGraph: {
+    title: 'M.A.S Engineering For Trade | خبرة هندسية. توريد تثق به.',
+    description: 'زيوت، شحوم ورمان بلي من علامات عالمية، بدعم فني متخصص لقطاع الصناعة والنقل في مصر.',
+    locale: 'ar_EG',
+    alternateLocale: 'en_GB',
+    type: 'website',
+  },
   icons: {
     icon: '/images/logo.png',
     apple: '/images/logo.png',

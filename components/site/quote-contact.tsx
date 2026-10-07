@@ -11,17 +11,15 @@ export function QuoteContact() {
   return (
     <section id="contact" aria-labelledby="contact-title" className="bg-muted py-20 text-foreground md:py-28">
       <div className="site-container flex flex-col gap-12">
-        <SectionHeading
-          id="contact-title"
-          eyebrow={t.quote.eyebrow}
-          title={t.quote.title}
-          subtitle={t.quote.subtitle}
-        />
-        <div className="grid items-start gap-10 md:grid-cols-[1.3fr_1fr] lg:gap-14">
-          <div className="quote-surface rounded-3xl border border-primary/10 bg-card p-6 text-card-foreground sm:p-8 lg:p-10">
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between md:gap-12">
+          <SectionHeading id="contact-title" eyebrow={t.quote.eyebrow} title={t.quote.title} />
+          <p className="max-w-md text-base leading-relaxed text-pretty text-muted-foreground">{t.quote.subtitle}</p>
+        </div>
+        <div className="grid items-start gap-10 md:grid-cols-[1.3fr_1fr] lg:gap-16">
+          <div className="rounded-2xl bg-card p-6 text-card-foreground sm:p-8 lg:p-10">
             <QuoteForm />
           </div>
-          <div className="md:py-8">
+          <div className="md:py-2">
             <ContactInfo />
           </div>
         </div>
