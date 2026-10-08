@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, Headset, Mail, MapPin, Phone, Printer, Store, Warehouse } from 'lucide-react'
+import { Building2, Headset, Mail, Phone, Printer, Store, Warehouse } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/icons'
 import { useLanguage } from '@/components/language-provider'
 import { addresses, company, phones, whatsappLink } from '@/lib/site'
@@ -11,6 +11,14 @@ type Row = {
   value: string
   href?: string
   external?: boolean
+}
+
+function IconBadge({ icon: Icon }: { icon: Row['icon'] }) {
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-background/20 text-accent">
+      <Icon className="size-4" />
+    </span>
+  )
 }
 
 export function ContactInfo() {
@@ -39,20 +47,17 @@ export function ContactInfo() {
   ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <div id="contact-direct" className="flex flex-col gap-4">
+    <div className="flex flex-col gap-8 rounded-[1.125rem] bg-foreground p-6 text-background sm:p-8 lg:p-10">
+      <div id="contact-direct" className="flex flex-col gap-3">
         <h3 className="text-lg font-bold">{c.title}</h3>
-        <ul className="flex flex-col divide-y">
+        <ul className="flex flex-col divide-y divide-background/10">
           {rows.map((row) => {
-            const Icon = row.icon
             const content = (
               <>
-                <span className="flex size-8 shrink-0 items-center justify-center text-primary">
-                  <Icon className="size-5" />
-                </span>
+                <IconBadge icon={row.icon} />
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-sm text-muted-foreground">{row.label}</span>
-                  <span dir="ltr" className="truncate text-start font-semibold">
+                  <span className="text-sm text-background/60">{row.label}</span>
+                  <span dir="ltr" className="truncate text-start font-bold">
                     {row.value}
                   </span>
                 </span>
@@ -64,7 +69,7 @@ export function ContactInfo() {
                   <a
                     href={row.href}
                     {...(row.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                    className="flex items-center gap-4 rounded-lg py-3 transition-colors hover:text-primary"
+                    className="flex items-center gap-4 py-3 transition-colors hover:text-accent"
                   >
                     {content}
                   </a>
@@ -75,34 +80,26 @@ export function ContactInfo() {
             )
           })}
         </ul>
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Headset className="size-4 shrink-0 text-foreground" aria-hidden="true" />
+        <p className="flex items-center gap-2 text-sm text-background/70">
+          <Headset className="size-4 shrink-0 text-accent" aria-hidden="true" />
           <span>
-            {c.support}: <span className="font-semibold">{company.support[lang]}</span>
+            {c.support}: <span className="font-bold text-background">{company.support[lang]}</span>
           </span>
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 border-t pt-8">
+      <div className="flex flex-col gap-4 border-t border-background/15 pt-8">
         <h3 className="text-lg font-bold">{c.addressesTitle}</h3>
         <ul className="flex flex-col gap-4">
-          {locations.map((location) => {
-            const Icon = location.icon
-            return (
-              <li key={location.label} className="flex gap-4">
-                <span className="flex size-8 shrink-0 items-center justify-center text-primary">
-                  <Icon className="size-5" aria-hidden="true" />
-                </span>
-                <span className="flex flex-col gap-0.5">
-                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="size-3.5" aria-hidden="true" />
-                    {location.label}
-                  </span>
-                  <span className="leading-relaxed font-medium">{location.value}</span>
-                </span>
-              </li>
-            )
-          })}
+          {locations.map((location) => (
+            <li key={location.label} className="flex items-start gap-4">
+              <IconBadge icon={location.icon} />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-sm text-background/60">{location.label}</span>
+                <span className="leading-relaxed font-medium">{location.value}</span>
+              </span>
+            </li>
+          ))}
         </ul>
       </div>
     </div>

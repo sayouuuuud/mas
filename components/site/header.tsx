@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Menu, X } from 'lucide-react'
+import { Globe, Menu, Phone, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { Logo } from '@/components/logo'
 import { phones } from '@/lib/site'
@@ -38,14 +38,20 @@ export function Header() {
         solid ? 'border-b border-border bg-background/95 text-foreground backdrop-blur-lg' : 'text-background',
       )}
     >
-      <div className="site-container flex min-h-24 items-center justify-between gap-6 py-4 md:min-h-28 md:py-5">
-        <a href="#top" onClick={() => setOpen(false)} aria-label="M.A.S Engineering For Trade">
+      <div className="site-container flex min-h-24 items-center gap-10 py-4 md:min-h-28 md:py-5 lg:gap-16">
+        <a href="#top" onClick={() => setOpen(false)} aria-label="M.A.S Engineering For Trade" className="shrink-0">
           <Logo inverted={!solid} />
         </a>
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-end gap-5 text-sm md:gap-7">
-            <a href={phones.mobile.href} dir="ltr" className="hidden transition-opacity hover:opacity-70 md:block">
-              {phones.mobile.display}
+        <div className="flex flex-1 flex-col gap-3">
+          <div
+            className={cn(
+              'flex items-center justify-end gap-5 text-sm md:gap-7 md:border-b md:pb-3',
+              solid ? 'md:border-border' : 'md:border-background/25',
+            )}
+          >
+            <a href={phones.mobile.href} className="hidden items-center gap-2 transition-opacity hover:opacity-70 md:flex">
+              <Phone className="size-3.5" aria-hidden="true" />
+              <span dir="ltr">{phones.mobile.display}</span>
             </a>
             <a href="#quote" className="hidden underline-offset-4 hover:underline md:block">
               {t.cta.quote}
@@ -54,8 +60,9 @@ export function Header() {
               type="button"
               onClick={toggle}
               aria-label={t.meta.switchLabel}
-              className="min-h-10 min-w-10 font-medium underline-offset-4 hover:underline md:min-h-6"
+              className="flex min-h-10 items-center gap-2 font-medium underline-offset-4 hover:underline md:min-h-6"
             >
+              <Globe className="size-3.5" aria-hidden="true" />
               <span lang={lang === 'ar' ? 'en' : 'ar'}>{t.meta.switchTo}</span>
             </button>
             <button
@@ -70,10 +77,13 @@ export function Header() {
             </button>
           </div>
           <nav aria-label={t.nav.primary} className="hidden md:block">
-            <ul className="flex items-center gap-5 lg:gap-9">
+            <ul className="flex items-center justify-end gap-6 lg:gap-10">
               {sections.map((key) => (
                 <li key={key}>
-                  <a href={`#${key}`} className="inline-block py-1 text-base font-medium underline-offset-8 hover:underline">
+                  <a
+                    href={`#${key}`}
+                    className="relative inline-block py-1 text-base font-medium after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:scale-x-0 after:bg-accent after:transition-transform after:duration-300 hover:after:scale-x-100 ltr:after:origin-left rtl:after:origin-right motion-reduce:after:transition-none"
+                  >
                     {t.nav[key]}
                   </a>
                 </li>
