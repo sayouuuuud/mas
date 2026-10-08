@@ -9,7 +9,7 @@ export function QuoteContact() {
   const { t } = useLanguage()
 
   return (
-    <section id="contact" aria-labelledby="contact-title" className="bg-muted py-20 text-foreground md:py-28">
+    <section id="contact" aria-labelledby="contact-title" className="supply-section relative isolate overflow-hidden bg-background py-20 text-foreground md:py-28">
       <div className="site-container flex flex-col gap-12">
         <SectionHeading
           id="contact-title"
@@ -17,13 +17,11 @@ export function QuoteContact() {
           title={t.quote.title}
           subtitle={t.quote.subtitle}
         />
-        <div className="grid items-start gap-10 md:grid-cols-[1.3fr_1fr] lg:gap-14">
-          <div className="quote-surface rounded-3xl border border-primary/10 bg-card p-6 text-card-foreground sm:p-8 lg:p-10">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] lg:gap-8">
+          <div className="rounded-[1.125rem] border bg-background p-6 sm:p-8 lg:p-10">
             <QuoteForm />
           </div>
-          <div className="md:py-8">
-            <ContactInfo />
-          </div>
+          <ContactInfo />
         </div>
       </div>
     </section>

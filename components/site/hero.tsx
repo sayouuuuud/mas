@@ -1,51 +1,53 @@
 'use client'
 
-import { ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react'
-import { HeroSlider } from '@/components/site/hero-slider'
+import { ArrowDown } from 'lucide-react'
+import { WhatsAppIcon } from '@/components/icons'
 import { useLanguage } from '@/components/language-provider'
-import { buttonVariants } from '@/components/ui/button'
+import { ActionLink } from '@/components/site/action-link'
+import { HeroSlider } from '@/components/site/hero-slider'
 import { company, whatsappLink } from '@/lib/site'
 import { cn } from '@/lib/utils'
 
 export function Hero() {
   const { t, lang } = useLanguage()
-  const Arrow = lang === 'ar' ? ArrowLeft : ArrowRight
 
   return (
     <HeroSlider
       footer={
-        <div className="flex items-center justify-between gap-5 text-sm text-background/85">
-          <a href="#products" className="inline-flex items-center gap-3 underline-offset-4 hover:underline">
-            {t.hero.explore}
+        <a href="#products" className="group inline-flex items-center gap-3 text-sm text-background/85 transition-colors hover:text-background">
+          <span className="flex size-8 items-center justify-center rounded-full border border-background/30 transition-transform duration-300 motion-safe:group-hover:translate-y-0.5">
             <ArrowDown className="size-4" aria-hidden="true" />
-          </a>
-          <p className="hidden xl:block">{t.hero.stockNote} · {t.hero.stockPlace}</p>
-        </div>
+          </span>
+          {t.hero.explore}
+        </a>
       }
     >
       <div className="hero-copy pointer-events-auto flex max-w-xl flex-col gap-6 md:gap-7">
-        <p className="text-base font-medium text-background/85">{company.name[lang]}</p>
+        <p className="flex items-center gap-3 text-sm font-medium text-background/85 md:text-base">
+          <span aria-hidden="true" className="h-px w-8 bg-accent" />
+          {company.name[lang]}
+        </p>
         <h1
           id="hero-title"
-          className={cn('font-sans leading-[1.2] font-normal text-balance', lang === 'ar' ? 'text-5xl sm:text-6xl lg:text-7xl' : 'text-4xl sm:text-5xl lg:text-6xl')}
+          className={cn('font-sans leading-[1.2] text-balance', lang === 'ar' ? 'text-5xl sm:text-6xl lg:text-7xl' : 'text-4xl sm:text-5xl lg:text-6xl')}
         >
-          <span className="block">{t.hero.titleStart}</span>
-          <span className="block">{t.hero.titleHighlight}</span>
+          <span className="block font-light">{t.hero.titleStart}</span>
+          <span className="block font-bold">{t.hero.titleHighlight}</span>
         </h1>
         <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">{t.hero.subtitle}</p>
-        <div className="flex flex-wrap items-center gap-7">
-          <a href="#quote" className={cn(buttonVariants({ variant: 'inverse', size: 'lg' }), 'h-12 rounded-full px-7')}>
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+          <ActionLink href="#quote" variant="accent">
             {t.cta.quote}
-            <Arrow data-icon="inline-end" aria-hidden="true" />
-          </a>
-          <a
+          </ActionLink>
+          <ActionLink
             href={whatsappLink(t.hero.whatsappGreeting)}
             target="_blank"
             rel="noopener noreferrer"
-            className="py-3 text-base font-medium underline-offset-8 hover:underline"
+            variant="light"
+            icon={<WhatsAppIcon className="size-4" />}
           >
             {t.cta.whatsapp}
-          </a>
+          </ActionLink>
         </div>
       </div>
     </HeroSlider>

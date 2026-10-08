@@ -5,7 +5,7 @@ import { CircleCheck } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/icons'
 import { useLanguage } from '@/components/language-provider'
 import { useQuote } from '@/components/quote-provider'
-import { Button } from '@/components/ui/button'
+import { ActionIcon, actionVariants } from '@/components/site/action-link'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -211,10 +211,10 @@ export function QuoteForm() {
       </div>
 
       <div className="flex flex-col gap-3">
-        <Button type="submit" className="h-12 w-fit rounded-full px-7">
-          <WhatsAppIcon data-icon="inline-start" />
+        <button type="submit" className={cn(actionVariants({ variant: 'primary' }), 'w-fit')}>
+          <ActionIcon icon={<WhatsAppIcon className="size-4" />} />
           {f.submit}
-        </Button>
+        </button>
         <p className="text-sm leading-relaxed text-muted-foreground">{f.hint}</p>
         <div aria-live="polite">
           {whatsappUrl ? (

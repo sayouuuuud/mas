@@ -32,6 +32,7 @@ const ar = {
     nextSlide: 'الصورة التالية',
     pauseSlides: 'إيقاف تغيير الصور تلقائياً',
     playSlides: 'تشغيل تغيير الصور تلقائياً',
+    chooseSlide: 'اختر صورة',
     slide: 'الصورة',
     of: 'من',
     slides: [
@@ -65,7 +66,7 @@ const ar = {
   },
   partners: {
     eyebrow: 'شركاء النجاح',
-    title: 'نوزّع منتجات علامات يثق بها العالم',
+    title: 'نوزّع منتجات *علامات يثق بها العالم*',
     subtitle: 'شراكات مباشرة مع كبرى شركات الزيوت والمشحمات ورمان البلي لضمان منتج أصلي بسعر عادل.',
     featuredLabel: 'الشريك الرئيسي',
     featuredBody:
@@ -76,7 +77,7 @@ const ar = {
   },
   about: {
     eyebrow: 'عن الشركة',
-    title: 'خبرة هندسية في خدمة صناعتك',
+    title: 'خبرة هندسية في *خدمة صناعتك*',
     body: 'إم إيه إس للتجارة الهندسية شركة مصرية متخصصة في توزيع الزيوت والشحوم ورمان البلي. نعمل مع المصانع وشركات النقل ومراكز خدمة السيارات، ونساعد كل عميل على اختيار المنتج المناسب لمعداته بفضل فريق دعم فني من المهندسين.',
     imageAlt: 'رافعة شوكية تنقل براميل زيوت داخل مخزن التوزيع',
     supportLabel: 'الدعم الفني',
@@ -89,7 +90,7 @@ const ar = {
   },
   products: {
     eyebrow: 'المنتجات',
-    title: 'منتجات تحافظ على كفاءة أعمالك',
+    title: 'منتجات تحافظ على *كفاءة أعمالك*',
     subtitle: 'من اختيار المواصفات إلى التوريد، نوفر ما تحتاجه محركاتك ومعداتك وخطوط إنتاجك.',
     request: 'اطلب عرض سعر',
     items: {
@@ -115,7 +116,7 @@ const ar = {
   },
   sectors: {
     eyebrow: 'القطاعات التي نخدمها',
-    title: 'حلول تشحيم لكل قطاع',
+    title: 'حلول تشحيم *لكل قطاع*',
     subtitle: 'نورّد للشركات والأفراد في مختلف القطاعات الصناعية والتجارية.',
     items: {
       factories: { title: 'المصانع', body: 'زيوت ورمان لخطوط الإنتاج والماكينات.' },
@@ -128,7 +129,7 @@ const ar = {
   },
   quote: {
     eyebrow: 'تواصل معنا',
-    title: 'لنتحدث عن احتياجاتك',
+    title: 'لنتحدث عن *احتياجاتك*',
     subtitle: 'املأ البيانات وسنفتح لك واتساب برسالة جاهزة، أو تواصل معنا مباشرة بالهاتف أو البريد.',
     form: {
       title: 'نموذج طلب عرض سعر',
@@ -187,6 +188,7 @@ const ar = {
     quickLinks: 'روابط سريعة',
     contactTitle: 'بيانات التواصل',
     rights: 'جميع الحقوق محفوظة.',
+    backToTop: 'العودة للأعلى',
   },
   whatsappFloat: {
     label: 'تواصل معنا عبر واتساب',
@@ -226,6 +228,7 @@ const en: Dictionary = {
     nextSlide: 'Next image',
     pauseSlides: 'Pause automatic image rotation',
     playSlides: 'Start automatic image rotation',
+    chooseSlide: 'Choose an image',
     slide: 'Image',
     of: 'of',
     slides: [
@@ -259,7 +262,7 @@ const en: Dictionary = {
   },
   partners: {
     eyebrow: 'Our partners',
-    title: 'We distribute brands the world trusts',
+    title: 'We distribute *brands the world trusts*',
     subtitle: 'Direct partnerships with leading lubricant and bearing manufacturers mean genuine products at fair prices.',
     featuredLabel: 'Main partner',
     featuredBody:
@@ -270,7 +273,7 @@ const en: Dictionary = {
   },
   about: {
     eyebrow: 'About us',
-    title: 'Engineering expertise behind every delivery',
+    title: 'Engineering expertise *behind every delivery*',
     body: 'M.A.S Engineering For Trade is an Egyptian distributor specializing in oils, greases and bearings. We work with factories, transport companies and car service centers, and our team of engineers helps every customer pick the right product for their equipment.',
     imageAlt: 'Forklift moving oil drums inside the distribution warehouse',
     supportLabel: 'Technical support',
@@ -283,7 +286,7 @@ const en: Dictionary = {
   },
   products: {
     eyebrow: 'Products',
-    title: 'Keep your operations moving',
+    title: 'Keep your *operations moving*',
     subtitle: 'From choosing the right specification to supply, we support your engines, equipment and production lines.',
     request: 'Request a quote',
     items: {
@@ -309,7 +312,7 @@ const en: Dictionary = {
   },
   sectors: {
     eyebrow: 'Sectors we serve',
-    title: 'Lubrication solutions for every sector',
+    title: 'Lubrication solutions *for every sector*',
     subtitle: 'We supply businesses and individuals across industrial and commercial sectors.',
     items: {
       factories: { title: 'Factories', body: 'Oils and bearings for production lines and machinery.' },
@@ -322,7 +325,7 @@ const en: Dictionary = {
   },
   quote: {
     eyebrow: 'Contact us',
-    title: 'Let’s talk about what you need',
+    title: 'Let’s talk about *what you need*',
     subtitle: 'Fill in your details and we’ll open WhatsApp with a ready message — or reach us directly by phone or email.',
     form: {
       title: 'Quote request form',
@@ -381,6 +384,7 @@ const en: Dictionary = {
     quickLinks: 'Quick links',
     contactTitle: 'Contact details',
     rights: 'All rights reserved.',
+    backToTop: 'Back to top',
   },
   whatsappFloat: {
     label: 'Chat with us on WhatsApp',
