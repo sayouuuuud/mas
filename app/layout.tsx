@@ -1,23 +1,11 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Inter, Tajawal } from 'next/font/google'
+import './fonts.css'
 import { cookies } from 'next/headers'
 import { LanguageProvider } from '@/components/language-provider'
 import { LANG_COOKIE, type Lang } from '@/lib/i18n'
 import './globals.css'
-
-const tajawal = Tajawal({
-  subsets: ['arabic', 'latin'],
-  weight: ['300', '400', '500', '700'],
-  variable: '--font-tajawal',
-  display: 'swap',
-})
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
+import { DemoProvider } from '@/components/demo/demo-provider'
 
 export const metadata: Metadata = {
   title: 'M.A.S Engineering For Trade | توزيع الزيوت والشحوم ورمان البلي',
@@ -56,12 +44,15 @@ export default async function RootLayout({
 
   return (
     <html
+      data-scroll-behavior="smooth"
       lang={lang}
       dir={lang === 'ar' ? 'rtl' : 'ltr'}
-      className={`${tajawal.variable} ${inter.variable} bg-background`}
+      className="bg-background"
     >
       <body className="font-sans antialiased">
-        <LanguageProvider initialLang={lang}>{children}</LanguageProvider>
+        <LanguageProvider initialLang={lang}>
+          <DemoProvider>{children}</DemoProvider>
+        </LanguageProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

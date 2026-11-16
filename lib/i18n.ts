@@ -130,7 +130,7 @@ const ar = {
   quote: {
     eyebrow: 'تواصل معنا',
     title: 'لنتحدث عن *احتياجاتك*',
-    subtitle: 'املأ البيانات وسنفتح لك واتساب برسالة جاهزة، أو تواصل معنا مباشرة بالهاتف أو البريد.',
+    subtitle: 'جهّز احتياجاتك من الكتالوج، أو تواصل معنا مباشرة بالهاتف أو البريد.',
     form: {
       title: 'نموذج طلب عرض سعر',
       name: 'الاسم',
@@ -155,7 +155,7 @@ const ar = {
       errors: {
         name: 'من فضلك اكتب اسمك.',
         phone: 'من فضلك اكتب رقم موبايل صحيح.',
-        product: 'من فضل�� اختر نوع المنتج.',
+        product: 'من فضلك اختر نوع المنتج.',
       },
     },
     message: {
@@ -326,7 +326,7 @@ const en: Dictionary = {
   quote: {
     eyebrow: 'Contact us',
     title: 'Let’s talk about *what you need*',
-    subtitle: 'Fill in your details and we’ll open WhatsApp with a ready message — or reach us directly by phone or email.',
+    subtitle: 'Prepare your requirements from the catalog, or reach us directly by phone or email.',
     form: {
       title: 'Quote request form',
       name: 'Name',

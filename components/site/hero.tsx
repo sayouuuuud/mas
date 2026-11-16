@@ -14,7 +14,10 @@ export function Hero() {
   return (
     <HeroSlider
       footer={
-        <a href="#products" className="group inline-flex items-center gap-3 text-sm text-background/85 transition-colors hover:text-background">
+        <a
+          href="#products"
+          className="group inline-flex items-center gap-3 text-sm text-background/85 transition-colors hover:text-background"
+        >
           <span className="flex size-8 items-center justify-center rounded-full border border-background/30 transition-transform duration-300 motion-safe:group-hover:translate-y-0.5">
             <ArrowDown className="size-4" aria-hidden="true" />
           </span>
@@ -29,14 +32,21 @@ export function Hero() {
         </p>
         <h1
           id="hero-title"
-          className={cn('font-sans leading-[1.2] text-balance', lang === 'ar' ? 'text-5xl sm:text-6xl lg:text-7xl' : 'text-4xl sm:text-5xl lg:text-6xl')}
+          className={cn(
+            'font-sans leading-[1.2] text-balance',
+            lang === 'ar'
+              ? 'text-5xl sm:text-6xl lg:text-7xl'
+              : 'text-4xl sm:text-5xl lg:text-6xl',
+          )}
         >
           <span className="block font-light">{t.hero.titleStart}</span>
           <span className="block font-bold">{t.hero.titleHighlight}</span>
         </h1>
-        <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">{t.hero.subtitle}</p>
+        <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">
+          {t.hero.subtitle}
+        </p>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-          <ActionLink href="#quote" variant="accent">
+          <ActionLink href="/request-quote" variant="accent">
             {t.cta.quote}
           </ActionLink>
           <ActionLink

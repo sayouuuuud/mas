@@ -14,7 +14,7 @@ export default function Home() {
   return (
     <QuoteProvider>
       <Header />
-      <main>
+      <main id="main-content">
         <Hero />
         <BrandMarquee />
         <About />

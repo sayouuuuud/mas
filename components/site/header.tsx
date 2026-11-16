@@ -1,115 +1,149 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Globe, Menu, Phone, X } from 'lucide-react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Globe, Menu, Phone, ShoppingBag, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { useDemo } from '@/components/demo/demo-provider'
 import { Logo } from '@/components/logo'
 import { phones } from '@/lib/site'
 import { cn } from '@/lib/utils'
 
-const sections = ['about', 'products', 'partners', 'sectors', 'contact'] as const
-
+const links = [
+  ['/products', 'المنتجات', 'Products'],
+  ['/brands', 'العلامات التجارية', 'Brands'],
+  ['/sectors', 'القطاعات', 'Sectors'],
+  ['/about', 'عن الشركة', 'About'],
+  ['/contact', 'تواصل معنا', 'Contact'],
+] as const
 export function Header() {
-  const { t, lang, toggle } = useLanguage()
+  const { lang, toggle } = useLanguage()
+  const { cart } = useDemo()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const solid = scrolled || open
-
+  const c = (ar: string, en: string) => (lang === 'ar' ? ar : en)
+  const solid = pathname !== '/' || scrolled || open
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 32)
-    handleScroll()
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+    const scroll = () => setScrolled(window.scrollY > 32)
+    scroll()
+    window.addEventListener('scroll', scroll, { passive: true })
+    return () => window.removeEventListener('scroll', scroll)
   }, [])
-
   useEffect(() => {
-    if (!open) return
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+    const close = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
     }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [open])
-
+    document.addEventListener('keydown', close)
+    return () => document.removeEventListener('keydown', close)
+  }, [])
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
   return (
-    <header
-      className={cn(
-        'fixed inset-x-0 top-0 z-40 transition-colors duration-300 motion-reduce:transition-none',
-        solid ? 'border-b border-border bg-background/95 text-foreground backdrop-blur-lg' : 'text-background',
-      )}
-    >
-      <div className="site-container flex min-h-24 items-center gap-10 py-4 md:min-h-28 md:py-5 lg:gap-16">
-        <a href="#top" onClick={() => setOpen(false)} aria-label="M.A.S Engineering For Trade" className="shrink-0">
-          <Logo inverted={!solid} />
-        </a>
-        <div className="flex flex-1 flex-col gap-3">
-          <div
-            className={cn(
-              'flex items-center justify-end gap-5 text-sm md:gap-7 md:border-b md:pb-3',
-              solid ? 'md:border-border' : 'md:border-background/25',
-            )}
-          >
-            <a href={phones.mobile.href} className="hidden items-center gap-2 transition-opacity hover:opacity-70 md:flex">
-              <Phone className="size-3.5" aria-hidden="true" />
-              <span dir="ltr">{phones.mobile.display}</span>
-            </a>
-            <a href="#quote" className="hidden underline-offset-4 hover:underline md:block">
-              {t.cta.quote}
-            </a>
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={t.meta.switchLabel}
-              className="flex min-h-10 items-center gap-2 font-medium underline-offset-4 hover:underline md:min-h-6"
+    <>
+      <a href="#main-content" className="skip-link">
+        {c('انتقل للمحتوى', 'Skip to content')}
+      </a>
+      <header
+        className={cn(
+          'fixed inset-x-0 top-0 z-40 transition-colors',
+          solid
+            ? 'border-b bg-background/95 text-foreground backdrop-blur-lg'
+            : 'text-background',
+        )}
+      >
+        <div className="site-container flex min-h-24 items-center justify-between gap-4 py-4">
+          <Link href="/" aria-label={c('إم إيه إس — الرئيسية', 'M.A.S — Home')}>
+            <Logo inverted={!solid} />
+          </Link>
+          <div className="flex flex-col items-end gap-3">
+            <div className="flex items-center gap-4 text-sm">
+              <a
+                href={phones.mobile.href}
+                className="hidden items-center gap-2 lg:flex"
+              >
+                <Phone className="size-3.5" aria-hidden />
+                <span dir="ltr">{phones.mobile.display}</span>
+              </a>
+              <button
+                onClick={toggle}
+                className="flex min-h-10 items-center gap-2"
+                aria-label={c('Switch to English', 'التبديل للعربية')}
+              >
+                <Globe className="size-4" aria-hidden />
+                {c('English', 'العربية')}
+              </button>
+              <Link
+                href="/request-quote"
+                aria-label={`${c('طلب عرض السعر، عدد البنود', 'Quote request, item count')}: ${cart.length}`}
+                className="flex min-h-10 items-center gap-2"
+              >
+                <ShoppingBag className="size-4" aria-hidden />
+                <span className="hidden sm:inline">
+                  {c('طلب عرض سعر', 'Request a quote')}
+                </span>
+                <span className="flex size-6 items-center justify-center rounded-full bg-accent text-xs text-foreground">
+                  {cart.length}
+                </span>
+              </Link>
+              <button
+                className="flex size-10 items-center justify-center md:hidden"
+                onClick={() => setOpen(!open)}
+                aria-expanded={open}
+                aria-controls="mobile-nav"
+                aria-label={c(
+                  open ? 'إغلاق القائمة' : 'فتح القائمة',
+                  open ? 'Close navigation' : 'Open navigation',
+                )}
+              >
+                {open ? <X /> : <Menu />}
+              </button>
+            </div>
+            <nav
+              aria-label={c('التنقل الرئيسي', 'Main navigation')}
+              className="hidden md:block"
             >
-              <Globe className="size-3.5" aria-hidden="true" />
-              <span lang={lang === 'ar' ? 'en' : 'ar'}>{t.meta.switchTo}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen((value) => !value)}
-              aria-expanded={open}
-              aria-controls="mobile-nav"
-              aria-label={open ? t.nav.closeMenu : t.nav.openMenu}
-              className="flex size-10 items-center justify-center md:hidden"
-            >
-              {open ? <X className="size-6" aria-hidden="true" /> : <Menu className="size-6" aria-hidden="true" />}
-            </button>
+              <ul className="flex gap-6 lg:gap-9">
+                {links.map(([href, ar, en]) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      aria-current={
+                        pathname.startsWith(href) ? 'page' : undefined
+                      }
+                      className={cn(
+                        'nav-link',
+                        pathname.startsWith(href) && 'nav-active',
+                      )}
+                    >
+                      {c(ar, en)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </div>
-          <nav aria-label={t.nav.primary} className="hidden md:block">
-            <ul className="flex items-center justify-end gap-6 lg:gap-10">
-              {sections.map((key) => (
-                <li key={key}>
-                  <a
-                    href={`#${key}`}
-                    className="relative inline-block py-1 text-base font-medium after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:scale-x-0 after:bg-accent after:transition-transform after:duration-300 hover:after:scale-x-100 ltr:after:origin-left rtl:after:origin-right motion-reduce:after:transition-none"
-                  >
-                    {t.nav[key]}
-                  </a>
+        </div>
+        {open && (
+          <nav
+            id="mobile-nav"
+            className="border-t bg-background px-6 py-5 text-foreground md:hidden"
+            aria-label={c('قائمة الموبايل', 'Mobile navigation')}
+          >
+            <ul>
+              {links.map(([href, ar, en]) => (
+                <li key={href}>
+                  <Link className="block py-3" href={href}>
+                    {c(ar, en)}
+                  </Link>
                 </li>
               ))}
             </ul>
           </nav>
-        </div>
-      </div>
-      {open ? (
-        <nav id="mobile-nav" aria-label={t.nav.primary} className="border-t bg-background text-foreground md:hidden">
-          <ul className="site-container flex flex-col gap-1 py-5">
-            {sections.map((key) => (
-              <li key={key}>
-                <a href={`#${key}`} onClick={() => setOpen(false)} className="block py-3 text-lg hover:text-primary">
-                  {t.nav[key]}
-                </a>
-              </li>
-            ))}
-            <li>
-              <a href="#quote" onClick={() => setOpen(false)} className="inline-block py-3 text-lg font-bold text-primary">
-                {t.cta.quote}
-              </a>
-            </li>
-          </ul>
-        </nav>
-      ) : null}
-    </header>
+        )}
+      </header>
+    </>
   )
 }
