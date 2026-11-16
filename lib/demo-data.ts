@@ -103,7 +103,17 @@ export type DemoProduct = {
   sectorIds: string[]
   image: string
   status: 'published' | 'draft' | 'archived'
+  createdAt?: string
   featured: boolean
+  description?: Localized
+  applications?: Localized
+  benefits?: Localized
+  seoTitle?: Localized
+  seoDescription?: Localized
+  relatedIds?: string[]
+  mediaIds?: string[]
+  mainMediaId?: string
+  sourceNote?: string
   specs: { label: Localized; value: string }[]
   variants: DemoVariant[]
 }
@@ -230,8 +240,21 @@ export const initialProducts: DemoProduct[] = rows.map(
       'نموذج منتج لتوضيح بيانات الكتالوج واختيار المواصفات والعبوة المناسبة.',
       'A sample catalog entry to demonstrate specifications and pack selection.',
     ),
+    description: bi(
+      'بيانات توضيحية لمعاينة صفحة المنتج. القيم الفنية والاعتمادات تحتاج مراجعة الشركة قبل الاستخدام التجاري.',
+      'Illustrative product detail content. Technical values and approvals require company review before commercial use.',
+    ),
+    applications: bi(
+      'تُراجع ملاءمة المنتج مع الفريق الفني وفق متطلبات المعدة.',
+      'Confirm suitability with the technical team against equipment requirements.',
+    ),
+    benefits: bi(
+      'عرض منظم للمواصفات والعبوات وتجهيز استفسار فني واضح.',
+      'Organized specifications and pack options for a clear technical inquiry.',
+    ),
     image: categories.find((c) => c.id === category)!.image,
     status: 'published',
+    createdAt: new Date(Date.UTC(2026, 10, 1 + i)).toISOString(),
     featured: i < 3,
     specs: [
       {
@@ -272,7 +295,24 @@ export type DemoRequest = {
   date: string
   priority: string
   notes: string[]
-  items: { variantId: string; quantity: number }[]
+  phone?: string
+  email?: string
+  followUpAt?: string
+  closeReason?: string
+  customerId?: string
+  events?: { id: string; at: string; action: string; text: string }[]
+  items: {
+    snapshot?: {
+      name: Localized
+      sku: string
+      label: Localized
+      unit: Localized
+    }
+    variantId?: string
+    description?: string
+    quantity: number
+    unit?: string
+  }[]
 }
 export const initialRequests: DemoRequest[] = [
   {

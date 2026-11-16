@@ -6,10 +6,16 @@ import { useLanguage } from '@/components/language-provider'
 import { ActionLink } from '@/components/site/action-link'
 import { HeroSlider } from '@/components/site/hero-slider'
 import { company, whatsappLink } from '@/lib/site'
+import {
+  useContentPreview,
+  useSiteInfo,
+} from '@/components/demo/content-preview'
 import { cn } from '@/lib/utils'
 
 export function Hero() {
   const { t, lang } = useLanguage()
+  const { company, whatsappHref } = useSiteInfo()
+  const content = useContentPreview('home-hero')
 
   return (
     <HeroSlider
@@ -39,18 +45,32 @@ export function Hero() {
               : 'text-4xl sm:text-5xl lg:text-6xl',
           )}
         >
-          <span className="block font-light">{t.hero.titleStart}</span>
-          <span className="block font-bold">{t.hero.titleHighlight}</span>
+          {content ? (
+            <span className="block font-bold">
+              {lang === 'ar' ? content.nameAr : content.nameEn}
+            </span>
+          ) : (
+            <>
+              <span className="block font-light">{t.hero.titleStart}</span>
+              <span className="block font-bold">{t.hero.titleHighlight}</span>
+            </>
+          )}
         </h1>
         <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">
-          {t.hero.subtitle}
+          {content
+            ? lang === 'ar'
+              ? content.bodyAr
+              : content.bodyEn
+            : t.hero.subtitle}
         </p>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
           <ActionLink href="/request-quote" variant="accent">
-            {t.cta.quote}
+            {content
+              ? (lang === 'ar' ? content.cta : content.ctaEn) || t.cta.quote
+              : t.cta.quote}
           </ActionLink>
           <ActionLink
-            href={whatsappLink(t.hero.whatsappGreeting)}
+            href={`${whatsappHref}?text=${encodeURIComponent(t.hero.whatsappGreeting)}`}
             target="_blank"
             rel="noopener noreferrer"
             variant="light"

@@ -5,7 +5,8 @@ import { useDemo } from '@/components/demo/demo-provider'
 import { Badge, EmptyState, Field, useCopy } from '@/components/demo/ui'
 import { AdminLogin, AdminShell } from './admin-shell'
 import { ProductWorkspace } from './products-workspace'
-import { Dashboard, RequestsPage, QuotationPreview } from './sales-workspace'
+import { Dashboard, RequestsPage } from './sales-workspace'
+import { QuotationsWorkspace } from './quotations-workspace'
 import {
   MediaWorkspace,
   ResourceWorkspace,
@@ -20,7 +21,7 @@ export function AdminPage({ path }: { path: string[] }) {
   if (!section) body = <Dashboard />
   else if (section === 'products') body = <ProductWorkspace id={id} />
   else if (section === 'quote-requests') body = <RequestsPage id={id} />
-  else if (section === 'quotations') body = <QuotationPreview id={id} />
+  else if (section === 'quotations') body = <QuotationsWorkspace id={id} />
   else if (section === 'media') body = <MediaWorkspace />
   else if (section === 'settings') body = <SettingsWorkspace />
   else if (section === 'reports') body = <Reports />
@@ -169,43 +170,27 @@ function Reports() {
   )
 }
 function ActivityLog() {
+  const { audit } = useDemo()
   const c = useCopy()
   const [q, setQ] = useState('')
-  const events = [
-    {
-      action: 'catalog.preview',
-      entity: 'DEMO-001',
-      actor: c('مستخدم تجريبي', 'Sample user'),
-      note: c(
-        'فتح معاينة منتج — مثال للسجل المستقبلي',
-        'Product preview opened — example future record',
-      ),
-    },
-    {
-      action: 'request.assignment',
-      entity: 'DEMO-RFQ-002',
-      actor: c('مدير تجريبي', 'Sample manager'),
-      note: c('مثال توضيحي لإسناد طلب', 'Illustrative request assignment'),
-    },
-  ]
-  const filtered = events.filter((e) =>
-    `${e.action} ${e.entity} ${e.note}`.toLowerCase().includes(q.toLowerCase()),
+  const rows = audit.filter((e) =>
+    `${e.action} ${e.entity}`.toLowerCase().includes(q.toLowerCase()),
   )
   return (
     <>
       <div className="admin-heading">
         <div>
-          <h1>{c('سجل النشاط', 'Activity log')}</h1>
+          <h1>{c('سجل نشاط المعاينة', 'Preview activity log')}</h1>
           <p>
             {c(
-              'شكل السجل المخطط له. لا يمثل سجل تدقيق فعليًا لتغييرات المعاينة.',
-              'Planned log format. This is not a real audit trail of preview changes.',
+              'أحداث التعديلات المحلية لهذه الجلسة، وليست سجل تدقيق مؤمّنًا.',
+              'Local session activity, not a secured audit trail.',
             )}
           </p>
         </div>
       </div>
       <div className="panel bg-white">
-        <Field label={c('البحث في الأمثلة', 'Search examples')}>
+        <Field label={c('بحث بالنوع أو المعرف', 'Search action or identifier')}>
           <input
             className="control"
             value={q}
@@ -213,24 +198,24 @@ function ActivityLog() {
           />
         </Field>
         <div className="mt-5 space-y-4">
-          {filtered.map((e) => (
-            <article className="rounded-lg border p-5" key={e.action}>
-              <div className="flex flex-wrap items-center gap-3">
+          {rows.length ? (
+            rows.map((e) => (
+              <article key={e.id} className="rounded-lg border p-4">
                 <Badge>{e.action}</Badge>
-                <span className="font-mono text-sm">{e.entity}</span>
-              </div>
-              <p className="my-3 text-sm">{e.note}</p>
-              <p className="text-xs text-muted-foreground">
-                {e.actor} · {c('مثال ثابت', 'Static example')}
-              </p>
-            </article>
-          ))}
-          {!filtered.length && (
+                <p className="my-2 font-mono text-sm">{e.entity}</p>
+                <time className="text-xs text-muted-foreground">
+                  {new Date(e.at).toLocaleString('ar-EG', {
+                    timeZone: 'Africa/Cairo',
+                  })}
+                </time>
+              </article>
+            ))
+          ) : (
             <EmptyState
-              title={c('لا توجد نتائج', 'No results')}
+              title={c('لا توجد أحداث مطابقة', 'No matching activity')}
               description={c(
-                'ابحث بنوع الإجراء أو رقم السجل.',
-                'Search by action or record identifier.',
+                'جرّب تعديل منتج أو طلب لتظهر أنشطتك هنا.',
+                'Edit a product or request to see session activity here.',
               )}
             />
           )}

@@ -13,6 +13,8 @@ import {
 import { useDemo } from '@/components/demo/demo-provider'
 import { useLanguage } from '@/components/language-provider'
 import { Badge, EmptyState, Field, useCopy } from '@/components/demo/ui'
+import { useConfirmAction, Pagination } from './frontend-tools'
+import { csvDownload } from '@/lib/frontend-model'
 import { requestStatuses } from '@/lib/demo-data'
 
 export function StatusBadge({ status }: { status: string }) {
@@ -37,9 +39,18 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
   const c = useCopy()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
+  const [owner, setOwner] = useState('')
+  const [priority, setPriority] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [page, setPage] = useState(1)
   const filtered = requests.filter(
     (r) =>
       (!status || r.status === status) &&
+      (!owner || r.owner === owner) &&
+      (!priority || r.priority === priority) &&
+      (!from || r.date >= from) &&
+      (!to || r.date <= to) &&
       `${r.id} ${r.company} ${r.name}`.toLowerCase().includes(q.toLowerCase()),
   )
   return (
@@ -72,6 +83,70 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
           </select>
         </div>
       )}
+      {!compact && (
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <Field label={c('المسؤول', 'Owner')}>
+            <select
+              className="control"
+              value={owner}
+              onChange={(e) => setOwner(e.target.value)}
+            >
+              <option value="">{c('الكل', 'All')}</option>
+              {Array.from(
+                new Set(requests.map((r) => r.owner).filter(Boolean)),
+              ).map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label={c('الأولوية', 'Priority')}>
+            <select
+              className="control"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              <option value="">{c('الكل', 'All')}</option>
+              {['normal', 'high', 'urgent'].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label={c('من تاريخ', 'From')}>
+            <input
+              className="control"
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </Field>
+          <Field label={c('إلى تاريخ', 'To')}>
+            <input
+              className="control"
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </Field>
+          <button
+            className="btn-outline self-end"
+            onClick={() =>
+              csvDownload(
+                'demo-requests.csv',
+                ['reference', 'company', 'status', 'owner', 'date'],
+                filtered.map((r) => [
+                  r.id,
+                  r.company,
+                  r.status,
+                  r.owner,
+                  r.date,
+                ]),
+              )
+            }
+          >
+            {c('تصدير النتائج', 'Export results')}
+          </button>
+        </div>
+      )}
       {filtered.length ? (
         <div
           className="table-scroll"
@@ -98,30 +173,47 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <Link
-                      href={`/admin/quote-requests/${r.id}`}
-                      className="font-mono text-sm font-bold text-primary"
-                    >
-                      {r.id}
-                    </Link>
-                  </td>
-                  <td>
-                    <span className="font-semibold">{r.company}</span>
-                    <p className="text-xs text-muted-foreground">{r.name}</p>
-                  </td>
-                  <td>
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td>{r.owner || c('غير مسند', 'Unassigned')}</td>
-                  <td>{r.items.length}</td>
-                  <td>
-                    <time dateTime={r.date}>{r.date}</time>
-                  </td>
-                </tr>
-              ))}
+              {filtered
+                .slice(
+                  compact
+                    ? 0
+                    : (Math.min(
+                        page,
+                        Math.max(1, Math.ceil(filtered.length / 8)),
+                      ) -
+                        1) *
+                        8,
+                  compact
+                    ? 5
+                    : Math.min(
+                        page,
+                        Math.max(1, Math.ceil(filtered.length / 8)),
+                      ) * 8,
+                )
+                .map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <Link
+                        href={`/admin/quote-requests/${r.id}`}
+                        className="font-mono text-sm font-bold text-primary"
+                      >
+                        {r.id}
+                      </Link>
+                    </td>
+                    <td>
+                      <span className="font-semibold">{r.company}</span>
+                      <p className="text-xs text-muted-foreground">{r.name}</p>
+                    </td>
+                    <td>
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td>{r.owner || c('غير مسند', 'Unassigned')}</td>
+                    <td>{r.items.length}</td>
+                    <td>
+                      <time dateTime={r.date}>{r.date}</time>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -132,6 +224,14 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
             'جرّب مسح البحث أو تغيير الحالة.',
             'Clear the search or change the status.',
           )}
+        />
+      )}
+      {!compact && (
+        <Pagination
+          total={filtered.length}
+          pages={Math.max(1, Math.ceil(filtered.length / 8))}
+          page={Math.min(page, Math.max(1, Math.ceil(filtered.length / 8)))}
+          onChange={setPage}
         />
       )}
     </>
@@ -235,11 +335,20 @@ export function Dashboard() {
   )
 }
 export function RequestsPage({ id }: { id?: string }) {
-  const { requests, setRequests, products } = useDemo()
+  const {
+    requests,
+    setRequests,
+    products,
+    resources,
+    recordActivity,
+    quotations,
+  } = useDemo()
   const { lang } = useLanguage()
   const c = useCopy()
   const [note, setNote] = useState('')
   const [message, setMessage] = useState('')
+  const [reason, setReason] = useState('')
+  const { confirm, confirmation } = useConfirmAction()
   const request = requests.find((r) => r.id === id)
   if (!id)
     return (
@@ -249,11 +358,14 @@ export function RequestsPage({ id }: { id?: string }) {
             <h1>{c('طلبات عروض الأسعار', 'Quote requests')}</h1>
             <p>
               {c(
-                'صندوق متابعة المبيعات — بيانات تجريبية فقط.',
-                'Sales inbox — sample data only.',
+                'متابعة وإسناد وحالات وتجهيز عروض محلية.',
+                'Local tracking, assignment, status and quotations.',
               )}
             </p>
           </div>
+          <Link className="btn-primary" href="/request-quote">
+            {c('تجربة طلب جديد من الموقع', 'Try a new public request')}
+          </Link>
         </div>
         <section className="panel bg-white">
           <RequestTable />
@@ -265,78 +377,154 @@ export function RequestsPage({ id }: { id?: string }) {
       <EmptyState
         title={c('الطلب غير موجود', 'Request not found')}
         description={c(
-          'اختر طلبًا من القائمة التجريبية.',
-          'Choose a request from the sample list.',
+          'قد تكون بيانات المعاينة عادت للأصل بعد التحديث.',
+          'Preview data may have reset after a reload.',
         )}
       />
     )
-  const update = (patch: Partial<typeof request>) => {
-    setRequests((all) => all.map((r) => (r.id === id ? { ...r, ...patch } : r)))
-    setMessage(
-      c('تم تحديث المعاينة المؤقتة فقط.', 'Temporary preview updated only.'),
+  const event = (
+    patch: Partial<typeof request>,
+    action: string,
+    text: string,
+  ) => {
+    setRequests((all) =>
+      all.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              ...patch,
+              events: [
+                ...(r.events || []),
+                {
+                  id: crypto.randomUUID(),
+                  at: new Date().toISOString(),
+                  action,
+                  text,
+                },
+              ],
+            }
+          : r,
+      ),
+    )
+    recordActivity(action, id!)
+    setMessage(c('تم تحديث المعاينة المحلية.', 'Local preview updated.'))
+  }
+  const allowed: Record<string, string[]> = {
+    new: ['assigned', 'cancelled', 'lost'],
+    assigned: ['in_progress', 'cancelled', 'lost'],
+    in_progress: ['awaiting_customer', 'quoted', 'cancelled', 'lost'],
+    awaiting_customer: ['in_progress', 'quoted', 'cancelled', 'lost'],
+    quoted: ['in_progress', 'won', 'lost', 'cancelled'],
+    won: ['in_progress'],
+    lost: ['in_progress'],
+    cancelled: ['in_progress'],
+  }
+  const changeStatus = (next: string) => {
+    if (!allowed[request.status]?.includes(next)) {
+      setMessage(
+        c('هذا الانتقال غير مسموح.', 'This transition is not allowed.'),
+      )
+      return
+    }
+    if (next === 'assigned' && !request.owner) {
+      setMessage(c('اختر المسؤول أولًا.', 'Assign an owner first.'))
+      return
+    }
+    if (
+      next === 'quoted' &&
+      !quotations.some(
+        (q) => q.requestId === id && ['sent', 'accepted'].includes(q.state),
+      )
+    ) {
+      setMessage(
+        c(
+          'جهّز عرضًا وسجّل التواصل التجريبي قبل حالة تم العرض.',
+          'Prepare a quotation and record sample delivery first.',
+        ),
+      )
+      return
+    }
+    if (
+      (['lost', 'cancelled', 'won'].includes(next) ||
+        ['won', 'lost', 'cancelled'].includes(request.status)) &&
+      !reason.trim()
+    ) {
+      setMessage(
+        c(
+          'أضف سبب الإغلاق أو مرجع الموافقة أو إعادة الفتح.',
+          'Add a close reason, acceptance reference or reopening reason.',
+        ),
+      )
+      return
+    }
+    confirm(
+      c('تطبيق تغيير الحالة محليًا؟', 'Apply this status change locally?'),
+      () =>
+        event(
+          { status: next, closeReason: reason },
+          'request.status',
+          `${request.status} → ${next}: ${reason}`,
+        ),
     )
   }
   return (
     <>
+      {confirmation}
       <div className="admin-heading">
         <div>
-          <Link
-            href="/admin/quote-requests"
-            className="mb-2 block text-sm text-primary"
-          >
+          <Link href="/admin/quote-requests" className="text-sm text-primary">
             {c('كل الطلبات', 'All requests')}
           </Link>
           <h1 className="font-mono">{request.id}</h1>
           <p>
-            {request.company} — {request.date}
+            {request.company} · {request.date}
           </p>
         </div>
-        <Link className="btn-primary" href={`/admin/quotations/${request.id}`}>
-          {c('تجهيز عرض سعر تجريبي', 'Prepare sample quotation')}
+        <Link href={`/admin/quotations/${request.id}`} className="btn-primary">
+          {c('تجهيز عرض سعر', 'Prepare quotation')}
         </Link>
       </div>
-      <div className="grid items-start gap-6 xl:grid-cols-[1.7fr_1fr]">
+      <p role="status" className="mb-4 text-sm text-primary">
+        {message}
+      </p>
+      <div className="grid items-start gap-6 xl:grid-cols-[1.6fr_1fr]">
         <div className="space-y-6">
           <section className="panel bg-white">
             <h2 className="mb-5 text-xl font-bold">
               {c('بنود الطلب', 'Request items')}
             </h2>
-            <div
-              className="table-scroll"
-              tabIndex={0}
-              role="region"
-              aria-label={c(
-                'جدول قابل للتمرير أفقيًا',
-                'Horizontally scrollable table',
-              )}
-            >
+            <div className="table-scroll" tabIndex={0}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>{c('المنتج', 'Product')}</th>
+                    <th>{c('المنتج / الوصف', 'Product / description')}</th>
                     <th>SKU</th>
-                    <th>{c('الكمية', 'Quantity')}</th>
+                    <th>{c('الكمية والوحدة', 'Quantity & unit')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {request.items.map((item) => {
-                    const product = products.find((p) =>
+                  {request.items.map((item, i) => {
+                    const p = products.find((p) =>
                       p.variants.some((v) => v.id === item.variantId),
                     )
-                    const variant = product?.variants.find(
-                      (v) => v.id === item.variantId,
-                    )
+                    const v = p?.variants.find((v) => v.id === item.variantId)
                     return (
-                      <tr key={item.variantId}>
+                      <tr key={i}>
                         <td>
-                          {product?.name[lang]}
+                          {item.snapshot?.name[lang] ||
+                            p?.name[lang] ||
+                            item.description ||
+                            c('بند حر', 'Custom item')}
                           <p className="text-xs text-muted-foreground">
-                            {variant?.label[lang]}
+                            {item.snapshot?.label[lang] || v?.label[lang]}
                           </p>
                         </td>
-                        <td className="font-mono text-xs">{variant?.sku}</td>
+                        <td>{item.snapshot?.sku || v?.sku || '—'}</td>
                         <td>
-                          {item.quantity} {variant?.unit[lang]}
+                          {item.quantity}{' '}
+                          {item.snapshot?.unit[lang] ||
+                            v?.unit[lang] ||
+                            item.unit}
                         </td>
                       </tr>
                     )
@@ -347,29 +535,24 @@ export function RequestsPage({ id }: { id?: string }) {
           </section>
           <section className="panel bg-white">
             <h2 className="mb-5 text-xl font-bold">
-              {c('ملاحظات المتابعة', 'Follow-up notes')}
+              {c('الملاحظات وسجل التواصل', 'Notes & contact history')}
             </h2>
-            {request.notes.length ? (
-              <ul className="mb-5 space-y-3">
-                {request.notes.map((n, i) => (
-                  <li
-                    className="rounded-lg border-s-2 border-primary bg-muted p-4 text-sm"
-                    key={i}
-                  >
-                    {n}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mb-5 text-sm text-muted-foreground">
-                {c('لا توجد ملاحظات بعد.', 'No notes yet.')}
-              </p>
-            )}
+            <ul className="mb-5 space-y-3">
+              {request.notes.map((n, i) => (
+                <li key={i} className="rounded-lg bg-muted p-4 text-sm">
+                  {n}
+                </li>
+              ))}
+            </ul>
             <form
               onSubmit={(e) => {
                 e.preventDefault()
                 if (note.trim()) {
-                  update({ notes: [...request.notes, note.trim()] })
+                  event(
+                    { notes: [...request.notes, note.trim()] },
+                    'request.note',
+                    'تمت إضافة ملاحظة محلية / Local note added',
+                  )
                   setNote('')
                 }
               }}
@@ -388,361 +571,192 @@ export function RequestsPage({ id }: { id?: string }) {
                 {c('إضافة للمعاينة', 'Add to preview')}
               </button>
             </form>
+            <ol className="mt-6 space-y-3 border-t pt-5">
+              {(request.events || [])
+                .slice()
+                .reverse()
+                .map((e) => (
+                  <li
+                    key={e.id}
+                    className="border-s-2 border-primary ps-4 text-sm"
+                  >
+                    <p className="font-semibold">{e.action}</p>
+                    <p className="my-1 text-muted-foreground">{e.text}</p>
+                    <time className="text-xs">
+                      {new Date(e.at).toLocaleString(
+                        lang === 'ar' ? 'ar-EG' : 'en-EG',
+                        { timeZone: 'Africa/Cairo' },
+                      )}
+                    </time>
+                  </li>
+                ))}
+            </ol>
+          </section>
+          <section className="panel bg-white">
+            <h2 className="mb-4 font-bold">
+              {c('عروض الطلب', 'Request quotations')}
+            </h2>
+            {quotations
+              .filter((q) => q.requestId === id)
+              .map((q) => (
+                <Link
+                  className="mb-2 flex justify-between rounded-lg border p-3 text-sm text-primary"
+                  href={`/admin/quotations/${q.id}`}
+                  key={q.id}
+                >
+                  <span>
+                    {q.id} R{q.revision}
+                  </span>
+                  <span>{q.state}</span>
+                </Link>
+              ))}
           </section>
         </div>
         <aside className="space-y-5">
-          <div className="panel bg-white">
-            <h2 className="mb-5 font-bold">
+          <section className="panel bg-white">
+            <h2 className="mb-4 font-bold">
               {c('بيانات العميل', 'Customer details')}
             </h2>
             <p>{request.name}</p>
+            {request.phone && (
+              <p dir="ltr" className="mt-3 text-sm">
+                {request.phone}
+              </p>
+            )}
+            {request.email && (
+              <p dir="ltr" className="mt-2 text-sm">
+                {request.email}
+              </p>
+            )}
             <p className="mt-2 text-sm text-muted-foreground">
               {request.company}
             </p>
-            <p className="mt-4 text-xs text-muted-foreground">
-              {c(
-                'لا توجد بيانات تواصل حقيقية في المعاينة.',
-                'No real contact details are included in this preview.',
-              )}
-            </p>
-          </div>
-          <div className="panel space-y-5 bg-white">
-            <Field label={c('الحالة التجريبية', 'Preview status')}>
-              <select
-                className="control"
-                value={request.status}
-                onChange={(e) => update({ status: e.target.value })}
-              >
-                {requestStatuses.map((s) => (
-                  <option key={s[0]} value={s[0]}>
-                    {c(s[1], s[2])}
+            <div className="mt-5">
+              <Field label={c('ربط بعميل موجود', 'Link existing customer')}>
+                <select
+                  className="control"
+                  value={request.customerId || ''}
+                  onChange={(e) =>
+                    event(
+                      { customerId: e.target.value },
+                      'request.customer',
+                      'Customer link updated',
+                    )
+                  }
+                >
+                  <option value="">
+                    {c('بدون ربط', 'No linked customer')}
                   </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={c('مسؤول المتابعة', 'Assigned owner')}>
+                  {resources.customers.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nameAr} · {r.organization}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </section>
+          <section className="panel space-y-5 bg-white">
+            <StatusBadge status={request.status} />
+            <Field label={c('المسؤول عن المتابعة', 'Assigned owner')}>
               <select
                 className="control"
                 value={request.owner}
-                onChange={(e) => update({ owner: e.target.value })}
+                onChange={(e) => {
+                  const owner = e.target.value
+                  event(
+                    {
+                      owner,
+                      ...(request.status === 'new' && owner
+                        ? { status: 'assigned' }
+                        : {}),
+                    },
+                    'request.assignment',
+                    owner || 'Unassigned',
+                  )
+                }}
               >
                 <option value="">{c('غير مسند', 'Unassigned')}</option>
                 <option value="موظف المبيعات">
-                  {c('موظف المبيعات', 'Sales agent')}
+                  {c('موظف المبيعات التجريبي', 'Sample sales agent')}
                 </option>
-                <option value="مدير المبيعات">
-                  {c('مدير المبيعات', 'Sales manager')}
-                </option>
+                {resources.team
+                  .filter((r) => r.status !== 'inactive')
+                  .map((r) => (
+                    <option key={r.id} value={r.nameAr}>
+                      {r.nameAr} · {r.role}
+                    </option>
+                  ))}
               </select>
             </Field>
             <Field label={c('الأولوية', 'Priority')}>
               <select
                 className="control"
                 value={request.priority}
-                onChange={(e) => update({ priority: e.target.value })}
+                onChange={(e) =>
+                  event(
+                    { priority: e.target.value },
+                    'request.priority',
+                    e.target.value,
+                  )
+                }
               >
                 <option value="normal">{c('عادية', 'Normal')}</option>
-                <option value="high">{c('مرتفعة', 'High')}</option>
+                <option value="high">{c('عالية', 'High')}</option>
+                <option value="urgent">{c('عاجلة', 'Urgent')}</option>
               </select>
             </Field>
-            <p role="status" className="text-sm text-primary">
-              {message}
-            </p>
-            <p className="text-xs leading-6 text-muted-foreground">
-              {c(
-                'التنقل بين الحالات هنا لاستعراض الواجهة فقط؛ صلاحيات وقواعد دورة العمل تُنفّذ في مرحلة الباك إند.',
-                'Status changes demonstrate the interface only. Authorization and workflow rules belong to the backend phase.',
+            <Field label={c('موعد المتابعة التالي', 'Next follow-up')}>
+              <input
+                className="control"
+                type="datetime-local"
+                value={request.followUpAt || ''}
+                onChange={(e) =>
+                  event(
+                    { followUpAt: e.target.value },
+                    'request.follow_up',
+                    e.target.value,
+                  )
+                }
+              />
+            </Field>
+            <Field
+              label={c(
+                'سبب الإغلاق / مرجع الموافقة',
+                'Close reason / approval reference',
               )}
-            </p>
-          </div>
-        </aside>
-      </div>
-    </>
-  )
-}
-
-type QuoteLine = {
-  id: number
-  description: string
-  quantity: number
-  price: string
-  discount: string
-  tax: string
-}
-export function QuotationPreview({ id }: { id: string }) {
-  const { requests, products } = useDemo()
-  const { lang } = useLanguage()
-  const c = useCopy()
-  const request = requests.find((r) => r.id === id)
-  const [lines, setLines] = useState<QuoteLine[]>(() =>
-    (request?.items || []).map((item, i) => ({
-      id: i,
-      description:
-        products.find((p) => p.variants.some((v) => v.id === item.variantId))
-          ?.name[lang] || '',
-      quantity: item.quantity,
-      price: '',
-      discount: '0',
-      tax: '0',
-    })),
-  )
-  const [message, setMessage] = useState('')
-  const [terms, setTerms] = useState('')
-  if (!request)
-    return (
-      <EmptyState
-        title={c('العرض غير موجود', 'Quotation not found')}
-        description={c(
-          'ابدأ من تفاصيل طلب تجريبي.',
-          'Start from a sample request.',
-        )}
-      />
-    )
-  const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-  const calculated = lines.map((l) => {
-    const gross = round(l.quantity * Number(l.price))
-    const net = round(Math.max(0, gross - Number(l.discount)))
-    const tax = round((net * Number(l.tax)) / 100)
-    return { ...l, gross, net, taxAmount: tax, total: round(net + tax) }
-  })
-  const invalid =
-    !lines.length ||
-    lines.some(
-      (l) =>
-        !l.description.trim() ||
-        !Number.isInteger(l.quantity) ||
-        l.quantity <= 0 ||
-        l.price === '' ||
-        !Number.isFinite(Number(l.price)) ||
-        Number(l.price) < 0 ||
-        !Number.isFinite(Number(l.discount)) ||
-        Number(l.discount) < 0 ||
-        Number(l.discount) > l.quantity * Number(l.price) ||
-        !Number.isFinite(Number(l.tax)) ||
-        Number(l.tax) < 0 ||
-        Number(l.tax) > 100,
-    )
-  const money = (n: number) =>
-    new Intl.NumberFormat(lang === 'ar' ? 'ar-EG' : 'en-EG', {
-      style: 'currency',
-      currency: 'EGP',
-    }).format(n)
-  const update = (id: number, patch: Partial<QuoteLine>) =>
-    setLines((all) => all.map((l) => (l.id === id ? { ...l, ...patch } : l)))
-  return (
-    <>
-      <div className="admin-heading">
-        <div>
-          <h1>{c('معاينة عرض سعر', 'Quotation preview')}</h1>
-          <p>
-            {request.id} — {request.company}
-          </p>
-        </div>
-        <button
-          className="btn-outline"
-          disabled={invalid}
-          onClick={() => window.print()}
-        >
-          <Printer className="size-4" />
-          {c('طباعة المعاينة', 'Print preview')}
-        </button>
-      </div>
-      <div className="panel space-y-6 bg-white">
-        <Badge tone="gold">
-          {c(
-            'مسودة تجريبية — غير صالحة للتعاقد',
-            'Sample draft — not a commercial offer',
-          )}
-        </Badge>
-        <div
-          className="table-scroll"
-          tabIndex={0}
-          role="region"
-          aria-label={c(
-            'جدول قابل للتمرير أفقيًا',
-            'Horizontally scrollable table',
-          )}
-        >
-          <table className="data-table">
-            <thead>
-              <tr>
-                {[
-                  c('البند', 'Item'),
-                  c('الكمية', 'Quantity'),
-                  c('السعر EGP', 'Price EGP'),
-                  c('خصم EGP', 'Discount EGP'),
-                  c('ضريبة %', 'Tax %'),
-                  c('الإجمالي', 'Total'),
-                  '',
-                ].map((x, i) => (
-                  <th key={i}>{x}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {calculated.map((l) => (
-                <tr key={l.id}>
-                  <td>
-                    <input
-                      className="control min-w-48"
-                      aria-label={c('وصف البند', 'Item description')}
-                      value={l.description}
-                      onChange={(e) =>
-                        update(l.id, { description: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="control min-w-20"
-                      aria-label={c('كمية البند', 'Item quantity')}
-                      type="number"
-                      min={1}
-                      value={l.quantity}
-                      onChange={(e) =>
-                        update(l.id, { quantity: e.target.valueAsNumber })
-                      }
-                    />
-                  </td>
-                  {(['price', 'discount', 'tax'] as const).map((key) => (
-                    <td key={key}>
-                      <input
-                        className="control min-w-24"
-                        type="number"
-                        aria-label={c(
-                          key === 'price'
-                            ? 'سعر الوحدة'
-                            : key === 'discount'
-                              ? 'خصم البند'
-                              : 'نسبة الضريبة',
-                          key,
-                        )}
-                        min={0}
-                        max={key === 'tax' ? 100 : undefined}
-                        step="0.01"
-                        value={l[key]}
-                        onChange={(e) =>
-                          update(l.id, { [key]: e.target.value })
-                        }
-                      />
-                    </td>
+            >
+              <textarea
+                className="control"
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={500}
+              />
+            </Field>
+            <Field label={c('الانتقال إلى حالة', 'Move to status')}>
+              <select
+                className="control"
+                value=""
+                onChange={(e) => e.target.value && changeStatus(e.target.value)}
+              >
+                <option value="">{c('اختر إجراء…', 'Choose action…')}</option>
+                {requestStatuses
+                  .filter((s) => allowed[request.status]?.includes(s[0]))
+                  .map((s) => (
+                    <option key={s[0]} value={s[0]}>
+                      {c(s[1], s[2])}
+                    </option>
                   ))}
-                  <td className="whitespace-nowrap">
-                    {Number.isFinite(l.total) ? money(l.total) : '—'}
-                  </td>
-                  <td>
-                    <button
-                      className="icon-button"
-                      aria-label={c('حذف البند', 'Remove item')}
-                      onClick={() =>
-                        setLines((all) => all.filter((x) => x.id !== l.id))
-                      }
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <button
-          className="btn-outline"
-          onClick={() =>
-            setLines((all) => [
-              ...all,
-              {
-                id: Date.now(),
-                description: '',
-                quantity: 1,
-                price: '',
-                discount: '0',
-                tax: '0',
-              },
-            ])
-          }
-        >
-          <Plus className="size-4" />
-          {c('إضافة بند', 'Add item')}
-        </button>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Field label={c('الشروط ومهلة التوريد', 'Terms and lead time')}>
-            <textarea
-              className="control"
-              rows={4}
-              value={terms}
-              onChange={(e) => setTerms(e.target.value)}
-              maxLength={2000}
-            />
-          </Field>
-          <dl className="space-y-3 rounded-xl bg-muted p-5">
-            <div className="flex justify-between gap-4">
-              <dt>{c('الصافي', 'Net')}</dt>
-              <dd>
-                {money(
-                  calculated.reduce(
-                    (s, l) => s + (Number.isFinite(l.net) ? l.net : 0),
-                    0,
-                  ),
-                )}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt>{c('الضريبة', 'Tax')}</dt>
-              <dd>
-                {money(
-                  calculated.reduce(
-                    (s, l) =>
-                      s + (Number.isFinite(l.taxAmount) ? l.taxAmount : 0),
-                    0,
-                  ),
-                )}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4 border-t pt-3 font-bold">
-              <dt>{c('الإجمالي التجريبي', 'Preview total')}</dt>
-              <dd>
-                {money(
-                  calculated.reduce(
-                    (s, l) => s + (Number.isFinite(l.total) ? l.total : 0),
-                    0,
-                  ),
-                )}
-              </dd>
-            </div>
-          </dl>
-        </div>
-        <p className="text-xs leading-6 text-muted-foreground">
-          {c(
-            'الحسابات للعرض فقط وليست محرك تسعير معتمدًا. لم يُصدر PDF أو رقم عرض رسمي، ولم تُرسل بيانات لأي جهة.',
-            'Calculations are illustrative, not an approved pricing engine. No PDF or official quotation number has been issued and nothing has been sent.',
-          )}
-        </p>
-        <button
-          className="btn-primary"
-          disabled={invalid}
-          onClick={() =>
-            setMessage(
-              c(
-                'المعاينة جاهزة داخل المتصفح فقط؛ الإصدار والحفظ والإرسال غير مفعّلين.',
-                'Preview ready in this browser only; issuing, saving and sending are not connected.',
-              ),
-            )
-          }
-        >
-          {c('مراجعة المسودة التجريبية', 'Review sample draft')}
-        </button>
-        <p role="status" className="text-sm text-primary">
-          {message}
-        </p>
-        {invalid && (
-          <p className="text-sm text-muted-foreground">
-            {c(
-              'أكمل الأسعار والكميات والأوصاف، وتأكد أن الخصم لا يتجاوز قيمة البند.',
-              'Complete prices, quantities and descriptions; discounts must not exceed the line value.',
+              </select>
+            </Field>
+            {request.closeReason && (
+              <p className="text-sm text-muted-foreground">
+                {request.closeReason}
+              </p>
             )}
-          </p>
-        )}
+          </section>
+        </aside>
       </div>
     </>
   )

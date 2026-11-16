@@ -6,6 +6,7 @@ import { useLanguage } from '@/components/language-provider'
 import { ActionLink } from '@/components/site/action-link'
 import { SectionHeading } from '@/components/site/section-heading'
 import { productKeys, type ProductKey } from '@/lib/site'
+import { usePublicHref } from '@/components/demo/public-link'
 import { cn } from '@/lib/utils'
 
 const productImages: Record<ProductKey, string> = {
@@ -22,6 +23,7 @@ function ProductCard({
   wide: boolean
 }) {
   const { t, lang } = useLanguage()
+  const publicHref = usePublicHref()
   const item = t.products.items[productKey]
   const Arrow = lang === 'ar' ? ArrowLeft : ArrowRight
 
@@ -75,7 +77,7 @@ function ProductCard({
         <Arrow className="size-5 transition-transform duration-300 motion-safe:ltr:group-hover:translate-x-0.5 motion-safe:rtl:group-hover:-translate-x-0.5" />
       </span>
       <a
-        href={`/categories/${productKey}`}
+        href={publicHref(`/categories/${productKey}`)}
 
         className="absolute inset-0 z-10 rounded-[var(--notch-r)]"
       >

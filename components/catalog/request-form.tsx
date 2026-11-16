@@ -1,7 +1,11 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
-import Link from 'next/link'
+import { PublicLink as Link } from '@/components/demo/public-link'
+import { usePublicHref } from '@/components/demo/public-link'
+import { useRouter } from 'next/navigation'
+import { validQuantity } from '@/lib/frontend-model'
+import { useSiteInfo } from '@/components/demo/content-preview'
 import { FileCheck2, Plus, Trash2 } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useDemo } from '@/components/demo/demo-provider'
@@ -16,7 +20,20 @@ import {
 export function RequestForm({ contact = false }: { contact?: boolean }) {
   const c = useCopy()
   const { lang } = useLanguage()
-  const { products, cart, setCart, hydrated } = useDemo()
+  const {
+    products,
+    cart,
+    setCart,
+    hydrated,
+    setRequests,
+    setResources,
+    setLastSubmission,
+    recordActivity,
+  } = useDemo()
+  const router = useRouter()
+  const publicHref = usePublicHref()
+  const [review, setReview] = useState<Record<string, string>>({})
+  const [completed, setCompleted] = useState(false)
   const [freeItems, setFreeItems] = useState<
     { id: number; description: string; quantity: number; unit: string }[]
   >([])
@@ -40,6 +57,25 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
       )
       return
     }
+    if (
+      !contact &&
+      cart.some(
+        (item) =>
+          !products.some(
+            (p) =>
+              p.status === 'published' &&
+              p.variants.some((v) => v.id === item.variantId),
+          ),
+      )
+    ) {
+      setError(
+        c(
+          'أحد المنتجات لم يعد متاحًا. راجع السلة واحذف البند القديم.',
+          'A selected product is no longer available. Review the cart and remove the outdated item.',
+        ),
+      )
+      return
+    }
     if (!contact && cart.length + freeItems.length === 0) {
       setError(
         c(
@@ -53,22 +89,22 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
       !contact &&
       (freeItems.some(
         (i) =>
-          i.description.trim().length < 3 ||
-          !Number.isInteger(i.quantity) ||
-          i.quantity < 1 ||
-          i.quantity > 99999,
+          i.description.trim().length < 3 || !validQuantity(i.quantity, i.unit),
       ) ||
         cart.some(
           (i) =>
-            !Number.isInteger(i.quantity) ||
-            i.quantity < 1 ||
-            i.quantity > 99999,
+            !validQuantity(
+              i.quantity,
+              products
+                .flatMap((p) => p.variants)
+                .find((v) => v.id === i.variantId)?.unit.en || 'pack',
+            ),
         ))
     ) {
       setError(
         c(
-          'راجع وصف وكميات البنود؛ الكمية عدد صحيح من 1 إلى 99999.',
-          'Check item descriptions and quantities (whole numbers from 1 to 99999).',
+          'راجع وصف وكميات البنود؛ راجع الكمية وفق وحدة البيع؛ الحد الأعلى 99999.',
+          'Check item descriptions and quantities (quantities matching the sales unit, up to 99999).',
         ),
       )
       return
@@ -85,7 +121,89 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
       )
       return
     }
+    setReview(
+      Object.fromEntries(
+        Array.from(data.entries()).map(([k, v]) => [k, String(v).trim()]),
+      ),
+    )
     setPreview(true)
+  }
+  function finishPreview() {
+    if (completed) return
+    setCompleted(true)
+    const now = Date.now()
+    const reference = contact ? `DEMO-INQ-${now}` : `DEMO-RFQ-${now}`
+    if (contact)
+      setResources((all) => ({
+        ...all,
+        inquiries: [
+          ...(all.inquiries || []),
+          {
+            id: `new-${now}`,
+            reference,
+            nameAr: review.name,
+            nameEn: review.name,
+            email: review.email,
+            phone: review.phone,
+            message: review.notes,
+            status: 'new',
+            reply: '',
+          },
+        ],
+      }))
+    else {
+      setRequests((all) => [
+        ...all,
+        {
+          id: reference,
+          name: review.name,
+          company: review.company || c('عميل فردي تجريبي', 'Sample individual'),
+          phone: review.phone,
+          email: review.email,
+          status: 'new',
+          owner: '',
+          date: new Date().toISOString().slice(0, 10),
+          priority: 'normal',
+          items: [
+            ...cart.map((i) => ({
+              variantId: i.variantId,
+              quantity: i.quantity,
+              snapshot: (() => {
+                const p = products.find((p) =>
+                  p.variants.some((v) => v.id === i.variantId),
+                )
+                const v = p?.variants.find((v) => v.id === i.variantId)
+                return p && v
+                  ? {
+                      name: { ...p.name },
+                      sku: v.sku,
+                      label: { ...v.label },
+                      unit: { ...v.unit },
+                    }
+                  : undefined
+              })(),
+            })),
+            ...freeItems.map((i) => ({
+              description: i.description,
+              quantity: i.quantity,
+              unit: i.unit,
+            })),
+          ],
+          notes: review.notes ? [review.notes] : [],
+        },
+      ])
+      setCart([])
+    }
+    setLastSubmission({
+      reference,
+      kind: contact ? 'inquiry' : 'request',
+      itemCount: contact ? 0 : cart.length + freeItems.length,
+    })
+    recordActivity(
+      contact ? 'inquiry.preview_created' : 'request.preview_created',
+      reference,
+    )
+    router.push(publicHref('/request-quote/success'))
   }
   return (
     <>
@@ -111,6 +229,7 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
       <div className="site-container page-section">
         <DemoNotice />
         <form
+          onChange={() => setPreview(false)}
           onSubmit={submit}
           className="grid items-start gap-8 lg:grid-cols-[1.4fr_1fr]"
         >
@@ -170,9 +289,9 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
                             className="control w-24"
                             type="number"
                             required
-                            min={1}
+                            min={0.001}
                             max={99999}
-                            step={1}
+                            step={0.001}
                             value={
                               Number.isNaN(item.quantity) ? '' : item.quantity
                             }
@@ -234,9 +353,9 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
                             className="control"
                             type="number"
                             required
-                            min={1}
+                            min={0.001}
                             max={99999}
-                            step={1}
+                            step={0.001}
                             value={
                               Number.isNaN(item.quantity) ? '' : item.quantity
                             }
@@ -461,6 +580,35 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
                         'No request was sent and no reference number was created. Submission will be enabled when the backend is implemented.',
                       )}
                     </p>
+                    <dl className="my-4 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <dt>{c('الاسم', 'Name')}</dt>
+                        <dd>{review.name}</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt>{c('عدد البنود', 'Item count')}</dt>
+                        <dd>
+                          {contact ? '—' : cart.length + freeItems.length}
+                        </dd>
+                      </div>
+                    </dl>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={completed}
+                      onClick={finishPreview}
+                    >
+                      {c(
+                        'اختبار تأكيد الطلب محليًا',
+                        'Test local request confirmation',
+                      )}
+                    </button>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {c(
+                        'سيظهر نموذج الطلب في لوحة الإدارة داخل هذه الجلسة فقط؛ لا يُرسل لأي جهة.',
+                        'The sample appears in the admin panel for this session only. Nothing is sent externally.',
+                      )}
+                    </p>
                   </div>
                 )}
               </div>
@@ -505,6 +653,7 @@ export function RequestForm({ contact = false }: { contact?: boolean }) {
 
 import { addresses, company, phones, whatsappLink } from '@/lib/site'
 export function ContactPanel() {
+  const { company, phones, addresses, hours, whatsappHref } = useSiteInfo()
   const { lang } = useLanguage()
   const c = useCopy()
   return (
@@ -523,7 +672,7 @@ export function ContactPanel() {
           {company.email}
         </a>
         <a
-          href={whatsappLink()}
+          href={whatsappHref}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex rounded-full border border-white/30 px-5 py-2 hover:bg-white/10"
@@ -531,6 +680,7 @@ export function ContactPanel() {
           {c('تواصل عبر واتساب', 'Chat on WhatsApp')}
         </a>
       </div>
+      {hours && <p className="mb-4 text-sm">{hours[lang]}</p>}
       <div className="space-y-5 border-t border-white/20 pt-5">
         {Object.entries(addresses).map(([key, value]) => (
           <div key={key}>

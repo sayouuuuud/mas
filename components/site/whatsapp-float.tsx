@@ -2,14 +2,15 @@
 
 import { WhatsAppIcon } from '@/components/icons'
 import { useLanguage } from '@/components/language-provider'
-import { whatsappLink } from '@/lib/site'
+import { useSiteInfo } from '@/components/demo/content-preview'
 
 export function WhatsAppFloat() {
   const { t } = useLanguage()
+  const { whatsappHref } = useSiteInfo()
 
   return (
     <a
-      href={whatsappLink(t.whatsappFloat.message)}
+      href={`${whatsappHref}?text=${encodeURIComponent(t.whatsappFloat.message)}`}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={t.whatsappFloat.label}

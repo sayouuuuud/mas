@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { FacetFilter } from './facet-filter'
+import { ComparisonToggle } from './comparison'
 import { ProductImageDialog } from './product-image-dialog'
-import Link from 'next/link'
+import { PublicLink as Link } from '@/components/demo/public-link'
 import Image from 'next/image'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
   Search,
   SlidersHorizontal,
@@ -17,7 +19,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
-import { useDemo } from '@/components/demo/demo-provider'
+import { useDemo, useCatalogData } from '@/components/demo/demo-provider'
 import {
   Badge,
   DemoNotice,
@@ -30,6 +32,7 @@ import {
 import { brands, categories, sectors, type DemoProduct } from '@/lib/demo-data'
 
 export function ProductCard({ product }: { product: DemoProduct }) {
+  const { brands, categories, sectors } = useCatalogData()
   const { lang } = useLanguage()
   const c = useCopy()
   return (
@@ -87,6 +90,7 @@ export function ProductCard({ product }: { product: DemoProduct }) {
             <DirectionArrow />
           </Link>
         </div>
+        <ComparisonToggle id={product.id} />
       </div>
     </article>
   )
@@ -105,19 +109,24 @@ export function Catalog({
   title?: string
   description?: string
 }) {
+  const { brands, categories, sectors } = useCatalogData()
   const c = useCopy()
   const { lang } = useLanguage()
   const { products } = useDemo()
-  const router = useRouter()
   const params = useSearchParams()
+  const [localQuery, setLocalQuery] = useState(params.toString())
+  const urlQuery = params.toString()
+  useEffect(() => setLocalQuery(urlQuery), [urlQuery])
+  const query = new URLSearchParams(localQuery)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const q = params.get('q') || ''
-  const categoryFilter = category || params.get('category') || ''
-  const brandFilter = brand || params.get('brand') || ''
-  const sectorFilter = sector || params.get('sector') || ''
-  const availability = params.get('availability') || ''
-  const pack = params.get('pack') || ''
-  const sort = params.get('sort') || 'featured'
+  const q = query.get('q') || ''
+  const categoryFilter = category || query.get('category') || ''
+  const brandFilter = brand || query.get('brand') || ''
+  const sectorFilter = sector || query.get('sector') || ''
+  const availability = query.get('availability') || ''
+  const pack = query.get('pack') || ''
+  const specification = query.get('spec') || ''
+  const sort = query.get('sort') || 'featured'
   const normalize = (s: string) =>
     s
       .toLowerCase()
@@ -125,52 +134,80 @@ export function Catalog({
       .replace(/[\u064B-\u065Fـ]/g, '')
       .replace(/[أإآ]/g, 'ا')
       .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  const values = (value: string) => value.split(',').filter(Boolean)
+  const descendant = (id: string, target: string) => {
+    let cursor = categories.find((c) => c.id === id)
+    const seen = new Set<string>()
+    while (cursor && !seen.has(cursor.id)) {
+      if (cursor.id === target) return true
+      seen.add(cursor.id)
+      cursor = categories.find((c) => c.id === cursor?.parent)
+    }
+    return false
+  }
+  const matches = (p: DemoProduct, ignore = '') =>
+    p.status === 'published' &&
+    categories.some(
+      (cat) => cat.id === p.category && cat.status === 'published',
+    ) &&
+    brands.some((b) => b.id === p.brand && b.status === 'published') &&
+    (ignore === 'category' ||
+      !categoryFilter ||
+      values(categoryFilter).some((id) => descendant(p.category, id))) &&
+    (ignore === 'brand' ||
+      !brandFilter ||
+      values(brandFilter).includes(p.brand)) &&
+    (ignore === 'sector' ||
+      !sectorFilter ||
+      p.sectorIds.some((id) => values(sectorFilter).includes(id))) &&
+    (ignore === 'spec' ||
+      !specification ||
+      p.specs.some((s) => s.value === specification)) &&
+    p.variants.some(
+      (v) =>
+        (ignore === 'availability' ||
+          !availability ||
+          v.availability === availability) &&
+        (ignore === 'pack' || !pack || v.pack === pack),
+    ) &&
+    normalize(
+      [
+        p.name.ar,
+        p.name.en,
+        p.slug,
+        brands.find((b) => b.id === p.brand)?.name.en,
+        ...p.variants.map((v) => v.sku),
+        ...p.specs.map((s) => s.value),
+      ].join(' '),
+    ).includes(normalize(q.trim()))
   const filtered = products
-    .filter(
-      (p) =>
-        p.status === 'published' &&
-        (!categoryFilter || p.category === categoryFilter) &&
-        (!brandFilter || p.brand === brandFilter) &&
-        (!sectorFilter || p.sectorIds.includes(sectorFilter)) &&
-        p.variants.some(
-          (v) =>
-            (!availability || v.availability === availability) &&
-            (!pack || v.pack === pack),
-        ) &&
-        normalize(
-          [
-            p.name.ar,
-            p.name.en,
-            p.slug,
-            brands.find((b) => b.id === p.brand)?.name.en,
-            ...p.variants.map((v) => v.sku),
-            ...p.specs.map((s) => s.value),
-          ].join(' '),
-        ).includes(normalize(q.trim())),
-    )
+    .filter((p) => matches(p))
     .sort((a, b) =>
       sort === 'name'
         ? a.name[lang].localeCompare(b.name[lang], lang)
         : sort === 'latest'
-          ? b.id.localeCompare(a.id)
+          ? (b.createdAt || b.id).localeCompare(a.createdAt || a.id)
           : Number(b.featured) - Number(a.featured),
     )
   const totalPages = Math.max(1, Math.ceil(filtered.length / 6))
-  const rawPage = Number(params.get('page') || 1)
+  const rawPage = Number(query.get('page') || 1)
   const page =
     Number.isInteger(rawPage) && rawPage > 0 ? Math.min(totalPages, rawPage) : 1
   function change(key: string, value: string) {
-    const next = new URLSearchParams(params.toString())
+    const next = new URLSearchParams(window.location.search)
     if (value) next.set(key, value)
     else next.delete(key)
     if (key !== 'page') next.delete('page')
-    router.replace(
+    setLocalQuery(next.toString())
+    window.history.replaceState(
+      null,
+      '',
       `${window.location.pathname}${next.size ? `?${next}` : ''}`,
-      { scroll: false },
     )
   }
   function clear() {
-    router.replace(window.location.pathname, { scroll: false })
+    setLocalQuery('')
+    window.history.replaceState(null, '', window.location.pathname)
   }
   const activeCount = [
     'q',
@@ -179,7 +216,8 @@ export function Catalog({
     'sector',
     'availability',
     'pack',
-  ].filter((k) => params.get(k)).length
+    'spec',
+  ].filter((k) => query.get(k)).length
   return (
     <>
       <PageIntro
@@ -253,7 +291,7 @@ export function Catalog({
                 </option>
                 <option value="name">{c('الاسم', 'Name')}</option>
                 <option value="latest">
-                  {c('ترتيب بديل للمعاينة', 'Alternate demo order')}
+                  {c('الأحدث إضافة', 'Recently added')}
                 </option>
               </select>
             </label>
@@ -279,55 +317,84 @@ export function Catalog({
             </div>
             <div className="space-y-6">
               {!category && (
-                <Field label={c('التصنيف', 'Category')}>
-                  <select
-                    className="control"
-                    value={categoryFilter}
-                    onChange={(e) => change('category', e.target.value)}
-                  >
-                    <option value="">
-                      {c('كل التصنيفات', 'All categories')}
-                    </option>
-                    {categories.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name[lang]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                <FacetFilter
+                  label={c('التصنيف', 'Category')}
+                  value={categoryFilter}
+                  onChange={(value) => change('category', value)}
+                  options={categories
+                    .filter((cat) => cat.status === 'published')
+                    .map((cat) => ({
+                      id: cat.id,
+                      label: cat.name[lang],
+                      count: products.filter(
+                        (p) =>
+                          matches(p, 'category') &&
+                          descendant(p.category, cat.id),
+                      ).length,
+                    }))}
+                />
               )}
               {!brand && (
-                <Field label={c('العلامة التجارية', 'Brand')}>
-                  <select
-                    className="control"
-                    value={brandFilter}
-                    onChange={(e) => change('brand', e.target.value)}
-                  >
-                    <option value="">{c('كل العلامات', 'All brands')}</option>
-                    {brands.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name[lang]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                <FacetFilter
+                  label={c('العلامة التجارية', 'Brand')}
+                  value={brandFilter}
+                  onChange={(value) => change('brand', value)}
+                  options={brands
+                    .filter((b) => b.status === 'published')
+                    .map((b) => ({
+                      id: b.id,
+                      label: b.name[lang],
+                      count: products.filter(
+                        (p) => matches(p, 'brand') && p.brand === b.id,
+                      ).length,
+                    }))}
+                />
               )}
               {!sector && (
-                <Field label={c('القطاع', 'Sector')}>
-                  <select
-                    className="control"
-                    value={sectorFilter}
-                    onChange={(e) => change('sector', e.target.value)}
-                  >
-                    <option value="">{c('كل القطاعات', 'All sectors')}</option>
-                    {sectors.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name[lang]}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+                <FacetFilter
+                  label={c('القطاع', 'Sector')}
+                  value={sectorFilter}
+                  onChange={(value) => change('sector', value)}
+                  options={sectors
+                    .filter((s) => s.status === 'published')
+                    .map((s) => ({
+                      id: s.id,
+                      label: s.name[lang],
+                      count: products.filter(
+                        (p) =>
+                          matches(p, 'sector') && p.sectorIds.includes(s.id),
+                      ).length,
+                    }))}
+                />
               )}
+              <Field label={c('المواصفة الفنية', 'Technical specification')}>
+                <select
+                  className="control"
+                  value={specification}
+                  onChange={(e) => change('spec', e.target.value)}
+                >
+                  <option value="">
+                    {c('كل المواصفات', 'All specifications')}
+                  </option>
+                  {Array.from(
+                    new Set(
+                      products
+                        .filter(
+                          (p) =>
+                            p.status === 'published' &&
+                            (!categoryFilter ||
+                              values(categoryFilter).some((id) =>
+                                descendant(p.category, id),
+                              )),
+                        )
+                        .flatMap((p) => p.specs.map((s) => s.value))
+                        .filter((v) => v && v !== '—'),
+                    ),
+                  ).map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </Field>
               <Field label={c('حالة التوفر', 'Availability')}>
                 <select
                   className="control"
@@ -427,15 +494,17 @@ export function Catalog({
 }
 
 export function ProductDetail({ slug }: { slug: string }) {
+  const { brands, categories, sectors } = useCatalogData()
   const c = useCopy()
   const { lang } = useLanguage()
-  const { products, cart, addToCart } = useDemo()
+  const { products, cart, addToCart, media, resources } = useDemo()
   const product = products.find((p) => p.id === slug || p.slug === slug)
   const [variantId, setVariantId] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
   const [zoom, setZoom] = useState(false)
   const [tab, setTab] = useState('overview')
+  const [selectedImage, setSelectedImage] = useState('')
   if (!product || product.status !== 'published')
     return (
       <EmptyState
@@ -457,8 +526,17 @@ export function ProductDetail({ slug }: { slug: string }) {
     product.variants.find((v) => v.id === variantId) || product.variants[0]
   const category = categories.find((t) => t.id === product.category)!
   const brand = brands.find((b) => b.id === product.brand)!
+  const precision = Number(
+    resources.units.find((u) => u.code === variant.unit.en)?.precision || 0,
+  )
+  const quantityStep = 10 ** -precision
   const validQuantity =
-    Number.isInteger(quantity) && quantity >= 1 && quantity <= 99999
+    Number.isFinite(quantity) &&
+    quantity >= quantityStep &&
+    quantity <= 99999 &&
+    Math.abs(
+      quantity * 10 ** precision - Math.round(quantity * 10 ** precision),
+    ) < 0.000001
   const full =
     cart.length >= 30 && !cart.some((i) => i.variantId === variant.id)
   return (
@@ -483,7 +561,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
             >
               <Image
-                src={product.image}
+                src={selectedImage || product.image}
                 alt={product.name[lang]}
                 fill
                 priority
@@ -494,6 +572,57 @@ export function ProductDetail({ slug }: { slug: string }) {
                 {c('اضغط للتكبير', 'Click to enlarge')}
               </span>
             </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                product.image,
+                ...media
+                  .filter(
+                    (m) =>
+                      m.status === 'ready' &&
+                      m.mime.startsWith('image/') &&
+                      product.mediaIds?.includes(m.id),
+                  )
+                  .map((m) => m.url),
+              ].map((src, i) => (
+                <button
+                  key={src}
+                  className={`relative size-16 overflow-hidden rounded-lg border-2 ${(selectedImage || product.image) === src ? 'border-primary' : 'border-transparent'}`}
+                  onClick={() => setSelectedImage(src)}
+                  aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
+                >
+                  <Image
+                    src={src}
+                    alt=""
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {media
+                .filter(
+                  (m) =>
+                    product.mediaIds?.includes(m.id) &&
+                    m.mime.startsWith('image/') &&
+                    m.status === 'ready',
+                )
+                .map((m) => (
+                  <button
+                    key={m.id}
+                    className="overflow-hidden rounded-lg border-2 border-primary/20"
+                    onClick={() => setSelectedImage(m.url)}
+                    aria-label={`${c('عرض صورة', 'Show image')} ${m.name}`}
+                  >
+                    <img
+                      src={m.url}
+                      alt={lang === 'ar' ? m.altAr : m.altEn}
+                      className="size-16 object-cover"
+                    />
+                  </button>
+                ))}
+            </div>
             <p className="mt-3 text-xs text-muted-foreground">
               {c(
                 'صورة توضيحية للمجموعة وليست صورة عبوة معتمدة.',
@@ -555,9 +684,14 @@ export function ProductDetail({ slug }: { slug: string }) {
                 <div className="flex w-fit items-center rounded-lg border">
                   <button
                     className="quantity-button"
-                    disabled={quantity <= 1}
+                    disabled={quantity <= quantityStep}
                     onClick={() => {
-                      setQuantity((q) => Math.max(1, q - 1))
+                      setQuantity((q) =>
+                        Math.max(
+                          quantityStep,
+                          Number((q - quantityStep).toFixed(3)),
+                        ),
+                      )
                       setAdded(false)
                     }}
                     aria-label={c('تقليل الكمية', 'Decrease quantity')}
@@ -568,9 +702,9 @@ export function ProductDetail({ slug }: { slug: string }) {
                     id="product-quantity"
                     className="w-20 bg-transparent text-center"
                     type="number"
-                    min={1}
+                    min={quantityStep}
+                    step={quantityStep}
                     max={99999}
-                    step={1}
                     value={Number.isNaN(quantity) ? '' : quantity}
                     onChange={(e) => {
                       setQuantity(e.target.valueAsNumber)
@@ -689,13 +823,29 @@ export function ProductDetail({ slug }: { slug: string }) {
                 <h3 className="text-xl font-bold">
                   {c('معلومات المنتج', 'Product overview')}
                 </h3>
-                <p className="my-4 max-w-3xl leading-8 text-muted-foreground">
-                  {product.summary[lang]}{' '}
-                  {c(
-                    'ستُضاف معلومات الاستخدام والفوائد من البيانات الفنية المعتمدة عند ربط الكتالوج.',
-                    'Approved technical descriptions, applications and benefits will be added when the catalog data is connected.',
-                  )}
+                <p className="my-4 max-w-3xl whitespace-pre-line leading-8 text-muted-foreground">
+                  {product.description?.[lang] || product.summary[lang]}
                 </p>
+                {product.applications?.[lang] && (
+                  <section className="mb-5">
+                    <h4 className="font-bold">
+                      {c('الاستخدامات', 'Applications')}
+                    </h4>
+                    <p className="mt-2 whitespace-pre-line leading-8 text-muted-foreground">
+                      {product.applications[lang]}
+                    </p>
+                  </section>
+                )}
+                {product.benefits?.[lang] && (
+                  <section className="mb-5">
+                    <h4 className="font-bold">
+                      {c('الخصائص والفوائد', 'Features & benefits')}
+                    </h4>
+                    <p className="mt-2 whitespace-pre-line leading-8 text-muted-foreground">
+                      {product.benefits[lang]}
+                    </p>
+                  </section>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {product.sectorIds.map((id) => (
                     <Link
@@ -728,26 +878,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 ))}
               </dl>
             ) : (
-              <div className="flex items-start gap-4">
-                <FileText
-                  className="size-8 shrink-0 text-primary"
-                  aria-hidden
-                />
-                <div>
-                  <h3 className="font-bold">
-                    {c(
-                      'لا توجد مستندات معتمدة بعد',
-                      'No approved documents yet',
-                    )}
-                  </h3>
-                  <p className="mt-2 text-muted-foreground">
-                    {c(
-                      'ستظهر ملفات TDS وSDS هنا بعد إضافتها ومراجعتها. لا توجد ملفات وهمية للتنزيل.',
-                      'TDS and SDS files will appear here after approval. No placeholder downloads are provided.',
-                    )}
-                  </p>
-                </div>
-              </div>
+              <ProductDocuments mediaIds={product.mediaIds || []} />
             )}
           </div>
         </section>
@@ -759,7 +890,9 @@ export function ProductDetail({ slug }: { slug: string }) {
             {products
               .filter(
                 (p) =>
-                  p.category === product.category &&
+                  (product.relatedIds?.length
+                    ? product.relatedIds.includes(p.id)
+                    : p.category === product.category) &&
                   p.id !== product.id &&
                   p.status === 'published',
               )
@@ -771,12 +904,63 @@ export function ProductDetail({ slug }: { slug: string }) {
         </section>
         {zoom && (
           <ProductImageDialog
-            src={product.image}
+            src={selectedImage || product.image}
             alt={product.name[lang]}
             onClose={() => setZoom(false)}
           />
         )}
       </div>
     </>
+  )
+}
+
+function ProductDocuments({ mediaIds }: { mediaIds: string[] }) {
+  const { media } = useDemo()
+  const { lang } = useLanguage()
+  const c = useCopy()
+  const files = media.filter(
+    (m) =>
+      mediaIds.includes(m.id) &&
+      m.status === 'ready' &&
+      m.mime === 'application/pdf',
+  )
+  return files.length ? (
+    <ul className="space-y-3">
+      {files.map((file) => (
+        <li
+          key={file.id}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+        >
+          <span className="flex items-center gap-3">
+            <FileText className="size-5 text-primary" />
+            {file.name}
+          </span>
+          <a className="btn-outline" href={file.url} download={file.name}>
+            {c('تنزيل الملف المحلي', 'Download local file')}
+          </a>
+        </li>
+      ))}
+      <li className="text-xs text-muted-foreground">
+        {c(
+          'ملفات المعاينة المحلية لم تخضع لفحص أو اعتماد خادم.',
+          'Local preview files have not undergone server scanning or approval.',
+        )}
+      </li>
+    </ul>
+  ) : (
+    <div className="flex items-start gap-4">
+      <FileText className="size-8 shrink-0 text-primary" />
+      <div>
+        <h3 className="font-bold">
+          {c('لا توجد مستندات مرتبطة', 'No linked documents')}
+        </h3>
+        <p className="mt-2 text-muted-foreground">
+          {c(
+            'يمكن للإدارة اختيار PDF محلي وربطه بالمنتج لاختبار هذه الواجهة.',
+            'An administrator can select a local PDF and link it to test this interface.',
+          )}
+        </p>
+      </div>
+    </div>
   )
 }

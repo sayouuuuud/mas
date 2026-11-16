@@ -5,6 +5,8 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
+  useCallback,
   type ReactNode,
 } from 'react'
 import {
@@ -14,8 +16,40 @@ import {
   type DemoRequest,
 } from '@/lib/demo-data'
 
+import { resourceConfigs, type ResourceRow } from '@/lib/demo-resources'
+import type {
+  PreviewAudit,
+  PreviewMedia,
+  PreviewQuotation,
+} from '@/lib/frontend-model'
+
 export type CartItem = { variantId: string; quantity: number }
 type DemoContextValue = {
+  comparison: string[]
+  setComparison: React.Dispatch<React.SetStateAction<string[]>>
+  lastSubmission: {
+    reference: string
+    kind: 'request' | 'inquiry'
+    itemCount: number
+  } | null
+  setLastSubmission: React.Dispatch<
+    React.SetStateAction<{
+      reference: string
+      kind: 'request' | 'inquiry'
+      itemCount: number
+    } | null>
+  >
+  resources: Record<string, ResourceRow[]>
+  setResources: React.Dispatch<
+    React.SetStateAction<Record<string, ResourceRow[]>>
+  >
+  audit: PreviewAudit[]
+  recordActivity: (action: string, entity: string) => void
+  media: PreviewMedia[]
+  setMedia: React.Dispatch<React.SetStateAction<PreviewMedia[]>>
+  trackMediaUrl: (file: File) => string
+  quotations: PreviewQuotation[]
+  setQuotations: React.Dispatch<React.SetStateAction<PreviewQuotation[]>>
   products: DemoProduct[]
   setProducts: React.Dispatch<React.SetStateAction<DemoProduct[]>>
   requests: DemoRequest[]
@@ -27,8 +61,78 @@ type DemoContextValue = {
 }
 const DemoContext = createContext<DemoContextValue | null>(null)
 export function DemoProvider({ children }: { children: ReactNode }) {
+  const [comparison, setComparison] = useState<string[]>([])
+  const [lastSubmission, setLastSubmission] = useState<{
+    reference: string
+    kind: 'request' | 'inquiry'
+    itemCount: number
+  } | null>(null)
+  const [resources, setResources] = useState<Record<string, ResourceRow[]>>(
+    () =>
+      Object.fromEntries(
+        Object.entries(resourceConfigs).map(([key, config]) => [
+          key,
+          config.rows.map((row) => ({
+            status: 'published',
+            order: '0',
+            ...row,
+          })),
+        ]),
+      ),
+  )
+  const [audit, setAudit] = useState<PreviewAudit[]>([])
+  const [media, setMedia] = useState<PreviewMedia[]>([])
+  const [quotations, setQuotations] = useState<PreviewQuotation[]>([])
+  const mediaUrls = useRef(new Set<string>())
+  const trackMediaUrl = (file: File) => {
+    const url = URL.createObjectURL(file)
+    mediaUrls.current.add(url)
+    return url
+  }
+  useEffect(() => {
+    const urls = mediaUrls.current
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [])
+  const recordActivity = useCallback(
+    (action: string, entity: string) =>
+      setAudit((all) =>
+        [
+          {
+            id: crypto.randomUUID(),
+            at: new Date().toISOString(),
+            action,
+            entity,
+          },
+          ...all,
+        ].slice(0, 500),
+      ),
+    [],
+  )
   const [products, setProducts] = useState(initialProducts)
-  const [requests, setRequests] = useState(initialRequests)
+  const [requests, setRequests] = useState<DemoRequest[]>(() =>
+    initialRequests.map((request) => ({
+      ...request,
+      items: request.items.map((item) => {
+        const p = initialProducts.find((p) =>
+          p.variants.some((v) => v.id === item.variantId),
+        )
+        const v = p?.variants.find((v) => v.id === item.variantId)
+        return {
+          ...item,
+          ...(p && v
+            ? {
+                snapshot: {
+                  name: { ...p.name },
+                  sku: v.sku,
+                  label: { ...v.label },
+                  unit: { ...v.unit },
+                },
+              }
+            : {}),
+        }
+      }),
+    })),
+  )
   const [cart, setCart] = useState<CartItem[]>([])
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
@@ -44,7 +148,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
                 !!item &&
                 typeof item === 'object' &&
                 typeof item.variantId === 'string' &&
-                Number.isInteger(item.quantity) &&
+                Number.isFinite(item.quantity) &&
                 item.quantity > 0 &&
                 item.quantity <= 99999 &&
                 initialProducts.some((p) =>
@@ -68,7 +172,8 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     }
   }, [cart, hydrated])
   function addToCart(variantId: string, quantity: number) {
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99999) return
+    if (!Number.isFinite(quantity) || quantity < 0.001 || quantity > 99999)
+      return
     setCart((current) => {
       const found = current.find((item) => item.variantId === variantId)
       if (found)
@@ -85,6 +190,19 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   return (
     <DemoContext.Provider
       value={{
+        comparison,
+        setComparison,
+        lastSubmission,
+        setLastSubmission,
+        resources,
+        setResources,
+        audit,
+        recordActivity,
+        media,
+        setMedia,
+        trackMediaUrl,
+        quotations,
+        setQuotations,
         products,
         setProducts,
         requests,
@@ -103,4 +221,32 @@ export function useDemo() {
   const context = useContext(DemoContext)
   if (!context) throw new Error('DemoProvider is required')
   return context
+}
+
+export function useCatalogData() {
+  const { resources } = useDemo()
+  return {
+    categories: resources.categories.map((row) => ({
+      id: row.id,
+      name: { ar: row.nameAr, en: row.nameEn },
+      description: { ar: row.description || '', en: row.descriptionEn || '' },
+      image: row.image || '/images/product-oils.png',
+      status: row.status,
+      parent: row.parent || '',
+    })),
+    brands: resources.brands.map((row) => ({
+      id: row.id,
+      name: { ar: row.nameAr, en: row.nameEn },
+      logo: row.logo || undefined,
+      description: { ar: row.description || '', en: row.descriptionEn || '' },
+      website: row.website || '',
+      status: row.status,
+    })),
+    sectors: resources.sectors.map((row) => ({
+      id: row.id,
+      name: { ar: row.nameAr, en: row.nameEn },
+      description: { ar: row.description || '', en: row.descriptionEn || '' },
+      status: row.status,
+    })),
+  }
 }

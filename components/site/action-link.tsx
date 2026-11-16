@@ -4,6 +4,7 @@ import type { ComponentProps, ReactNode } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
+import { usePublicHref } from '@/components/demo/public-link'
 import { cn } from '@/lib/utils'
 
 export const actionVariants = cva(
@@ -11,8 +12,10 @@ export const actionVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary ps-2 pe-6 text-primary-foreground hover:bg-foreground',
-        accent: 'bg-accent ps-2 pe-6 text-accent-foreground hover:bg-background',
+        primary:
+          'bg-primary ps-2 pe-6 text-primary-foreground hover:bg-foreground',
+        accent:
+          'bg-accent ps-2 pe-6 text-accent-foreground hover:bg-background',
         light: 'text-background hover:text-accent',
         plain: 'text-primary hover:text-foreground',
       },
@@ -35,11 +38,23 @@ export function ActionIcon({ icon }: { icon?: ReactNode }) {
   )
 }
 
-type ActionLinkProps = ComponentProps<'a'> & VariantProps<typeof actionVariants> & { icon?: ReactNode }
+type ActionLinkProps = ComponentProps<'a'> &
+  VariantProps<typeof actionVariants> & { icon?: ReactNode }
 
-export function ActionLink({ variant, icon, className, children, ...props }: ActionLinkProps) {
+export function ActionLink({
+  variant,
+  icon,
+  className,
+  children,
+  ...props
+}: ActionLinkProps) {
+  const publicHref = usePublicHref()
   return (
-    <a className={cn(actionVariants({ variant }), className)} {...props}>
+    <a
+      className={cn(actionVariants({ variant }), className)}
+      {...props}
+      href={props.href ? publicHref(props.href) : props.href}
+    >
       <ActionIcon icon={icon} />
       {children}
     </a>

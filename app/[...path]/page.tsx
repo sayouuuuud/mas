@@ -13,10 +13,13 @@ export default async function Page({
 }: {
   params: Promise<{ path: string[] }>
 }) {
-  const { path } = await params
+  const { path: rawPath } = await params
+  const path =
+    rawPath[0] === 'ar' || rawPath[0] === 'en' ? rawPath.slice(1) : rawPath
   const [section, slug] = path
   const singles = [
     'products',
+    'compare',
     'categories',
     'brands',
     'sectors',
@@ -26,15 +29,19 @@ export default async function Page({
     'privacy',
     'terms',
   ]
-  const validSingle = path.length === 1 && singles.includes(section)
+  const validSingle =
+    path.length === 0 || (path.length === 1 && singles.includes(section))
   const validDetail =
     path.length === 2 &&
     ((section === 'products' &&
       (initialProducts.some((p) => p.id === slug) ||
         /^demo-\d+$/.test(slug))) ||
-      (section === 'categories' && categories.some((p) => p.id === slug)) ||
-      (section === 'brands' && brands.some((p) => p.id === slug)) ||
-      (section === 'sectors' && sectors.some((p) => p.id === slug)) ||
+      (section === 'categories' &&
+        (categories.some((p) => p.id === slug) || /^new-\d+$/.test(slug))) ||
+      (section === 'brands' &&
+        (brands.some((p) => p.id === slug) || /^new-\d+$/.test(slug))) ||
+      (section === 'sectors' &&
+        (sectors.some((p) => p.id === slug) || /^new-\d+$/.test(slug))) ||
       (section === 'request-quote' && slug === 'success'))
   if (!validSingle && !validDetail) notFound()
   return (

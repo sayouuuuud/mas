@@ -1,6 +1,12 @@
 'use client'
 
 import { ArrowUp, Mail, MapPin, Phone } from 'lucide-react'
+import { usePublicHref } from '@/components/demo/public-link'
+import {
+  useSiteInfo,
+  useContentPreview,
+} from '@/components/demo/content-preview'
+import { useDemo } from '@/components/demo/demo-provider'
 import { useLanguage } from '@/components/language-provider'
 import { Logo } from '@/components/logo'
 import { addresses, company, phones } from '@/lib/site'
@@ -14,6 +20,10 @@ const sections = [
 ] as const
 
 export function Footer() {
+  const { company, phones, addresses } = useSiteInfo()
+  const content = useContentPreview('footer')
+  const publicHref = usePublicHref()
+  const { resources } = useDemo()
   const { t, lang } = useLanguage()
   const year = new Date().getFullYear()
 
@@ -23,7 +33,11 @@ export function Footer() {
         <div className="flex flex-col gap-5">
           <Logo inverted />
           <p className="max-w-sm leading-relaxed text-background/70">
-            {t.footer.tagline}
+            {content
+              ? lang === 'ar'
+                ? content.bodyAr
+                : content.bodyEn
+              : t.footer.tagline}
           </p>
           {lang === 'ar' ? (
             <p className="text-sm text-background/60">{company.name.ar}</p>
@@ -36,16 +50,19 @@ export function Footer() {
             {t.footer.quickLinks}
           </h2>
           <ul className="flex flex-col gap-3">
-            {sections.map((key) => (
-              <li key={key}>
-                <a
-                  href={key === 'partners' ? '/brands' : `/${key}`}
-                  className="text-background/75 transition-colors hover:text-background"
-                >
-                  {t.nav[key]}
-                </a>
-              </li>
-            ))}
+            {resources.navigation
+              .filter((r) => r.area === 'footer' && r.status === 'published')
+              .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+              .map((row) => (
+                <li key={row.id}>
+                  <a
+                    href={publicHref(row.href)}
+                    className="text-background/75 transition-colors hover:text-background"
+                  >
+                    {lang === 'ar' ? row.nameAr : row.nameEn}
+                  </a>
+                </li>
+              ))}
           </ul>
         </nav>
 
@@ -92,8 +109,12 @@ export function Footer() {
       <div className="border-t border-background/15">
         <div className="site-container flex items-center justify-between gap-6 py-6 text-sm text-background/60">
           <div className="flex flex-wrap gap-4">
-            <a href="/privacy">{lang === 'ar' ? 'الخصوصية' : 'Privacy'}</a>
-            <a href="/terms">{lang === 'ar' ? 'الشروط' : 'Terms'}</a>
+            <a href={publicHref('/privacy')}>
+              {lang === 'ar' ? 'الخصوصية' : 'Privacy'}
+            </a>
+            <a href={publicHref('/terms')}>
+              {lang === 'ar' ? 'الشروط' : 'Terms'}
+            </a>
           </div>
           <p>
             © {year} M.A.S Engineering For Trade. {t.footer.rights}

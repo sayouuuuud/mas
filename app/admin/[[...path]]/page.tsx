@@ -12,12 +12,14 @@ const sections = [
   'brands',
   'sectors',
   'attributes',
+  'units',
   'media',
   'quote-requests',
   'quotations',
   'customers',
   'inquiries',
   'content',
+  'navigation',
   'settings',
   'team',
   'audit-log',
@@ -40,19 +42,22 @@ export default async function Page({
           initialProducts.some((p) => p.id === id) ||
           /^demo-\d+$/.test(id)
         : section === 'quote-requests' || section === 'quotations'
-          ? initialRequests.some((r) => r.id === id)
+          ? initialRequests.some((r) => r.id === id) ||
+            /^DEMO-(RFQ|Q)-[0-9-]+$/.test(id)
           : [
               'categories',
               'brands',
               'sectors',
               'attributes',
+              'units',
               'customers',
               'inquiries',
               'content',
+              'navigation',
               'team',
             ].includes(section) && /^[a-z0-9-]+$/.test(id)
     if (!allow) notFound()
   }
-  if (section === 'quotations' && !id) notFound()
+
   return <AdminPage key={path.join('/')} path={path} />
 }

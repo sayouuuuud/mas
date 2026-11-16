@@ -1,14 +1,15 @@
 'use client'
 
-import Link from 'next/link'
+import { PublicLink as Link } from '@/components/demo/public-link'
 import Image from 'next/image'
+import { useCatalogData } from '@/components/demo/demo-provider'
 import { useLanguage } from '@/components/language-provider'
 import { Header } from '@/components/site/header'
 import { Footer } from '@/components/site/footer'
 import { About } from '@/components/site/about'
 import { Sectors } from '@/components/site/sectors'
 import { WhatsAppFloat } from '@/components/site/whatsapp-float'
-import { brands, categories, sectors } from '@/lib/demo-data'
+
 import {
   DemoNotice,
   DirectionArrow,
@@ -16,18 +17,28 @@ import {
   useCopy,
 } from '@/components/demo/ui'
 import { Catalog, ProductDetail } from './catalog'
+import { useContentPreview } from '@/components/demo/content-preview'
+import { ComparisonTray, ComparisonPage } from './comparison'
+import { HomePage } from '@/components/site/home-page'
+import { PreviewReceipt } from './preview-receipt'
 import { RequestForm } from './request-form'
 
 export function PublicPage({ path }: { path: string[] }) {
+  const { brands, categories, sectors } = useCatalogData()
   const { lang } = useLanguage()
   const c = useCopy()
   const [section, slug] = path
+  if (!section) return <HomePage />
   let body
-  if (section === 'products' && slug)
+  if (section === 'compare') body = <ComparisonPage />
+  else if (section === 'products' && slug)
     body = <ProductDetail key={slug} slug={slug} />
   else if (section === 'products') body = <Catalog />
   else if (section === 'categories' && slug) {
-    const category = categories.find((t) => t.id === slug)!
+    const category = categories.find(
+      (t) => t.id === slug && t.status === 'published',
+    )
+    if (!category) return <UnavailablePage />
     body = (
       <Catalog
         category={slug}
@@ -36,7 +47,8 @@ export function PublicPage({ path }: { path: string[] }) {
       />
     )
   } else if (section === 'brands' && slug) {
-    const brand = brands.find((b) => b.id === slug)!
+    const brand = brands.find((b) => b.id === slug && b.status === 'published')
+    if (!brand) return <UnavailablePage />
     body = (
       <Catalog
         brand={slug}
@@ -48,7 +60,10 @@ export function PublicPage({ path }: { path: string[] }) {
       />
     )
   } else if (section === 'sectors' && slug) {
-    const sector = sectors.find((s) => s.id === slug)!
+    const sector = sectors.find(
+      (s) => s.id === slug && s.status === 'published',
+    )
+    if (!sector) return <UnavailablePage />
     body = (
       <Catalog
         sector={slug}
@@ -57,27 +72,7 @@ export function PublicPage({ path }: { path: string[] }) {
       />
     )
   } else if (section === 'request-quote' && slug === 'success')
-    body = (
-      <>
-        <PageIntro title={c('حالة الطلب', 'Request status')} />
-        <div className="site-container page-section">
-          <div className="panel text-center">
-            <h2 className="text-2xl font-bold">
-              {c('لا يوجد طلب مرسل', 'No request has been sent')}
-            </h2>
-            <p className="my-5 text-muted-foreground">
-              {c(
-                'هذه مرحلة معاينة الواجهات. تأكيد الاستلام سيظهر فقط بعد ربط الحفظ الفعلي.',
-                'This is an interface preview. A receipt will only be shown after real submission is connected.',
-              )}
-            </p>
-            <Link href="/request-quote" className="btn-primary">
-              {c('العودة للطلب', 'Back to request')}
-            </Link>
-          </div>
-        </div>
-      </>
-    )
+    body = <PreviewReceipt />
   else if (section === 'request-quote' || section === 'contact')
     body = <RequestForm contact={section === 'contact'} />
   else if (section === 'brands')
@@ -94,34 +89,36 @@ export function PublicPage({ path }: { path: string[] }) {
         <div className="site-container page-section">
           <DemoNotice />
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {brands.map((b) => (
-              <Link
-                href={`/brands/${b.id}`}
-                className="directory-card group"
-                key={b.id}
-              >
-                <div className="relative mb-7 flex h-24 w-full items-center justify-center">
-                  {b.logo ? (
-                    <Image
-                      src={b.logo}
-                      alt={b.name[lang]}
-                      fill
-                      sizes="200px"
-                      className="object-contain"
-                    />
-                  ) : (
-                    <span className="text-3xl font-bold text-primary">
-                      {b.name[lang]}
-                    </span>
-                  )}
-                </div>
-                <h2 className="font-bold">{b.name[lang]}</h2>
-                <span className="mt-3 flex items-center gap-2 text-sm text-primary">
-                  {c('تصفح المنتجات', 'Browse products')}
-                  <DirectionArrow />
-                </span>
-              </Link>
-            ))}
+            {brands
+              .filter((b) => b.status === 'published')
+              .map((b) => (
+                <Link
+                  href={`/brands/${b.id}`}
+                  className="directory-card group"
+                  key={b.id}
+                >
+                  <div className="relative mb-7 flex h-24 w-full items-center justify-center">
+                    {b.logo ? (
+                      <Image
+                        src={b.logo}
+                        alt={b.name[lang]}
+                        fill
+                        sizes="200px"
+                        className="object-contain"
+                      />
+                    ) : (
+                      <span className="text-3xl font-bold text-primary">
+                        {b.name[lang]}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="font-bold">{b.name[lang]}</h2>
+                  <span className="mt-3 flex items-center gap-2 text-sm text-primary">
+                    {c('تصفح المنتجات', 'Browse products')}
+                    <DirectionArrow />
+                  </span>
+                </Link>
+              ))}
           </div>
         </div>
       </>
@@ -138,30 +135,32 @@ export function PublicPage({ path }: { path: string[] }) {
         />
         <div className="site-container page-section">
           <div className="grid gap-6 md:grid-cols-3">
-            {categories.map((cat) => (
-              <Link
-                key={cat.id}
-                href={`/categories/${cat.id}`}
-                className="catalog-card"
-              >
-                <div className="relative aspect-[4/3]">
-                  <Image
-                    src={cat.image}
-                    alt={cat.name[lang]}
-                    fill
-                    sizes="33vw"
-                    className="object-cover"
-                  />
-                </div>
-                <div className="p-6">
-                  <h2 className="text-2xl font-bold">{cat.name[lang]}</h2>
-                  <p className="my-3 text-muted-foreground">
-                    {cat.description[lang]}
-                  </p>
-                  <DirectionArrow />
-                </div>
-              </Link>
-            ))}
+            {categories
+              .filter((cat) => cat.status === 'published')
+              .map((cat) => (
+                <Link
+                  key={cat.id}
+                  href={`/categories/${cat.id}`}
+                  className="catalog-card"
+                >
+                  <div className="relative aspect-[4/3]">
+                    <Image
+                      src={cat.image}
+                      alt={cat.name[lang]}
+                      fill
+                      sizes="33vw"
+                      className="object-cover"
+                    />
+                  </div>
+                  <div className="p-6">
+                    <h2 className="text-2xl font-bold">{cat.name[lang]}</h2>
+                    <p className="my-3 text-muted-foreground">
+                      {cat.description[lang]}
+                    </p>
+                    <DirectionArrow />
+                  </div>
+                </Link>
+              ))}
           </div>
         </div>
       </>
@@ -178,25 +177,27 @@ export function PublicPage({ path }: { path: string[] }) {
         />
         <div className="site-container page-section">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {sectors.map((s, i) => (
-              <Link
-                href={`/sectors/${s.id}`}
-                className="directory-card"
-                key={s.id}
-              >
-                <span className="mb-6 block font-mono text-3xl text-primary/30">
-                  0{i + 1}
-                </span>
-                <h2 className="text-xl font-bold">{s.name[lang]}</h2>
-                <p className="my-4 leading-7 text-muted-foreground">
-                  {s.description[lang]}
-                </p>
-                <span className="flex items-center gap-2 text-sm font-bold text-primary">
-                  {c('المنتجات المرتبطة', 'Related products')}
-                  <DirectionArrow />
-                </span>
-              </Link>
-            ))}
+            {sectors
+              .filter((s) => s.status === 'published')
+              .map((s, i) => (
+                <Link
+                  href={`/sectors/${s.id}`}
+                  className="directory-card sector-card"
+                  key={s.id}
+                >
+                  <span className="mb-6 block font-mono text-3xl text-primary/30">
+                    0{i + 1}
+                  </span>
+                  <h2 className="text-xl font-bold">{s.name[lang]}</h2>
+                  <p className="my-4 leading-7 text-muted-foreground">
+                    {s.description[lang]}
+                  </p>
+                  <span className="flex items-center gap-2 text-sm font-bold text-primary">
+                    {c('المنتجات المرتبطة', 'Related products')}
+                    <DirectionArrow />
+                  </span>
+                </Link>
+              ))}
           </div>
         </div>
         <Sectors />
@@ -246,6 +247,7 @@ export function PublicPage({ path }: { path: string[] }) {
       <main id="main-content" className="public-main">
         {body}
       </main>
+      <ComparisonTray />
       <Footer />
       <WhatsAppFloat />
     </>
@@ -253,6 +255,8 @@ export function PublicPage({ path }: { path: string[] }) {
 }
 
 function LegalPage({ type }: { type: string }) {
+  const content = useContentPreview(type)
+  const { lang } = useLanguage()
   const c = useCopy()
   const privacy = type === 'privacy'
   const blocks = privacy
@@ -338,14 +342,48 @@ function LegalPage({ type }: { type: string }) {
       />
       <div className="site-container page-section">
         <article className="mx-auto max-w-3xl space-y-8">
-          {blocks.map(([heading, text]) => (
-            <section className="border-b pb-8" key={heading}>
-              <h2 className="mb-3 text-xl font-bold">{heading}</h2>
-              <p className="leading-8 text-muted-foreground">{text}</p>
+          {content ? (
+            <section>
+              <h2 className="text-xl font-bold">
+                {lang === 'ar' ? content.nameAr : content.nameEn}
+              </h2>
+              <p className="mt-5 whitespace-pre-line leading-8">
+                {lang === 'ar' ? content.bodyAr : content.bodyEn}
+              </p>
             </section>
-          ))}
+          ) : (
+            blocks.map(([heading, text]) => (
+              <section className="border-b pb-8" key={heading}>
+                <h2 className="mb-3 text-xl font-bold">{heading}</h2>
+                <p className="leading-8 text-muted-foreground">{text}</p>
+              </section>
+            ))
+          )}
         </article>
       </div>
+    </>
+  )
+}
+
+function UnavailablePage() {
+  const c = useCopy()
+  return (
+    <>
+      <Header />
+      <main id="main-content" className="public-main">
+        <PageIntro
+          title={c(
+            'المحتوى غير متاح في المعاينة',
+            'Content unavailable in preview',
+          )}
+        />
+        <div className="site-container page-section">
+          <Link href="/products" className="btn-primary">
+            {c('تصفح المنتجات', 'Browse products')}
+          </Link>
+        </div>
+      </main>
+      <Footer />
     </>
   )
 }

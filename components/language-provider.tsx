@@ -1,7 +1,20 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
-import { dictionaries, LANG_COOKIE, type Dictionary, type Lang } from '@/lib/i18n'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useEffect,
+} from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import {
+  dictionaries,
+  LANG_COOKIE,
+  type Dictionary,
+  type Lang,
+} from '@/lib/i18n'
 
 type LanguageContextValue = {
   lang: Lang
@@ -18,7 +31,19 @@ export function LanguageProvider({
   initialLang: Lang
   children: React.ReactNode
 }) {
-  const [lang, setLang] = useState<Lang>(initialLang)
+  const [storedLang, setLang] = useState<Lang>(initialLang)
+  const pathname = usePathname()
+  const router = useRouter()
+  const prefix = pathname.split('/')[1]
+  const lang: Lang = prefix === 'ar' || prefix === 'en' ? prefix : storedLang
+  useEffect(() => {
+    document.documentElement.lang = lang
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
+    if (prefix === 'ar' || prefix === 'en') {
+      setLang(lang)
+      document.cookie = `${LANG_COOKIE}=${lang}; path=/; max-age=31536000; samesite=lax`
+    }
+  }, [lang, prefix])
 
   const toggle = useCallback(() => {
     const next: Lang = lang === 'ar' ? 'en' : 'ar'
@@ -26,15 +51,27 @@ export function LanguageProvider({
     document.documentElement.lang = next
     document.documentElement.dir = next === 'ar' ? 'rtl' : 'ltr'
     setLang(next)
-  }, [lang])
+    if (prefix === 'ar' || prefix === 'en')
+      router.push(
+        `/${next}${pathname.slice(3)}${window.location.search}${window.location.hash}`,
+      )
+  }, [lang, prefix, pathname, router])
 
-  const value = useMemo(() => ({ lang, t: dictionaries[lang], toggle }), [lang, toggle])
+  const value = useMemo(
+    () => ({ lang, t: dictionaries[lang], toggle }),
+    [lang, toggle],
+  )
 
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  )
 }
 
 export function useLanguage() {
   const context = useContext(LanguageContext)
-  if (!context) throw new Error('useLanguage must be used within LanguageProvider')
+  if (!context)
+    throw new Error('useLanguage must be used within LanguageProvider')
   return context
 }

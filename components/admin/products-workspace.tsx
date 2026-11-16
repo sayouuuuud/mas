@@ -1,27 +1,31 @@
 'use client'
 import { useState } from 'react'
+import { ImportPreview } from './import-preview'
+import {
+  Pagination,
+  useConfirmAction,
+  useUnsavedChanges,
+} from './frontend-tools'
+import { csvDownload } from '@/lib/frontend-model'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, Save, ExternalLink, Trash2 } from 'lucide-react'
-import { useDemo } from '@/components/demo/demo-provider'
+import { useDemo, useCatalogData } from '@/components/demo/demo-provider'
 import { Badge, EmptyState, Field, useCopy } from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
-import {
-  bi,
-  brands,
-  categories,
-  sectors,
-  type DemoProduct,
-  type CategoryKey,
-} from '@/lib/demo-data'
+import { bi, type DemoProduct, type CategoryKey } from '@/lib/demo-data'
 
 export function ProductWorkspace({ id }: { id?: string }) {
-  const { products } = useDemo()
+  const { brands, categories } = useCatalogData()
+  const { products, setProducts, requests, recordActivity } = useDemo()
   const c = useCopy()
   const { lang } = useLanguage()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [page, setPage] = useState(1)
+  const { confirm, confirmation } = useConfirmAction()
   if (id) return <ProductEditor key={id} id={id} />
   const filtered = products.filter(
     (p) =>
@@ -32,6 +36,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
   )
   return (
     <>
+      {confirmation}
       <div className="admin-heading">
         <div>
           <h1>{c('إدارة المنتجات', 'Manage products')}</h1>
@@ -47,7 +52,62 @@ export function ProductWorkspace({ id }: { id?: string }) {
           {c('منتج جديد', 'New product')}
         </Link>
       </div>
+      <ImportPreview />
       <div className="panel bg-white">
+        <div className="mb-5 flex flex-wrap gap-3">
+          <button
+            className="btn-outline"
+            onClick={() =>
+              csvDownload(
+                'demo-products.csv',
+                ['name', 'sku', 'status'],
+                filtered.map((p) => [
+                  p.name[lang],
+                  p.variants[0]?.sku || '',
+                  p.status,
+                ]),
+              )
+            }
+          >
+            {c('تصدير النتائج', 'Export results')}
+          </button>
+          <select
+            className="control w-auto"
+            value=""
+            aria-label={c('إجراء جماعي', 'Bulk action')}
+            disabled={!selectedIds.length}
+            onChange={(e) => {
+              const status = e.target.value
+              if (status)
+                confirm(
+                  c(
+                    'تطبيق الحالة على المنتجات المحددة؟',
+                    'Apply status to selected products?',
+                  ),
+                  () => {
+                    setProducts((all) =>
+                      all.map((p) =>
+                        selectedIds.includes(p.id)
+                          ? { ...p, status: status as DemoProduct['status'] }
+                          : p,
+                      ),
+                    )
+                    recordActivity(
+                      `products.bulk_${status}`,
+                      selectedIds.join(','),
+                    )
+                    setSelectedIds([])
+                  },
+                )
+            }}
+          >
+            <option value="">
+              {c('إجراء على المحدد', 'Selected action')} ({selectedIds.length})
+            </option>
+            <option value="draft">{c('إلغاء النشر', 'Unpublish')}</option>
+            <option value="archived">{c('أرشفة', 'Archive')}</option>
+          </select>
+        </div>
         <div className="mb-5 flex flex-wrap gap-3">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">
@@ -86,6 +146,21 @@ export function ProductWorkspace({ id }: { id?: string }) {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label={c('تحديد الكل', 'Select all')}
+                      checked={
+                        filtered.length > 0 &&
+                        filtered.every((p) => selectedIds.includes(p.id))
+                      }
+                      onChange={(e) =>
+                        setSelectedIds(
+                          e.target.checked ? filtered.map((p) => p.id) : [],
+                        )
+                      }
+                    />
+                  </th>
                   {[
                     c('المنتج', 'Product'),
                     c('العلامة / التصنيف', 'Brand / category'),
@@ -98,68 +173,150 @@ export function ProductWorkspace({ id }: { id?: string }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <Image
-                          src={p.image}
-                          alt=""
-                          width={44}
-                          height={44}
-                          className="size-11 rounded-lg object-cover"
+                {filtered
+                  .slice(
+                    (Math.min(
+                      page,
+                      Math.max(1, Math.ceil(filtered.length / 8)),
+                    ) -
+                      1) *
+                      8,
+                    Math.min(
+                      page,
+                      Math.max(1, Math.ceil(filtered.length / 8)),
+                    ) * 8,
+                  )
+                  .map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`${c('تحديد', 'Select')} ${p.name[lang]}`}
+                          checked={selectedIds.includes(p.id)}
+                          onChange={(e) =>
+                            setSelectedIds((ids) =>
+                              e.target.checked
+                                ? [...ids, p.id]
+                                : ids.filter((id) => id !== p.id),
+                            )
+                          }
                         />
-                        <div>
-                          <Link
-                            href={`/admin/products/${p.id}`}
-                            className="font-bold text-primary"
-                          >
-                            {p.name[lang]}
-                          </Link>
-                          <p className="mt-1 font-mono text-xs text-muted-foreground">
-                            {p.variants[0]?.sku}
-                          </p>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <Image
+                            src={p.image}
+                            alt=""
+                            width={44}
+                            height={44}
+                            className="size-11 rounded-lg object-cover"
+                          />
+                          <div>
+                            <Link
+                              href={`/admin/products/${p.id}`}
+                              className="font-bold text-primary"
+                            >
+                              {p.name[lang]}
+                            </Link>
+                            <p className="mt-1 font-mono text-xs text-muted-foreground">
+                              {p.variants[0]?.sku}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      {brands.find((b) => b.id === p.brand)?.name[lang]}
-                      <p className="text-xs text-muted-foreground">
-                        {
-                          categories.find((t) => t.id === p.category)?.name[
-                            lang
-                          ]
-                        }
-                      </p>
-                    </td>
-                    <td>{p.variants.length}</td>
-                    <td>
-                      <Badge
-                        tone={
-                          p.status === 'published'
-                            ? 'green'
+                      </td>
+                      <td>
+                        {brands.find((b) => b.id === p.brand)?.name[lang]}
+                        <p className="text-xs text-muted-foreground">
+                          {
+                            categories.find((t) => t.id === p.category)?.name[
+                              lang
+                            ]
+                          }
+                        </p>
+                      </td>
+                      <td>{p.variants.length}</td>
+                      <td>
+                        <Badge
+                          tone={
+                            p.status === 'published'
+                              ? 'green'
+                              : p.status === 'draft'
+                                ? 'gold'
+                                : 'neutral'
+                          }
+                        >
+                          {p.status === 'published'
+                            ? c('منشور', 'Published')
                             : p.status === 'draft'
-                              ? 'gold'
-                              : 'neutral'
-                        }
-                      >
-                        {p.status === 'published'
-                          ? c('منشور', 'Published')
-                          : p.status === 'draft'
-                            ? c('مسودة', 'Draft')
-                            : c('مؤرشف', 'Archived')}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Link
-                        href={`/admin/products/${p.id}`}
-                        className="text-primary underline"
-                      >
-                        {c('تحرير', 'Edit')}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                              ? c('مسودة', 'Draft')
+                              : c('مؤرشف', 'Archived')}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Link
+                          href={`/admin/products/${p.id}`}
+                          className="text-primary underline"
+                        >
+                          {c('تحرير', 'Edit')}
+                        </Link>
+                        <button
+                          className="ms-3 text-primary"
+                          onClick={() => {
+                            const id = `demo-${Date.now()}`
+                            setProducts((all) => [
+                              ...all,
+                              {
+                                ...structuredClone(p),
+                                id,
+                                slug: `${p.slug}-copy-${Date.now()}`,
+                                status: 'draft',
+                                variants: p.variants.map((v, i) => ({
+                                  ...v,
+                                  id: `${id}-${i}`,
+                                  sku: `COPY-${Date.now()}-${i}`,
+                                })),
+                              },
+                            ])
+                            recordActivity('product.duplicated', p.id)
+                          }}
+                        >
+                          {c('نسخ', 'Duplicate')}
+                        </button>
+                        <button
+                          className="ms-3 text-red-700"
+                          onClick={() => {
+                            if (
+                              p.status !== 'draft' ||
+                              requests.some((r) =>
+                                r.items.some((i) =>
+                                  p.variants.some((v) => v.id === i.variantId),
+                                ),
+                              )
+                            ) {
+                              window.alert(
+                                c(
+                                  'الحذف للمسودات غير المرتبطة فقط.',
+                                  'Only unreferenced drafts can be deleted.',
+                                ),
+                              )
+                              return
+                            }
+                            confirm(
+                              c('حذف المسودة المحلية؟', 'Delete local draft?'),
+                              () => {
+                                setProducts((all) =>
+                                  all.filter((item) => item.id !== p.id),
+                                )
+                                recordActivity('product.deleted', p.id)
+                              },
+                            )
+                          }}
+                        >
+                          {c('حذف', 'Delete')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -172,6 +329,12 @@ export function ProductWorkspace({ id }: { id?: string }) {
             )}
           />
         )}
+        <Pagination
+          page={Math.min(page, Math.max(1, Math.ceil(filtered.length / 8)))}
+          pages={Math.max(1, Math.ceil(filtered.length / 8))}
+          total={filtered.length}
+          onChange={setPage}
+        />
         <p className="mt-5 text-xs text-muted-foreground">
           {filtered.length}{' '}
           {c(
@@ -185,7 +348,8 @@ export function ProductWorkspace({ id }: { id?: string }) {
 }
 
 function ProductEditor({ id }: { id: string }) {
-  const { products, setProducts } = useDemo()
+  const { brands, categories, sectors } = useCatalogData()
+  const { products, setProducts, media, resources, recordActivity } = useDemo()
   const c = useCopy()
   const { lang } = useLanguage()
   const router = useRouter()
@@ -217,10 +381,13 @@ function ProductEditor({ id }: { id: string }) {
           ],
         },
   )
+  const [baseline, setBaseline] = useState(JSON.stringify(draft))
+  useUnsavedChanges(JSON.stringify(draft) !== baseline)
   const [tab, setTab] = useState('basic')
   const [message, setMessage] = useState('')
   const tabs = [
     ['basic', 'البيانات الأساسية', 'Basics'],
+    ['description', 'الوصف والاستخدامات', 'Description & applications'],
     ['specs', 'المواصفات', 'Specifications'],
     ['variants', 'العبوات والمتغيرات', 'Variants'],
     ['media', 'الصور والملفات', 'Media'],
@@ -261,6 +428,31 @@ function ProductEditor({ id }: { id: string }) {
       )
       return
     }
+    if (
+      !brands.some((b) => b.id === draft.brand && b.status !== 'archived') ||
+      !categories.some(
+        (cat) => cat.id === draft.category && cat.status !== 'archived',
+      )
+    ) {
+      setMessage(
+        c('اختر علامة وتصنيفًا فعالين.', 'Select an active brand and category.'),
+      )
+      setTab('basic')
+      return
+    }
+    if (
+      draft.status === 'published' &&
+      (!draft.description?.ar.trim() || !draft.description?.en.trim())
+    ) {
+      setMessage(
+        c(
+          'أكمل الوصف التفصيلي باللغتين للنشر.',
+          'Complete detailed descriptions in both languages before publishing.',
+        ),
+      )
+      setTab('description')
+      return
+    }
     const skus = draft.variants.map((v) => v.sku.trim().toLowerCase())
     const otherSkus = products
       .filter((p) => p.id !== draft.id)
@@ -299,6 +491,56 @@ function ProductEditor({ id }: { id: string }) {
       setTab('basic')
       return
     }
+    if (
+      draft.status === 'published' &&
+      (!categories.some(
+        (cat) => cat.id === draft.category && cat.status === 'published',
+      ) ||
+        !brands.some((b) => b.id === draft.brand && b.status === 'published'))
+    ) {
+      setMessage(
+        c(
+          'انشر التصنيف والعلامة المرتبطين أولًا.',
+          'Publish the related category and brand first.',
+        ),
+      )
+      return
+    }
+    if (
+      draft.status === 'published' &&
+      draft.mainMediaId &&
+      media.some(
+        (m) =>
+          m.id === draft.mainMediaId && (!m.altAr.trim() || !m.altEn.trim()),
+      )
+    ) {
+      setMessage(
+        c(
+          'الصورة الرئيسية تحتاج نصًا بديلًا باللغتين.',
+          'The main image requires bilingual alt text.',
+        ),
+      )
+      setTab('media')
+      return
+    }
+    if (
+      draft.status === 'published' &&
+      resources.attributes.some(
+        (a) =>
+          a.required === 'yes' &&
+          a.category === draft.category &&
+          !draft.specs.some((s) => s.label.ar === a.nameAr && s.value.trim()),
+      )
+    ) {
+      setMessage(
+        c(
+          'أكمل المواصفات الإلزامية المعرفة للتصنيف.',
+          'Complete required category attributes.',
+        ),
+      )
+      setTab('specs')
+      return
+    }
     setProducts((current) =>
       current.some((p) => p.id === draft.id)
         ? current.map((p) => (p.id === draft.id ? draft : p))
@@ -310,6 +552,8 @@ function ProductEditor({ id }: { id: string }) {
         'Changes applied to this preview only. They will reset on reload.',
       ),
     )
+    setBaseline(JSON.stringify(draft))
+    recordActivity('product.saved', draft.id)
     if (id === 'new') router.push(`/admin/products/${draft.id}`)
   }
   return (
@@ -483,6 +727,56 @@ function ProductEditor({ id }: { id: string }) {
                   />
                 </Field>
               ))}
+            </div>
+          )}
+          {tab === 'description' && (
+            <div className="space-y-6">
+              {(['description', 'applications', 'benefits'] as const).map(
+                (key) => (
+                  <div className="grid gap-5 md:grid-cols-2" key={key}>
+                    {(['ar', 'en'] as const).map((locale) => (
+                      <Field
+                        key={locale}
+                        label={`${c(key === 'description' ? 'الوصف التفصيلي' : key === 'applications' ? 'الاستخدامات' : 'المزايا', key)} (${locale})`}
+                      >
+                        <textarea
+                          rows={6}
+                          className="control"
+                          maxLength={10000}
+                          value={draft[key]?.[locale] || ''}
+                          dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              [key]: {
+                                ar: draft[key]?.ar || '',
+                                en: draft[key]?.en || '',
+                                [locale]: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </Field>
+                    ))}
+                  </div>
+                ),
+              )}
+              <Field
+                label={c(
+                  'مصدر المواصفات — داخلي',
+                  'Specification source — internal',
+                )}
+              >
+                <textarea
+                  className="control"
+                  rows={3}
+                  maxLength={1000}
+                  value={draft.sourceNote || ''}
+                  onChange={(e) =>
+                    setDraft({ ...draft, sourceNote: e.target.value })
+                  }
+                />
+              </Field>
             </div>
           )}
           {tab === 'specs' && (
@@ -670,6 +964,33 @@ function ProductEditor({ id }: { id: string }) {
                         }
                       />
                     </Field>
+                    <Field label={c('وحدة البيع', 'Sales unit')}>
+                      <select
+                        className="control"
+                        value={v.unit.en}
+                        onChange={(e) => {
+                          const unit = resources.units.find(
+                            (u) => u.code === e.target.value,
+                          )!
+                          setDraft({
+                            ...draft,
+                            variants: draft.variants.map((x) =>
+                              x.id === v.id
+                                ? { ...x, unit: bi(unit.nameAr, unit.nameEn) }
+                                : x,
+                            ),
+                          })
+                        }}
+                      >
+                        {resources.units
+                          .filter((u) => u.status !== 'archived')
+                          .map((u) => (
+                            <option key={u.id} value={u.code}>
+                              {lang === 'ar' ? u.nameAr : u.nameEn}
+                            </option>
+                          ))}
+                      </select>
+                    </Field>
                     <Field label={c('التوفر', 'Availability')}>
                       <select
                         className="control"
@@ -723,27 +1044,147 @@ function ProductEditor({ id }: { id: string }) {
             </div>
           )}
           {tab === 'media' && (
-            <div>
+            <div className="space-y-5">
               <Image
                 src={draft.image}
                 alt={draft.name[lang]}
                 width={320}
                 height={240}
-                className="mb-5 rounded-xl"
+                className="rounded-xl"
               />
-              <p className="mb-4 text-muted-foreground">
+              <Field label={c('الصورة الرئيسية', 'Main image')}>
+                <select
+                  className="control"
+                  value={draft.mainMediaId || ''}
+                  onChange={(e) => {
+                    const file = media.find((m) => m.id === e.target.value)
+                    setDraft({
+                      ...draft,
+                      mainMediaId: file?.id,
+                      image:
+                        file?.url ||
+                        categories.find((t) => t.id === draft.category)
+                          ?.image ||
+                        categories[0].image,
+                    })
+                  }}
+                >
+                  <option value="">
+                    {c(
+                      'صورة التصنيف الافتراضية',
+                      'Default category illustration',
+                    )}
+                  </option>
+                  {media
+                    .filter(
+                      (m) =>
+                        m.mime.startsWith('image/') && m.status === 'ready',
+                    )
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <fieldset>
+                <legend className="mb-3 font-bold">
+                  {c('صور وملفات مرتبطة', 'Linked images & documents')}
+                </legend>
+                {media
+                  .filter((m) => m.status === 'ready')
+                  .map((m) => (
+                    <label key={m.id} className="mb-3 flex gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={draft.mediaIds?.includes(m.id) || false}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            mediaIds: e.target.checked
+                              ? [...(draft.mediaIds || []), m.id]
+                              : (draft.mediaIds || []).filter(
+                                  (id) => id !== m.id,
+                                ),
+                          })
+                        }
+                      />
+                      {m.name} · {m.mime}
+                    </label>
+                  ))}
+              </fieldset>
+              <Link className="btn-outline" href="/admin/media">
                 {c(
-                  'الصورة الحالية توضيحية. يمكن تجربة اختيار ملفات محليًا من مكتبة الوسائط؛ الرفع غير مفعّل.',
-                  'This is a category illustration. Try local file selection in the media library; uploads are not connected.',
+                  'اختيار ملفات محلية من المكتبة',
+                  'Choose local files from the library',
+                )}
+              </Link>
+              <p className="text-sm text-muted-foreground">
+                {c(
+                  'تطبق النصوص البديلة من مكتبة الوسائط؛ لا رفع أو فحص أو نشر حقيقي.',
+                  'Alt text comes from the library. No real upload, scanning or publishing.',
                 )}
               </p>
-              <Link className="btn-outline" href="/admin/media">
-                {c('مكتبة الوسائط', 'Media library')}
-              </Link>
             </div>
           )}
           {tab === 'seo' && (
             <div className="space-y-6">
+              <div className="grid gap-5 sm:grid-cols-2">
+                {(['seoTitle', 'seoDescription'] as const).flatMap((key) =>
+                  (['ar', 'en'] as const).map((locale) => (
+                    <Field
+                      key={`${key}-${locale}`}
+                      label={`${key === 'seoTitle' ? c('عنوان البحث', 'SEO title') : c('وصف البحث', 'SEO description')} (${locale})`}
+                    >
+                      <input
+                        className="control"
+                        maxLength={key === 'seoTitle' ? 70 : 180}
+                        value={draft[key]?.[locale] || ''}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            [key]: {
+                              ar: draft[key]?.ar || '',
+                              en: draft[key]?.en || '',
+                              [locale]: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </Field>
+                  )),
+                )}
+              </div>
+              <fieldset>
+                <legend className="mb-3 font-bold">
+                  {c('منتجات مرتبطة', 'Related products')}
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {products
+                    .filter(
+                      (p) => p.id !== draft.id && p.status === 'published',
+                    )
+                    .map((p) => (
+                      <label key={p.id} className="flex gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={draft.relatedIds?.includes(p.id) || false}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              relatedIds: e.target.checked
+                                ? [...(draft.relatedIds || []), p.id]
+                                : (draft.relatedIds || []).filter(
+                                    (id) => id !== p.id,
+                                  ),
+                            })
+                          }
+                        />
+                        {p.name[lang]}
+                      </label>
+                    ))}
+                </div>
+              </fieldset>
               <label className="flex gap-3">
                 <input
                   type="checkbox"

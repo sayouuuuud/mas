@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import {
   LayoutDashboard,
   Package,
@@ -26,7 +26,9 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
+  ChevronDown,
 } from 'lucide-react'
+import { AuthStates } from './auth-states'
 import { Logo } from '@/components/logo'
 import { useLanguage } from '@/components/language-provider'
 import { DemoNotice, Field, useCopy } from '@/components/demo/ui'
@@ -43,6 +45,12 @@ export const adminNavigation = [
     en: 'Attributes & units',
     icon: SlidersHorizontal,
   },
+  {
+    id: 'units',
+    ar: 'وحدات البيع والقياس',
+    en: 'Units',
+    icon: SlidersHorizontal,
+  },
   { id: 'media', ar: 'مكتبة الوسائط', en: 'Media library', icon: Image },
   {
     id: 'quote-requests',
@@ -50,9 +58,11 @@ export const adminNavigation = [
     en: 'Quote requests',
     icon: ClipboardList,
   },
+  { id: 'quotations', ar: 'عروض الأسعار', en: 'Quotations', icon: FileText },
   { id: 'customers', ar: 'العملاء', en: 'Customers', icon: Users },
   { id: 'inquiries', ar: 'الرسائل والاستفسارات', en: 'Inquiries', icon: Mail },
   { id: 'content', ar: 'محتوى الموقع', en: 'Site content', icon: FileText },
+  { id: 'navigation', ar: 'قوائم التنقل', en: 'Navigation', icon: Layers },
   { id: 'settings', ar: 'الإعدادات', en: 'Settings', icon: Settings },
   { id: 'team', ar: 'الفريق والصلاحيات', en: 'Team & roles', icon: Shield },
   { id: 'audit-log', ar: 'سجل النشاط', en: 'Activity log', icon: History },
@@ -63,6 +73,53 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const { toggle } = useLanguage()
   const c = useCopy()
   const [open, setOpen] = useState(false)
+  const [mobile, setMobile] = useState(false)
+  const sidebarRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1023px)')
+    const sync = () => setMobile(query.matches)
+    sync()
+    query.addEventListener('change', sync)
+    return () => query.removeEventListener('change', sync)
+  }, [])
+  useEffect(() => {
+    if (!open || !mobile) return
+    const previous = document.activeElement as HTMLElement | null
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const controls = () =>
+      Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href],button:not(:disabled),summary',
+        ) || [],
+      ).filter((e) => e.getClientRects().length > 0)
+    controls()[0]?.focus()
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setOpen(false)
+      }
+      if (event.key === 'Tab') {
+        const nodes = controls()
+        const first = nodes[0]
+        const last = nodes[nodes.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last?.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first?.focus()
+        }
+      }
+    }
+    document.addEventListener('keydown', key)
+    return () => {
+      document.body.style.overflow = overflow
+      document.removeEventListener('keydown', key)
+      previous?.focus()
+    }
+  }, [open, mobile])
+
   const active = adminNavigation.find((n) =>
     n.id ? pathname.startsWith(`/admin/${n.id}`) : pathname === '/admin',
   )
@@ -78,7 +135,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
           onClick={() => setOpen(false)}
         />
       )}
-      <aside className={`admin-sidebar ${open ? 'admin-sidebar-open' : ''}`}>
+      <aside
+        ref={sidebarRef}
+        inert={mobile && !open ? true : undefined}
+        className={`admin-sidebar ${open ? 'admin-sidebar-open' : ''}`}
+      >
         <div className="mb-6 flex items-center justify-between border-b border-white/15 pb-6">
           <Link href="/admin">
             <Logo inverted className="scale-90 origin-top" />
@@ -98,25 +159,98 @@ export function AdminShell({ children }: { children: ReactNode }) {
           aria-label={c('تنقل الإدارة', 'Administration')}
           className="flex-1"
         >
-          <ul className="space-y-1">
-            {adminNavigation.map((n) => {
-              const activeItem = n.id
-                ? pathname.startsWith(`/admin/${n.id}`)
-                : pathname === '/admin'
-              return (
-                <li key={n.id}>
-                  <Link
-                    href={`/admin${n.id ? `/${n.id}` : ''}`}
-                    onClick={() => setOpen(false)}
-                    className={`admin-nav-link ${activeItem ? 'admin-nav-active' : ''}`}
-                    aria-current={activeItem ? 'page' : undefined}
-                  >
-                    <n.icon className="size-4 shrink-0" aria-hidden />
-                    {c(n.ar, n.en)}
-                  </Link>
-                </li>
-              )
-            })}
+          <ul className="space-y-2">
+            <li>
+              <Link
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className={`admin-nav-link ${pathname === '/admin' ? 'admin-nav-active' : ''}`}
+                aria-current={pathname === '/admin' ? 'page' : undefined}
+              >
+                <LayoutDashboard className="size-4" />
+                {c('لوحة التحكم', 'Dashboard')}
+              </Link>
+            </li>
+            {[
+              {
+                id: 'sales',
+                ar: 'المبيعات والعملاء',
+                en: 'Sales & customers',
+                pages: [
+                  'quote-requests',
+                  'quotations',
+                  'customers',
+                  'inquiries',
+                ],
+              },
+              {
+                id: 'catalog',
+                ar: 'الكتالوج والمنتجات',
+                en: 'Catalog & products',
+                pages: [
+                  'products',
+                  'categories',
+                  'brands',
+                  'sectors',
+                  'attributes',
+                  'units',
+                  'media',
+                ],
+              },
+              {
+                id: 'website',
+                ar: 'إدارة الموقع',
+                en: 'Website management',
+                pages: ['content', 'navigation', 'settings'],
+              },
+              {
+                id: 'insights',
+                ar: 'التقارير والنشاط',
+                en: 'Reports & activity',
+                pages: ['reports', 'audit-log'],
+              },
+              {
+                id: 'access',
+                ar: 'الفريق والصلاحيات',
+                en: 'Team & access',
+                pages: ['team'],
+              },
+            ].map((group) => (
+              <li key={group.id}>
+                <details
+                  className="admin-nav-group"
+                  open={
+                    group.pages.some((id) =>
+                      pathname.startsWith(`/admin/${id}`),
+                    ) || undefined
+                  }
+                >
+                  <summary>
+                    <span>{c(group.ar, group.en)}</span>
+                    <ChevronDown className="size-4" />
+                  </summary>
+                  <ul id={`nav-${group.id}`} className="space-y-1">
+                    {group.pages.map((id) => {
+                      const n = adminNavigation.find((n) => n.id === id)!
+                      const activeItem = pathname.startsWith(`/admin/${id}`)
+                      return (
+                        <li key={id}>
+                          <Link
+                            href={`/admin/${id}`}
+                            onClick={() => setOpen(false)}
+                            className={`admin-nav-link ${activeItem ? 'admin-nav-active' : ''}`}
+                            aria-current={activeItem ? 'page' : undefined}
+                          >
+                            <n.icon className="size-4 shrink-0" aria-hidden />
+                            {c(n.ar, n.en)}
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </details>
+              </li>
+            ))}
           </ul>
         </nav>
         <div className="space-y-1 border-t border-white/15 pt-4">
@@ -294,6 +428,7 @@ export function AdminLogin({ reset = false }: { reset?: boolean }) {
               {message}
             </p>
           </form>
+          <AuthStates initial={reset ? 'password' : 'mfa'} />
           <div className="mt-8 border-t pt-6">
             <Link className="btn-outline w-full" href="/admin">
               {c(

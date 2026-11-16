@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { PublicLink as Link } from '@/components/demo/public-link'
 import { usePathname } from 'next/navigation'
 import { Globe, Menu, Phone, ShoppingBag, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useDemo } from '@/components/demo/demo-provider'
 import { Logo } from '@/components/logo'
+import { useSiteInfo } from '@/components/demo/content-preview'
 import { phones } from '@/lib/site'
 import { cn } from '@/lib/utils'
 
@@ -18,9 +19,15 @@ const links = [
   ['/contact', 'تواصل معنا', 'Contact'],
 ] as const
 export function Header() {
+  const { phones } = useSiteInfo()
   const { lang, toggle } = useLanguage()
-  const { cart } = useDemo()
-  const pathname = usePathname()
+  const { cart, resources } = useDemo()
+  const links = resources.navigation
+    .filter((r) => r.area === 'header' && r.status === 'published')
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+    .map((r) => [r.href, r.nameAr, r.nameEn])
+  const rawPathname = usePathname()
+  const pathname = rawPathname.replace(/^\/(ar|en)(?=\/|$)/, '') || '/'
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const c = (ar: string, en: string) => (lang === 'ar' ? ar : en)
