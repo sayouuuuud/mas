@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingIncludes: {
+    '/api/v1/*': ['./public/fonts/tajawal-regular.ttf'],
+  },
   images: {
     unoptimized: true,
   },
