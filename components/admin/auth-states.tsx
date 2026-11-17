@@ -246,7 +246,7 @@ export function MfaVerificationPanel({
           <button
             type="button"
             className="text-sm text-muted-foreground underline hover:text-foreground"
-            onClick={() => void onSignOut()}
+            onClick={() => { void Promise.resolve().then(() => onSignOut()).catch(err => setError(formatApiError(err, lang))) }}
           >
             {c('تسجيل الخروج واستخدام حساب آخر', 'Sign out and use another account')}
           </button>

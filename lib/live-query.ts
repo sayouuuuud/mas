@@ -74,7 +74,7 @@ async function runFetch<T>(
 
   const promise = fetcher()
     .then((data) => {
-      if (isPrivateKey(key) && genAtStart !== globalGeneration) {
+      if (store.get(key) !== nextEntry || (isPrivateKey(key) && genAtStart !== globalGeneration)) {
         return data
       }
       store.set(key, {
@@ -91,17 +91,18 @@ async function runFetch<T>(
     .catch((err: unknown) => {
       const normalized =
         err instanceof Error ? err : new Error('Request failed.')
+      if (store.get(key) !== nextEntry || (isPrivateKey(key) && genAtStart !== globalGeneration)) throw normalized
+      const unauthorized = normalized instanceof BackendError && [401, 403].includes(normalized.status) && isPrivateKey(key)
       if (
         normalized instanceof BackendError &&
         normalized.status === 401 &&
-        key !== '/auth/me' &&
         isPrivateKey(key)
       ) {
         clearPrivateLiveQueries()
       }
       store.set(key, {
         status: 'error',
-        data: existing?.data,
+        data: unauthorized ? undefined : existing?.data,
         error: normalized,
         updatedAt: Date.now(),
         stale: false,
@@ -181,7 +182,7 @@ export function useLiveQuery<T>(
     return (store.get(key) as CacheEntry<T>) || IDLE_ENTRY
   }, [key])
 
-  const entry = useSyncExternalStore(subscribe, getSnapshot, () => IDLE_ENTRY)
+  const entry = useSyncExternalStore<CacheEntry<T>>(subscribe, getSnapshot, () => IDLE_ENTRY)
 
   useEffect(() => {
     if (!key) return

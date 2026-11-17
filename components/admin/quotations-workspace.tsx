@@ -32,6 +32,8 @@ import {
   saveQuotation,
 } from '@/lib/api-client'
 import { invalidateLiveQueries, useLiveQuery } from '@/lib/live-query'
+import { quoteTotals } from '@/lib/frontend-model'
+import type { QuotationInput } from '@/lib/server/contracts'
 import type {
   AdminQuoteRequest,
   QuotationRecord,
@@ -61,7 +63,8 @@ type EditableLine = {
   unit: string
   quantity: number
   unitPrice: number
-  notes: string
+  discount: string
+  tax: string
 }
 
 export function QuotationsWorkspace({ id }: { id?: string }) {
@@ -76,6 +79,7 @@ function QuotationsList() {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
 
   const listPath = buildApiPath('/admin/quotations', {
     page,
@@ -114,6 +118,7 @@ function QuotationsList() {
 
   return (
     <>
+      {exportError && <p role="alert" className="text-red-700">{exportError}</p>}
       <div className="admin-heading">
         <div>
           <h1>{c('عروض الأسعار الرسمية', 'Formal Quotations')}</h1>
@@ -130,12 +135,15 @@ function QuotationsList() {
           disabled={exporting}
           onClick={async () => {
             setExporting(true)
+            setExportError('')
             try {
               await downloadServerExport('quotations', {
                 status: status || undefined,
                 q: q.trim() || undefined,
               })
               invalidateLiveQueries('/admin/audit-log')
+            } catch (err) {
+              setExportError(formatApiError(err, lang))
             } finally {
               setExporting(false)
             }
@@ -237,7 +245,7 @@ function QuotationsList() {
                       </td>
                       <td className="font-mono">R{row.revision}</td>
                       <td dir="ltr" className="font-mono">
-                        {Number(row.total || 0).toLocaleString('en-EG')}{' '}
+                        {(Number(row.totals?.total || 0) / 100).toLocaleString('en-EG')}{' '}
                         {row.currency}
                       </td>
                       <td>
@@ -323,8 +331,6 @@ function QuotationEditor({ id }: { id: string }) {
   const [validUntil, setValidUntil] = useState('')
   const [paymentTerms, setPaymentTerms] = useState('')
   const [deliveryTerms, setDeliveryTerms] = useState('')
-  const [customerNotes, setCustomerNotes] = useState('')
-  const [internalNotes, setInternalNotes] = useState('')
   const [discount, setDiscount] = useState(0)
   const [taxRate, setTaxRate] = useState(14)
   const [channel, setChannel] = useState('email')
@@ -339,24 +345,22 @@ function QuotationEditor({ id }: { id: string }) {
   useEffect(() => {
     if (!isNew && quotation && initializedKey !== `q:${quotation.id}:${quotation.version}`) {
       setValidUntil(quotation.validUntil || '')
-      setPaymentTerms(quotation.paymentTerms || '')
-      setDeliveryTerms(quotation.deliveryTerms || '')
-      setCustomerNotes(quotation.customerNotes || '')
-      setInternalNotes(quotation.internalNotes || '')
-      setDiscount(Number(quotation.discount || 0))
-      setTaxRate(Number(quotation.taxRate ?? 14))
+      setPaymentTerms(quotation.terms || '')
+      setDeliveryTerms(quotation.leadTime || '')
+      setDiscount(quotation.lines.reduce((sum, line) => sum + Number(line.discount || 0), 0))
+      setTaxRate(Number(quotation.lines[0]?.tax || 0))
       setLines(
-        (quotation.items || []).map((item, idx) => ({
-          key: item.id || `line-${idx}`,
+        (quotation.lines || []).map((item, idx) => ({
+          key: `line-${idx}`,
           requestItemId: item.requestItemId || null,
           variantId: item.variantId || null,
-          descriptionAr: item.description?.ar || '',
-          descriptionEn: item.description?.en || item.description?.ar || '',
+          descriptionAr: item.description || '',
+          descriptionEn: item.description || '',
           sku: item.sku || '',
           unit: item.unit || 'unit',
           quantity: Number(item.quantity || 1),
-          unitPrice: Number(item.unitPrice || 0),
-          notes: item.notes || '',
+          unitPrice: Number(item.price || 0),
+          discount: item.discount || '0', tax: item.tax || '0',
         })),
       )
       setInitializedKey(`q:${quotation.id}:${quotation.version}`)
@@ -374,18 +378,18 @@ function QuotationEditor({ id }: { id: string }) {
       const seedLines: EditableLine[] = (request.items || []).map(
         (item, idx) => {
           const arDesc =
-            item.snapshot?.productName?.ar ||
-            item.customName ||
+            item.snapshot?.name?.ar ||
+            item.snapshot?.description ||
             `بند ${idx + 1}`
           const enDesc =
-            item.snapshot?.productName?.en ||
-            item.customName ||
+            item.snapshot?.name?.en ||
+            item.snapshot?.description ||
             `Item ${idx + 1}`
-          const varAr = item.snapshot?.variantLabel?.ar
-            ? ` — ${item.snapshot.variantLabel.ar}`
+          const varAr = item.snapshot?.label?.ar
+            ? ` — ${item.snapshot.label.ar}`
             : ''
-          const varEn = item.snapshot?.variantLabel?.en
-            ? ` — ${item.snapshot.variantLabel.en}`
+          const varEn = item.snapshot?.label?.en
+            ? ` — ${item.snapshot.label.en}`
             : ''
           return {
             key: item.id || `seed-${idx}`,
@@ -397,7 +401,7 @@ function QuotationEditor({ id }: { id: string }) {
             unit: item.snapshot?.unitCode || 'unit',
             quantity: Number(item.quantity || 1),
             unitPrice: 0,
-            notes: item.notes || '',
+            discount: '0', tax: '14',
           }
         },
       )
@@ -415,7 +419,7 @@ function QuotationEditor({ id }: { id: string }) {
                 unit: 'unit',
                 quantity: 1,
                 unitPrice: 0,
-                notes: '',
+                discount: '0', tax: String(taxRate),
               },
             ],
       )
@@ -428,15 +432,9 @@ function QuotationEditor({ id }: { id: string }) {
   const statusBadge = STATUS_META[status] || STATUS_META.draft
 
   const totals = useMemo(() => {
-    const subtotal = lines.reduce(
-      (sum, l) => sum + Number(l.quantity || 0) * Number(l.unitPrice || 0),
-      0,
-    )
-    const afterDiscount = Math.max(0, subtotal - Number(discount || 0))
-    const taxAmount = afterDiscount * (Number(taxRate || 0) / 100)
-    const total = afterDiscount + taxAmount
-    return { subtotal, taxAmount, total }
-  }, [lines, discount, taxRate])
+    const calculated = quoteTotals(lines.map((line, i) => ({ id: String(i), description: line.descriptionAr || line.descriptionEn, sku: line.sku, unit: line.unit, quantity: line.quantity, price: String(line.unitPrice), discount: line.discount, tax: line.tax })))
+    return { subtotal: (calculated.net / 100) + lines.reduce((sum, l) => sum + Number(l.discount), 0), taxAmount: calculated.tax / 100, total: calculated.total / 100 }
+  }, [lines])
 
   if (isNew && !queryRequestId) {
     return (
@@ -469,28 +467,20 @@ function QuotationEditor({ id }: { id: string }) {
     )
   }
 
-  function buildPayload() {
+  function buildPayload(): QuotationInput {
+    const locale = quotation?.locale || request?.locale || lang
     return {
-      currency: 'EGP',
-      validUntil: validUntil || null,
-      paymentTerms: paymentTerms.trim() || null,
-      deliveryTerms: deliveryTerms.trim() || null,
-      customerNotes: customerNotes.trim() || null,
-      internalNotes: internalNotes.trim() || null,
-      discount: Number(discount || 0),
-      taxRate: Number(taxRate || 0),
-      items: lines.map((l) => ({
+      locale,
+      currency: quotation?.currency || 'EGP',
+      validUntil,
+      leadTime: deliveryTerms.trim(),
+      terms: paymentTerms.trim(),
+      lines: lines.map(l => ({
         requestItemId: l.requestItemId,
         variantId: l.variantId,
-        description: {
-          ar: l.descriptionAr.trim() || l.descriptionEn.trim(),
-          en: l.descriptionEn.trim() || l.descriptionAr.trim(),
-        },
-        sku: l.sku.trim() || null,
-        unit: l.unit.trim() || 'unit',
-        quantity: Number(l.quantity),
-        unitPrice: Number(l.unitPrice),
-        notes: l.notes.trim() || null,
+        description: (locale === 'ar' ? l.descriptionAr || l.descriptionEn : l.descriptionEn || l.descriptionAr).trim(),
+        sku: l.sku.trim(), unit: l.unit.trim(), quantity: Number(l.quantity),
+        price: String(l.unitPrice), discount: l.discount, tax: l.tax,
       })),
     }
   }
@@ -499,13 +489,12 @@ function QuotationEditor({ id }: { id: string }) {
     if (busy || frozen) return null
     const payload = buildPayload()
     if (
-      !payload.items.length ||
-      payload.items.some(
+      !payload.lines.length ||
+      payload.lines.some(
         (it) =>
-          !it.description.ar ||
-          !it.description.en ||
+          !it.description ||
           it.quantity <= 0 ||
-          it.unitPrice < 0,
+          Number(it.price) < 0,
       )
     ) {
       setErrorMsg(
@@ -521,7 +510,7 @@ function QuotationEditor({ id }: { id: string }) {
     setErrorMsg('')
     setFeedback('')
     try {
-      const saved = await saveQuotation(
+      const { data: saved } = await saveQuotation(
         resolvedRequestId,
         payload,
         isNew ? undefined : quotation?.id,
@@ -538,9 +527,6 @@ function QuotationEditor({ id }: { id: string }) {
       setFeedback(c('تم حفظ مسودة عرض السعر.', 'Quotation draft saved.'))
       return saved
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409 && !isNew) {
-        await quotationQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
       return null
     } finally {
@@ -562,7 +548,7 @@ function QuotationEditor({ id }: { id: string }) {
         pdfStatus: string
       }>(`/admin/quotations/${saved.id}/issue`, {
         method: 'POST',
-        body: { version: saved.version },
+        body: { version: saved.version, status: 'issued' },
       })
       invalidateLiveQueries('/admin/quotations')
       invalidateLiveQueries('/admin/quote-requests')
@@ -596,7 +582,7 @@ function QuotationEditor({ id }: { id: string }) {
         `/admin/quotations/${quotation.id}/revise`,
         {
           method: 'POST',
-          body: { version: quotation.version },
+          body: { version: quotation.version, status: 'draft' },
         },
       )
       invalidateLiveQueries('/admin/quotations')
@@ -637,8 +623,8 @@ function QuotationEditor({ id }: { id: string }) {
       await quotationQuery.refresh()
       setFeedback(
         c(
-          'تمت معالجة مهمة توليد ملف PDF وتحديث حالة الملف.',
-          'PDF generation job processed and status refreshed.',
+          'تم تحديث حالة المعالجة. يظل التنزيل متاحًا بعد جاهزية الملف فقط.',
+          'Processing status refreshed. Download is available only when the file is ready.',
         ),
       )
     } catch (err) {
@@ -653,11 +639,11 @@ function QuotationEditor({ id }: { id: string }) {
     opts?: { channel?: string; reason?: string },
   ) {
     if (busy || !quotation) return
-    if (targetStatus === 'rejected' && (!opts?.reason || opts.reason.trim().length < 3)) {
+    if (['accepted', 'rejected'].includes(targetStatus) && (!opts?.reason || opts.reason.trim().length < 3)) {
       setErrorMsg(
         c(
-          'أدخل سبب رفض العميل (3 أحرف على الأقل).',
-          'Enter the rejection reason (at least 3 characters).',
+          'أدخل سبب قرار العميل (3 أحرف على الأقل).',
+          'Enter the customer decision reason (at least 3 characters).',
         ),
       )
       return
@@ -671,8 +657,8 @@ function QuotationEditor({ id }: { id: string }) {
         body: {
           version: quotation.version,
           status: targetStatus,
-          channel: opts?.channel || null,
-          reason: opts?.reason?.trim() || null,
+          ...(opts?.channel ? { channel: opts.channel } : {}),
+          reason: opts?.reason?.trim() || '',
         },
       })
       setDecisionReason('')
@@ -844,7 +830,7 @@ function QuotationEditor({ id }: { id: string }) {
                         unit: 'unit',
                         quantity: 1,
                         unitPrice: 0,
-                        notes: '',
+                        discount: '0', tax: String(taxRate),
                       },
                     ])
                   }
@@ -946,7 +932,7 @@ function QuotationEditor({ id }: { id: string }) {
                         }
                       />
                     </Field>
-                    <Field label={c('سعر الوحدة (ج.م)', 'Unit price (EGP)')}>
+                    <Field label={c(`سعر الوحدة (${quotation?.currency || 'EGP'})`, `Unit price (${quotation?.currency || 'EGP'})`)}>
                       <input
                         type="number"
                         min={0}
@@ -987,7 +973,7 @@ function QuotationEditor({ id }: { id: string }) {
                         {(
                           Number(line.quantity || 0) * Number(line.unitPrice || 0)
                         ).toLocaleString('en-EG')}{' '}
-                        EGP
+                        {quotation?.currency || 'EGP'}
                       </strong>
                     </span>
                   </div>
@@ -1015,7 +1001,17 @@ function QuotationEditor({ id }: { id: string }) {
                 className="control font-mono"
                 dir="ltr"
                 value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))}
+                onChange={(e) => {
+                  const value = Number(e.target.value)
+                  setDiscount(value)
+                  // Assign a total discount deterministically in cents, without losing per-line amounts on reload.
+                  let remaining = Math.round(value * 100)
+                  setLines(current => current.map(line => {
+                    const amount = Math.min(Math.max(0, Math.round(line.quantity * line.unitPrice * 100)), remaining)
+                    remaining -= amount
+                    return { ...line, discount: (amount / 100).toFixed(2) }
+                  }))
+                }}
               />
             </Field>
             <Field label={c('نسبة الضريبة (%)', 'Tax rate (%)')}>
@@ -1028,10 +1024,10 @@ function QuotationEditor({ id }: { id: string }) {
                 className="control font-mono"
                 dir="ltr"
                 value={taxRate}
-                onChange={(e) => setTaxRate(Number(e.target.value))}
+                onChange={(e) => { setTaxRate(Number(e.target.value)); setLines(current => current.map(line => ({ ...line, tax: e.target.value }))) }}
               />
             </Field>
-            <Field label={c('شروط الدفع', 'Payment terms')}>
+            <Field label={c('الشروط والأحكام', 'Terms and conditions')}>
               <input
                 disabled={frozen}
                 className="control"
@@ -1049,24 +1045,7 @@ function QuotationEditor({ id }: { id: string }) {
                 />
               </Field>
             </div>
-            <Field label={c('ملاحظات تظهر للعميل في العرض', 'Customer-visible notes')}>
-              <textarea
-                rows={3}
-                disabled={frozen}
-                className="control"
-                value={customerNotes}
-                onChange={(e) => setCustomerNotes(e.target.value)}
-              />
-            </Field>
-            <Field label={c('ملاحظات داخلية للإدارة فقط', 'Internal admin notes')}>
-              <textarea
-                rows={3}
-                disabled={frozen}
-                className="control"
-                value={internalNotes}
-                onChange={(e) => setInternalNotes(e.target.value)}
-              />
-            </Field>
+
           </section>
         </div>
 
@@ -1080,7 +1059,7 @@ function QuotationEditor({ id }: { id: string }) {
                 {c('المجموع الفرعي', 'Subtotal')}
               </span>
               <span dir="ltr" className="font-mono">
-                {totals.subtotal.toLocaleString('en-EG')} EGP
+                {totals.subtotal.toLocaleString('en-EG')} {quotation?.currency || 'EGP'}
               </span>
             </div>
             <div className="flex justify-between">
@@ -1088,7 +1067,7 @@ function QuotationEditor({ id }: { id: string }) {
                 {c('الخصم', 'Discount')}
               </span>
               <span dir="ltr" className="font-mono">
-                -{Number(discount || 0).toLocaleString('en-EG')} EGP
+                -{Number(discount || 0).toLocaleString('en-EG')} {quotation?.currency || 'EGP'}
               </span>
             </div>
             <div className="flex justify-between">
@@ -1096,13 +1075,13 @@ function QuotationEditor({ id }: { id: string }) {
                 {c(`الضريبة (${taxRate}%)`, `VAT (${taxRate}%)`)}
               </span>
               <span dir="ltr" className="font-mono">
-                {totals.taxAmount.toLocaleString('en-EG')} EGP
+                {totals.taxAmount.toLocaleString('en-EG')} {quotation?.currency || 'EGP'}
               </span>
             </div>
             <div className="flex justify-between border-t pt-3 text-base font-bold">
               <span>{c('الإجمالي النهائي', 'Grand total')}</span>
               <span dir="ltr" className="font-mono text-primary">
-                {totals.total.toLocaleString('en-EG')} EGP
+                {totals.total.toLocaleString('en-EG')} {quotation?.currency || 'EGP'}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1172,12 +1151,12 @@ function QuotationEditor({ id }: { id: string }) {
                 type="button"
                 className="btn-primary w-full"
                 disabled={busy}
-                onClick={() => void transitionStatus('accepted')}
+                onClick={() => void transitionStatus('accepted', { reason: decisionReason })}
               >
                 {c('تسجيل قبول العميل للعرض', 'Record customer acceptance')}
               </button>
               <div className="space-y-2 border-t pt-3">
-                <Field label={c('سبب الرفض عند الاعتذار', 'Rejection reason')}>
+                <Field label={c('سبب قرار العميل (قبول أو رفض)', 'Customer decision reason (accept or reject)')}>
                   <input
                     className="control"
                     value={decisionReason}

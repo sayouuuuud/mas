@@ -155,6 +155,7 @@ export async function handle(request: NextRequest, path: string[]) {
       )
     }
     const known =
+      root === 'public' ||
       root === 'auth' ||
       root === 'catalog' ||
       root === 'content' ||
@@ -173,6 +174,12 @@ export async function handle(request: NextRequest, path: string[]) {
     if (root === 'auth')
       return scope.apply(await authController(request, path.slice(1), scope))
     const service = new BackendService(scope.repository)
+    if (root === 'public' && part === 'bootstrap' && path.length === 2 && method === 'GET') {
+      const [navigation, locations, settings] = await Promise.all(
+        ['navigation', 'locations', 'settings'].map(key => scope!.repository.publicContent(key)),
+      )
+      return scope.apply(response({ navigation: navigation?.items || [], locations: locations?.items || [], settings: (settings?.items as unknown[] | undefined)?.[0] || null }))
+    }
     if (root === 'catalog' && method === 'GET') {
       const query = filters(request)
       if (part === 'products' && path.length === 2)

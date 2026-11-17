@@ -11,7 +11,11 @@ pnpm test:db # Docker; creates and removes its own isolated PostgreSQL container
 pnpm build
 ```
 
-Use Node 24 and the pinned `pnpm@12.3.4`. The UI currently remains an explicit frontend preview. The backend API and migrations are implemented separately; production connection and replacement of preview state require a configured Supabase project. No real database or accounts are created by `pnpm build` or `pnpm test`.
+Use Node 24 and the pinned `pnpm@12.3.4`. The public and Admin workspaces call the backend API; visitor session state stores only the RFQ cart, comparison selection and last receipt. Real operation requires the configured Supabase project, reviewed migrations, an authorized Admin with MFA, approved business/legal data and a malware scanner. Build/test success does not create these prerequisites.
+
+Read [PROJECT_STATUS.md](PROJECT_STATUS.md) for verified results and outstanding release gates. The application is not yet certified ready for production use.
+
+For browser verification, start `pnpm dev`, then run `pnpm test:browser`. Set `PLAYWRIGHT_EXECUTABLE_PATH` if Chromium is not at `/usr/bin/chromium`. Workspace browser contracts intercept API responses; they are deliberately distinguished from live Supabase tests.
 
 - [Backend implementation, API and connection instructions (Arabic)](docs/BACKEND.ar.md)
 - [Product requirements](docs/PRD.ar.md)

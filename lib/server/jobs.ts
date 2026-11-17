@@ -203,10 +203,8 @@ export async function runJobs(
   const expected = secret(scope.config.jobSecret, 32),
     supplied =
       request.headers.get('authorization')?.replace(/^Bearer /, '') || ''
-  if (
-    supplied.length !== expected.length ||
-    !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))
-  )
+  const suppliedBytes = Buffer.from(supplied), expectedBytes = Buffer.from(expected)
+  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes))
     throw new ApiError(401, 'UNAUTHENTICATED', 'Worker authentication failed.')
   const processed = await drainJobs(scope)
   return response({ processed })
@@ -221,16 +219,7 @@ export async function adminJobsController(
   await limit(scope, request, `jobs:${actor.id}`, 20, 600, actor.id)
   if (!scope.service || !scope.repository.rpc) throw unavailable()
 
-  const contentLength = request.headers.get('content-length')
-  const hasJsonBody =
-    contentLength &&
-    Number(contentLength) > 0 &&
-    request.headers
-      .get('content-type')
-      ?.toLowerCase()
-      .startsWith('application/json')
-
-  const input = hasJsonBody
+  const input = request.body !== null
     ? z
         .object({
           quotationId: z.uuid().optional(),

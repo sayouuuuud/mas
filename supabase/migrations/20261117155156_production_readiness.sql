@@ -444,3 +444,28 @@ end $$;
 revoke all on all functions in schema mas from public,anon,authenticated;
 revoke all on function public.mas_retry_job(text,uuid,uuid,text) from public,anon,authenticated;
 grant execute on function public.mas_retry_job(text,uuid,uuid,text) to service_role;
+
+-- Enforce the single Admin role on direct RPC reads as well as API writes.
+-- Legacy role values are retained in storage without granting them Admin access.
+create or replace function mas.staff(p_actor uuid,p_aal text default null) returns mas.profiles
+language plpgsql stable security definer set search_path='' as $$
+declare staff mas.profiles;
+begin
+ select * into staff from mas.profiles where id=p_actor and active and roles && array['Admin','Owner'];
+ if staff.id is null then raise exception 'MAS_FORBIDDEN';end if;
+ if coalesce(p_aal,auth.jwt()->>'aal','aal1')<>'aal2' then raise exception 'MAS_MFA_REQUIRED';end if;
+ return staff;
+end $$;
+create or replace function mas.allowed(p_staff mas.profiles,p_resource text,p_write boolean default false) returns boolean
+language sql immutable set search_path='' as $$
+ select p_staff.active and p_staff.roles && array['Admin','Owner'];
+$$;
+-- Authentication metadata remains readable at aal1 for MFA enrollment.
+create or replace function public.mas_actor() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare staff mas.profiles;
+begin
+ select * into staff from mas.profiles where id=auth.uid() and active and roles && array['Admin','Owner'];
+ if staff.id is null then raise exception 'MAS_FORBIDDEN';end if;
+ return jsonb_build_object('id',staff.id,'active',staff.active,'roles',staff.roles,'displayName',staff.display_name);
+end $$;

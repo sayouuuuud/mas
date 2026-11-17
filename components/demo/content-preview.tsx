@@ -12,9 +12,9 @@ import { usePublicBootstrap } from '@/components/demo/demo-provider'
 import type { ContentBlockRecord } from '@/lib/types'
 
 export function usePublicContentBlock(key: string) {
-  return useLiveQuery(`/public/content/${key}`, async () => {
+  return useLiveQuery(`/content/${key}`, async () => {
     try {
-      const res = await api<ContentBlockRecord>(`/public/content/${key}`)
+      const res = await api<ContentBlockRecord>(`/content/${key}`)
       return res.data
     } catch (err) {
       if (err instanceof BackendError && err.status === 404) return null

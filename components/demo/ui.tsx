@@ -137,9 +137,11 @@ export function EmptyState({
   title,
   description,
   children,
+  action,
 }: {
   title: string
   description: string
+  action?: ReactNode
   children?: ReactNode
 }) {
   return (
@@ -149,7 +151,7 @@ export function EmptyState({
       <p className="mx-auto my-3 max-w-md text-muted-foreground">
         {description}
       </p>
-      {children}
+      {children || action}
     </div>
   )
 }
@@ -159,7 +161,7 @@ export function Badge({
   tone = 'neutral',
 }: {
   children: ReactNode
-  tone?: 'neutral' | 'green' | 'gold'
+  tone?: 'neutral' | 'green' | 'gold' | 'muted' | 'red' | 'blue'
 }) {
   return (
     <span className={cn('status-badge', `status-${tone}`)}>{children}</span>
@@ -224,4 +226,15 @@ export function Field({
       )}
     </div>
   )
+}
+
+export function RequestStatusBadge({ status }: { status: string }) {
+  const c = useCopy()
+  const labels: Record<string, [string, string]> = {
+    new: ['جديد', 'New'], assigned: ['معيّن', 'Assigned'],
+    in_progress: ['قيد المتابعة', 'In progress'], awaiting_customer: ['بانتظار العميل', 'Awaiting customer'],
+    quoted: ['تم تقديم عرض', 'Quoted'], won: ['ناجح', 'Won'], lost: ['غير ناجح', 'Lost'], cancelled: ['ملغى', 'Cancelled'],
+  }
+  const label = labels[status]
+  return <Badge tone={status === 'won' ? 'green' : status === 'new' ? 'gold' : 'neutral'}>{label ? c(...label) : status}</Badge>
 }

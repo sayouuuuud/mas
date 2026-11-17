@@ -108,6 +108,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [mobile, setMobile] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState<unknown>(null)
   const sidebarRef = useRef<HTMLElement>(null)
 
   const authQuery = useLiveQuery(
@@ -175,16 +176,19 @@ export function AdminShell({ children }: { children: ReactNode }) {
   async function handleSignOut() {
     if (signingOut) return
     setSigningOut(true)
+    setSignOutError(null)
     try {
       await authApi.logout()
-    } catch {
-      // Always clear client session cache even on network drop
-    } finally {
       clearPrivateLiveQueries()
-      setSigningOut(false)
       router.replace('/admin/login')
+    } catch (error) {
+      setSignOutError(error)
+    } finally {
+      setSigningOut(false)
     }
   }
+
+  if (signOutError) return <div className="mx-auto max-w-xl px-6 py-24"><ErrorState error={signOutError} onRetry={() => void handleSignOut()} title={c('تعذر إتمام تسجيل الخروج', 'Sign out could not be completed')} /></div>
 
   if (authQuery.isLoading) {
     return (
@@ -579,7 +583,7 @@ export function AdminLogin({ reset = false }: { reset?: boolean }) {
                 router.refresh()
               }}
               onSignOut={async () => {
-                await authApi.logout().catch(() => undefined)
+                await authApi.logout()
                 clearPrivateLiveQueries()
                 setMfaStep(false)
               }}

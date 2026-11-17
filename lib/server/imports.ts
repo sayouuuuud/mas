@@ -164,7 +164,7 @@ export async function importController(
     /^\d{13}$/.test(expires) &&
       Number(expires) > Date.now() &&
       Number(expires) <= Date.now() + 15 * 60000 &&
-      signature?.length === expected.length &&
+      /^[a-f0-9]{64}$/.test(signature || '') &&
       timingSafeEqual(Buffer.from(signature), Buffer.from(expected)),
     'The import preview changed or expired. Preview it again.',
   )

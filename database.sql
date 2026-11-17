@@ -1,21 +1,4 @@
--- ============================================================================
--- M.A.S B2B Product Catalog & RFQ Platform — Complete Database Schema
--- Source: supabase/migrations (commit 37c8861feb90b83ef1f1056c9676c1b0cca47161)
--- Compatible with Supabase SQL Editor (PostgreSQL 17, Auth & Storage enabled)
--- Order:
---   1. 202611160001_core.sql
---   2. 202611160002_commands.sql
---   3. 202611160003_jobs_storage_reports.sql
---   4. 202611160004_batches.sql
---   5. 202611160005_bootstrap.sql
---   6. 202611170001_admin_jobs_and_safeguards.sql
--- ============================================================================
-
-begin;
-
--- ============================================================================
--- 1. 202611160001_core.sql
--- ============================================================================
+-- Consolidated schema for a NEW database only. Do not re-run on an installed project.
 
 -- Application data lives outside PostgREST's exposed public schema.
 -- All writes are server-only RPCs; public RPCs project published fields explicitly.
@@ -347,9 +330,6 @@ grant execute on function public.mas_actor() to authenticated;
 revoke all on function public.mas_get(text,text,boolean),public.mas_list(text,jsonb,boolean),public.mas_content(text),public.mas_unit(text),public.mas_resolve_variant(uuid),public.mas_facets(jsonb) from public;
 grant execute on function public.mas_get(text,text,boolean),public.mas_list(text,jsonb,boolean),public.mas_content(text),public.mas_unit(text),public.mas_resolve_variant(uuid),public.mas_facets(jsonb) to anon,authenticated;
 
--- ============================================================================
--- 2. 202611160002_commands.sql
--- ============================================================================
 
 create function mas.require_service() returns void
 language plpgsql stable security definer set search_path='' as $$
@@ -671,9 +651,6 @@ revoke all on all functions in schema mas from public,anon,authenticated;
 revoke all on function public.mas_command(text,text,uuid,bigint,jsonb,uuid,text),public.mas_submit(text,jsonb,text,text),public.mas_rate_limit(text,integer,integer) from public,anon,authenticated;
 grant execute on function public.mas_command(text,text,uuid,bigint,jsonb,uuid,text),public.mas_submit(text,jsonb,text,text),public.mas_rate_limit(text,integer,integer) to service_role;
 
--- ============================================================================
--- 3. 202611160003_jobs_storage_reports.sql
--- ============================================================================
 
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values
  ('quarantine','quarantine',false,20971520,array['image/jpeg','image/png','image/webp','application/pdf']),
@@ -778,9 +755,6 @@ do $$ declare resource_name text;begin
  end loop;
 end $$;
 
--- ============================================================================
--- 4. 202611160004_batches.sql
--- ============================================================================
 
 create function public.mas_import_products(p_products jsonb,p_actor uuid,p_aal text) returns jsonb
 language plpgsql security definer set search_path='' as $$
@@ -813,9 +787,6 @@ end $$;
 revoke all on function public.mas_import_products(jsonb,uuid,text),public.mas_bulk_products(text,jsonb,uuid,text) from public,anon,authenticated;
 grant execute on function public.mas_import_products(jsonb,uuid,text),public.mas_bulk_products(text,jsonb,uuid,text) to service_role;
 
--- ============================================================================
--- 5. 202611160005_bootstrap.sql
--- ============================================================================
 
 -- This function can bootstrap exactly once. Subsequent staff changes go through
 -- an authenticated, MFA-verified Owner and are audited by mas_command.
@@ -833,8 +804,12 @@ end $$;
 revoke all on function public.mas_bootstrap_owner(uuid,text) from public,anon,authenticated;
 grant execute on function public.mas_bootstrap_owner(uuid,text) to service_role;
 
+
 -- ============================================================================
--- 6. 202611170001_admin_jobs_and_safeguards.sql
+-- 202611170001_admin_jobs_and_safeguards.sql
+-- Single Admin role compatibility (keeping Owner internally), job status
+-- metadata on private reads, safe job retry RPC, product draft-only deletion
+-- protection, superseded quotation revisions, and audit log filtering.
 -- ============================================================================
 
 alter table mas.profiles drop constraint if exists profiles_roles_check;
@@ -1277,4 +1252,27 @@ revoke all on all functions in schema mas from public,anon,authenticated;
 revoke all on function public.mas_retry_job(text,uuid,uuid,text) from public,anon,authenticated;
 grant execute on function public.mas_retry_job(text,uuid,uuid,text) to service_role;
 
-commit;
+-- Enforce the single Admin role on direct RPC reads as well as API writes.
+-- Legacy role values are retained in storage without granting them Admin access.
+create or replace function mas.staff(p_actor uuid,p_aal text default null) returns mas.profiles
+language plpgsql stable security definer set search_path='' as $$
+declare staff mas.profiles;
+begin
+ select * into staff from mas.profiles where id=p_actor and active and roles && array['Admin','Owner'];
+ if staff.id is null then raise exception 'MAS_FORBIDDEN';end if;
+ if coalesce(p_aal,auth.jwt()->>'aal','aal1')<>'aal2' then raise exception 'MAS_MFA_REQUIRED';end if;
+ return staff;
+end $$;
+create or replace function mas.allowed(p_staff mas.profiles,p_resource text,p_write boolean default false) returns boolean
+language sql immutable set search_path='' as $$
+ select p_staff.active and p_staff.roles && array['Admin','Owner'];
+$$;
+-- Authentication metadata remains readable at aal1 for MFA enrollment.
+create or replace function public.mas_actor() returns jsonb
+language plpgsql stable security definer set search_path='' as $$
+declare staff mas.profiles;
+begin
+ select * into staff from mas.profiles where id=auth.uid() and active and roles && array['Admin','Owner'];
+ if staff.id is null then raise exception 'MAS_FORBIDDEN';end if;
+ return jsonb_build_object('id',staff.id,'active',staff.active,'roles',staff.roles,'displayName',staff.display_name);
+end $$;

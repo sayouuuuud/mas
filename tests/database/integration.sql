@@ -15,7 +15,7 @@ insert into auth.users(id,email) values
  ('00000000-0000-4000-8000-000000000003','other@example.test');
 insert into mas.profiles(id,display_name,roles) values
  ('00000000-0000-4000-8000-000000000001','Test Owner',array['Owner']),
- ('00000000-0000-4000-8000-000000000002','Test Agent',array['Sales Agent']),
+ ('00000000-0000-4000-8000-000000000002','Test Admin',array['Admin']),
  ('00000000-0000-4000-8000-000000000003','Other Agent',array['Sales Agent']);
 
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
@@ -68,33 +68,36 @@ begin
  perform public.test_assert((select count(*) from mas.sales_items where mas.sales_items.request_id=integration.request_id)=1,'one canonical request item persisted');
  request:=public.mas_command('quote_requests','assign',request_id,1,jsonb_build_object('assignedTo',agent_id),owner_id,'aal2');
  perform public.test_assert(request->>'status'='assigned','assignment updates request state atomically');
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',agent_id,'aal','aal2')::text,true);
+ perform public.test_assert(public.mas_get('quote_requests',request_id::text,true) is not null,'Admin with MFA can read request');
  perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',agent_id,'aal','aal1')::text,true);
- perform public.test_assert(public.mas_get('quote_requests',request_id::text,true) is not null,'assigned agent can read request');
+ perform public.test_assert(public.mas_actor()->>'id'=agent_id::text,'Admin may read own authentication profile before MFA setup');
+ perform public.test_throws(format('select public.mas_get(%L,%L,true)','quote_requests',request_id),'MAS_MFA_REQUIRED','Admin without MFA cannot read private records');
  perform set_config('request.jwt.claims','{"role":"authenticated","sub":"00000000-0000-4000-8000-000000000003","aal":"aal1"}',true);
- perform public.test_assert(public.mas_get('quote_requests',request_id::text,true) is null,'other agent cannot read request');
- perform public.test_assert((public.mas_list('quote_requests','{}',true)->>'total')::int=0,'other agent list excludes private request');
+ perform public.test_throws(format('select public.mas_get(%L,%L,true)','quote_requests',request_id),'MAS_FORBIDDEN','legacy non-admin cannot read request');
+ perform public.test_throws('select public.mas_list(''quote_requests'',''{}'',true)','MAS_FORBIDDEN','legacy non-admin cannot list private requests');
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
- perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','quote_requests','assign',request_id,jsonb_build_object('assignedTo',agent_id),agent_id,'aal1'),'MAS_FORBIDDEN','agent cannot assign requests');
- request:=public.mas_command('quote_requests','transition',request_id,2,'{"status":"in_progress","reason":""}',agent_id,'aal1');
- quotation:=public.mas_command('quotations','create',null,null,jsonb_build_object('requestId',request_id,'locale','ar','currency','EGP','validUntil','2099-01-01','leadTime','One week','terms','Payment on delivery','lines',jsonb_build_array(jsonb_build_object('description','Oil','sku','TEST-SKU','quantity',2,'unit','piece','price','10','discount','0','tax','14')),'totals',jsonb_build_object('net',2000,'tax',280,'total',2280)),agent_id,'aal1');
- quotation:=public.mas_command('quotations','issue',(quotation->>'id')::uuid,1,'{}',agent_id,'aal1');
+ perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','quote_requests','assign',request_id,jsonb_build_object('assignedTo',agent_id),'00000000-0000-4000-8000-000000000003','aal2'),'MAS_FORBIDDEN','legacy non-admin cannot assign requests');
+ request:=public.mas_command('quote_requests','transition',request_id,2,'{"status":"in_progress","reason":""}',agent_id,'aal2');
+ quotation:=public.mas_command('quotations','create',null,null,jsonb_build_object('requestId',request_id,'locale','ar','currency','EGP','validUntil','2099-01-01','leadTime','One week','terms','Payment on delivery','lines',jsonb_build_array(jsonb_build_object('description','Oil','sku','TEST-SKU','quantity',2,'unit','piece','price','10','discount','0','tax','14')),'totals',jsonb_build_object('net',2000,'tax',280,'total',2280)),agent_id,'aal2');
+ quotation:=public.mas_command('quotations','issue',(quotation->>'id')::uuid,1,'{}',agent_id,'aal2');
  perform public.test_assert(quotation->>'number' is not null and quotation->>'status'='issued','quotation issuance allocates a number');
  perform public.test_assert(quotation->>'pdfStatus'='processing','issued quotation reports PDF processing state');
  perform public.test_assert((public.mas_retry_job('quotations',(quotation->>'id')::uuid,owner_id,'aal2')->>'pdfStatus')='processing','admin can safely retry quotation PDF job without mutating snapshot');
  perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','products','delete',product->>'id','{}',owner_id,'aal2'),'MAS_VALIDATION','published product cannot be deleted directly');
- perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','quotations','update',quotation->>'id','{}',agent_id,'aal1'),'MAS_VALIDATION','issued quotations are immutable');
- revision:=public.mas_command('quotations','revise',(quotation->>'id')::uuid,2,'{}',agent_id,'aal1');
+ perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','quotations','update',quotation->>'id','{}',agent_id,'aal2'),'MAS_VALIDATION','issued quotations are immutable');
+ revision:=public.mas_command('quotations','revise',(quotation->>'id')::uuid,2,'{}',agent_id,'aal2');
  perform public.test_assert(revision->>'revision'='2' and revision->>'number'=quotation->>'number','revision preserves series number');
  perform public.test_assert((select document->>'status' from mas.entities where id=(quotation->>'id')::uuid)='issued','prior issued revision preserved');
- perform public.mas_command('quotations','sent',(quotation->>'id')::uuid,3,'{"channel":"email"}',agent_id,'aal1');
- perform public.test_throws(format('select public.mas_command(%L,%L,%L,3,%L,%L,%L)','quote_requests','transition',request_id,'{"status":"won"}',agent_id,'aal1'),'MAS_VALIDATION','request cannot skip quotation status');
+ perform public.mas_command('quotations','sent',(quotation->>'id')::uuid,3,'{"channel":"email"}',agent_id,'aal2');
+ perform public.test_throws(format('select public.mas_command(%L,%L,%L,3,%L,%L,%L)','quote_requests','transition',request_id,'{"status":"won"}',agent_id,'aal2'),'MAS_VALIDATION','request cannot skip quotation status');
  perform public.test_assert((public.mas_rate_limit(repeat('a',64),1,60)->>'allowed')::boolean,'first rate limit token allowed');
  perform public.test_assert(not (public.mas_rate_limit(repeat('a',64),1,60)->>'allowed')::boolean,'persistent rate limit blocks excess');
  perform public.test_throws(format('select public.mas_command(%L,%L,%L,null,%L,%L,%L)','units','create',null,'{}',owner_id,'aal1'),'MAS_MFA_REQUIRED','owner without MFA cannot mutate');
  perform public.test_assert((public.mas_health()->>'ready')::boolean,'health requires owner policy settings and unit');
  perform public.test_throws(format('select public.mas_command(%L,%L,%L,1,%L,%L,%L)','profiles','update_staff',owner_id,'{"displayName":"Test Owner","active":false,"roles":["Owner"]}',owner_id,'aal2'),'MAS_VALIDATION','owner cannot disable their own account');
- perform public.mas_command('profiles','update_staff',agent_id,1,'{"displayName":"Test Agent","active":false,"roles":["Sales Agent"]}',owner_id,'aal2');
- perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',agent_id,'aal','aal1')::text,true);
+ perform public.mas_command('profiles','update_staff',agent_id,1,'{"displayName":"Test Agent","active":false,"roles":["Admin"]}',owner_id,'aal2');
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',agent_id,'aal','aal2')::text,true);
  perform public.test_throws('select public.mas_actor()','MAS_FORBIDDEN','disabled staff immediately lose access with an existing JWT');
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
 end $$;

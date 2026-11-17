@@ -14,10 +14,9 @@ const CSV_TEMPLATE = [
 
 type PreviewProduct = {
   slug: string
-  nameAr: string
-  nameEn: string
+  name: { ar: string; en: string }
   family: 'oils' | 'grease' | 'bearings'
-  variants: Array<{ sku: string | null; unitCode: string }>
+  variants: Array<{ sku: string | null; unitId: string }>
 }
 
 export function ImportPreview({
@@ -182,11 +181,11 @@ export function ImportPreview({
                     <td dir="ltr" className="font-mono text-xs">
                       {p.slug}
                     </td>
-                    <td>{p.nameAr}</td>
+                    <td>{p.name[lang]}</td>
                     <td>{p.family}</td>
                     <td dir="ltr" className="font-mono text-xs">
                       {p.variants
-                        .map((v) => `${v.sku || 'no-sku'} (${v.unitCode})`)
+                        .map((v) => `${v.sku || 'no-sku'} (${v.unitId})`)
                         .join(', ')}
                     </td>
                   </tr>

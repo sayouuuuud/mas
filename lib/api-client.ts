@@ -106,8 +106,8 @@ export function formatApiError(error: unknown, lang: 'ar' | 'en'): string {
           : 'Invitation delivery failed (verify SMTP settings or whether the user already exists).'
       }
       return lang === 'ar'
-        ? 'الخدمة غير متاحة مؤقتًا أو إعدادات الخادم غير مكتملة. لم يتم حفظ أي تغيير وهمي.'
-        : 'The backend service is temporarily unavailable or unconfigured. No fake changes were saved.'
+        ? 'الخدمة غير متاحة مؤقتًا. أعد المحاولة لاحقًا.'
+        : 'The service is temporarily unavailable. Please try again later.'
     }
     if (details) {
       return lang === 'ar'
@@ -205,21 +205,28 @@ export const submitInquiry = (
     signal,
   })
 
-export const saveQuotation = (
+export async function saveResource<T>(path: string, data: unknown, id?: string, version?: number): Promise<T> {
+  if (id && (!version || !Number.isInteger(version))) {
+    throw new BackendError(409, 'CONFLICT', 'Reload the record before saving.')
+  }
+  return (await api<T>(id ? `${path}/${id}` : path, {
+    method: id ? 'PATCH' : 'POST',
+    body: id ? { version, data } : data,
+  })).data
+}
+
+export async function saveQuotation(
   requestId: string,
   input: QuotationInput,
   quotationId?: string,
   version?: number,
-) =>
-  quotationId && version
-    ? api<QuotationRecord>(`/admin/quotations/${quotationId}`, {
-        method: 'PATCH',
-        body: { version, data: input },
-      })
-    : api<QuotationRecord>(`/admin/quote-requests/${requestId}/quotations`, {
-        method: 'POST',
-        body: input,
-      })
+): Promise<{ data: QuotationRecord; meta?: PageMeta }> {
+  if (quotationId) {
+    if (!version || !Number.isInteger(version)) throw new BackendError(409, 'CONFLICT', 'Reload the quotation before saving.')
+    return api<QuotationRecord>(`/admin/quotations/${quotationId}`, { method: 'PATCH', body: { version, data: input } })
+  }
+  return api<QuotationRecord>(`/admin/quote-requests/${requestId}/quotations`, { method: 'POST', body: input })
+}
 
 export async function downloadServerExport(
   resource:
