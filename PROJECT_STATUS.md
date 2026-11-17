@@ -56,6 +56,13 @@ Run `pnpm dev` before `pnpm test:browser`. Install the pinned Playwright Chromiu
 - Preview deployment `dpl_94YYwtSNQea25ZX7Jvp3U1Loxkgk` built successfully from commit `ad397b76df85d490a9c8e7b5b92799d2c8610e55`; GitHub Verify application and GitGuardian checks passed. Live preview catalog/bootstrap returned 200; health correctly returned NOT_READY.
 - A successful preview build is a code milestone; it is not a production-readiness certificate. Production release and live end-to-end verification remain dependent on the items below.
 
+## Real local Supabase journey completed after merge
+
+- Production merged PR #4 at `d362a6d25fc45c54b73cd9e3b6a411804d52e1e7`; deployment `dpl_DzdcxnHRgtuNbyUwVh1gsB4Ffqvx` is READY.
+- Real isolated Auth/TOTP, PostgreSQL/PostgREST, Storage and ClamAV browser journeys now pass: upload/scan/WebP/publication → visitor RFQ/idempotency → admin note/assignment/status → quotation issue/PDF download/revision → logout/access denial. No API responses or ready/PDF states were faked.
+- A development-only loopback HTTP configuration fix enables local Supabase while preserving production HTTPS. With its boundary test, 40 tests, typecheck and production build pass.
+- See [the detailed real E2E report](docs/REAL-E2E-VERIFICATION.ar.md). The hosted database still has no users, profiles or entities; hosted authenticated journeys remain a release gate.
+
 ## Remaining release gates
 
 1. Database migration applied and post-migration RPC/grant checks completed. Health remains NOT_READY until the real operational prerequisites below exist.

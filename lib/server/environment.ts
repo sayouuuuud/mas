@@ -27,9 +27,15 @@ export function configuration() {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) throw unavailable()
-  if (!parseOrigin(url, true)) throw unavailable()
-
   const isProdNode = process.env.NODE_ENV === 'production'
+  const localOrigin = parseOrigin(url, false)
+  const localUrl = localOrigin ? new URL(url) : null
+  const allowLocalHttp =
+    !isProdNode &&
+    localUrl?.protocol === 'http:' &&
+    ['localhost', '127.0.0.1', '[::1]'].includes(localUrl.hostname)
+  if (!parseOrigin(url, true) && !allowLocalHttp) throw unavailable()
+
   const vercelEnv = process.env.VERCEL_ENV
   const vercelDeploymentOrigin = process.env.VERCEL_URL
     ? parseOrigin(`https://${process.env.VERCEL_URL}`, true)

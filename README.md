@@ -17,6 +17,7 @@ Read [PROJECT_STATUS.md](PROJECT_STATUS.md) for verified results and outstanding
 
 For browser verification, start `pnpm dev`, then run `pnpm test:browser`. Set `PLAYWRIGHT_EXECUTABLE_PATH` if Chromium is not at `/usr/bin/chromium`. Workspace browser contracts intercept API responses; they are deliberately distinguished from live Supabase tests.
 
+- [Real Supabase/Auth/Storage/MFA/PDF verification results (Arabic)](docs/REAL-E2E-VERIFICATION.ar.md)
 - [Backend implementation, API and connection instructions (Arabic)](docs/BACKEND.ar.md)
 - [Product requirements](docs/PRD.ar.md)
 - [Frontend coverage](docs/FRONTEND-COMPLETENESS.ar.md)
