@@ -7,12 +7,24 @@ import { LANG_COOKIE, type Lang } from '@/lib/i18n'
 import './globals.css'
 import { DemoProvider } from '@/components/demo/demo-provider'
 
+const siteOrigin = (() => {
+  try {
+    return new URL(process.env.SITE_URL || 'https://mas-eg.com').origin
+  } catch {
+    return 'https://mas-eg.com'
+  }
+})()
+
 export const metadata: Metadata = {
-  title: 'M.A.S Engineering For Trade | توزيع الزيوت والشحوم ورمان البلي',
+  metadataBase: new URL(siteOrigin),
+  title: {
+    default: 'M.A.S Engineering For Trade | توزيع الزيوت والشحوم ورمان البلي',
+    template: '%s | M.A.S Engineering For Trade',
+  },
   description:
-    'إم إيه إس للتجارة الهندسية — موزع زيوت وشحوم ورمان بلي من أكبر العلامات العالمية: OLA Energy، Pennzoil، مصر للبترول، Eni، Petronas، ADNOC، bp، SKF، NSK، FAG، INA. اطلب عرض سعر الآن.',
+    'إم إيه إس للتجارة الهندسية — موزع زيوت وشحوم ورمان بلي من أكبر العلامات العالمية للمصانع والأساطيل ومراكز الخدمة. اطلب عرض سعر الآن.',
   keywords: [
-    'زيوت',
+    'زيوت صناعية',
     'شحوم',
     'رمان بلي',
     'OLA Energy',
@@ -20,7 +32,17 @@ export const metadata: Metadata = {
     'bearings Egypt',
     'M.A.S Engineering For Trade',
   ],
-  generator: 'v0.app',
+  alternates: {
+    canonical: '/ar',
+    languages: {
+      ar: '/ar',
+      en: '/en',
+    },
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
   icons: {
     icon: '/images/logo.png',
     apple: '/images/logo.png',

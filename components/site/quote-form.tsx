@@ -9,7 +9,8 @@ import { ActionIcon, actionVariants } from '@/components/site/action-link'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { allBrands, whatsappLink, type ProductOption } from '@/lib/site'
+import { allBrands, type ProductOption } from '@/lib/site'
+import { useSiteInfo } from '@/components/demo/content-preview'
 import { cn } from '@/lib/utils'
 
 type FieldError = 'name' | 'phone' | 'product'
@@ -31,6 +32,7 @@ function ErrorText({ id, message }: { id: string; message?: string }) {
 
 export function QuoteForm() {
   const { t, lang } = useLanguage()
+  const { whatsappHref } = useSiteInfo()
   const { product, setProduct } = useQuote()
   const [errors, setErrors] = useState<Partial<Record<FieldError, string>>>({})
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null)
@@ -74,7 +76,7 @@ export function QuoteForm() {
       notes ? `${m.notes}: ${notes}` : null,
     ].filter((line): line is string => line !== null)
 
-    const url = whatsappLink(lines.join('\n'))
+    const url = `${whatsappHref}?text=${encodeURIComponent(lines.join('\n'))}`
     setWhatsappUrl(url)
     window.open(url, '_blank', 'noopener,noreferrer')
   }

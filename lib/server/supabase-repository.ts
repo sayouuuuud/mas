@@ -9,17 +9,40 @@ import type {
   VariantResolution,
 } from './repository'
 import { ApiError, unavailable } from './errors'
-function convert(value: unknown): any {
-  if (Array.isArray(value)) return value.map(convert)
+
+const PRESERVE_MAP_KEYS = new Set(['byStatus', 'bySource'])
+
+export function convert(value: unknown, preserveDirectKeys = false): any {
+  if (Array.isArray(value)) return value.map((item) => convert(item, false))
   if (value && typeof value === 'object')
     return Object.fromEntries(
-      Object.entries(value).map(([key, val]) => [
-        key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
-        convert(val),
-      ]),
+      Object.entries(value).map(([key, val]) => {
+        const nextKey = preserveDirectKeys
+          ? key
+          : key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+        return [nextKey, convert(val, PRESERVE_MAP_KEYS.has(nextKey))]
+      }),
     )
   return value
 }
+
+const VALIDATION_MESSAGES: Array<[string, string]> = [
+  ['company settings', 'Complete company settings before issuing a quotation.'],
+  ['draft only', 'Only draft products without linked requests can be deleted; archive published products instead.'],
+  ['dependencies', 'This record is referenced by other records and cannot be deleted.'],
+  ['published dependency', 'Unpublish or update dependent published records first.'],
+  ['active dependency', 'This unit is used by published products and cannot be deactivated or modified.'],
+  ['unpublish dependent products', 'Unpublish dependent products before changing specification rules.'],
+  ['review published products', 'Review published products before adding required specifications.'],
+  ['immutable policy version', 'This privacy policy version was already published with different content; choose a new version.'],
+  ['policy version', 'Provide a privacy policy version before publishing.'],
+  ['self protection', 'You cannot deactivate your own account or remove your admin access.'],
+  ['last owner', 'At least one active admin account must remain.'],
+  ['delivered quotation', 'Record delivery of an issued quotation before marking the request quoted.'],
+  ['retained history', 'Sales requests, inquiries and quotations are permanent records and cannot be deleted.'],
+  ['use publication action', 'Use publish, unpublish or archive actions to change publication status.'],
+]
+
 export function databaseError(error: {
   code?: string
   message?: string
@@ -43,10 +66,15 @@ export function databaseError(error: {
     throw new ApiError(403, 'FORBIDDEN', 'This action is not permitted.')
   if (text.includes('MAS_RATE_LIMIT'))
     throw new ApiError(429, 'RATE_LIMITED', 'Please try again later.')
-  if (
-    text.includes('MAS_VALIDATION') ||
-    ['23503', '23514', '22023', '22P02'].includes(error.code || '')
-  )
+  if (text.includes('MAS_VALIDATION')) {
+    const matched = VALIDATION_MESSAGES.find(([tag]) => text.includes(tag))
+    throw new ApiError(
+      422,
+      'VALIDATION_ERROR',
+      matched?.[1] || 'A field, dependency or workflow constraint failed.',
+    )
+  }
+  if (['23503', '23514', '22023', '22P02'].includes(error.code || ''))
     throw new ApiError(
       422,
       'VALIDATION_ERROR',
@@ -54,11 +82,13 @@ export function databaseError(error: {
     )
   throw unavailable()
 }
+
 export class SupabaseRepository implements Repository {
   constructor(
     readonly user: SupabaseClient,
     readonly service?: SupabaseClient,
   ) {}
+
   async rpc<T>(
     name: string,
     args: Record<string, unknown>,
@@ -69,41 +99,49 @@ export class SupabaseRepository implements Repository {
     const { data, error } = await client.rpc(name, args)
     if (error) databaseError(error)
     const projected = convert(data)
-    const urls = (v: unknown): unknown =>
-      Array.isArray(v)
-        ? v.map(urls)
-        : v && typeof v === 'object'
-          ? Object.fromEntries(
-              Object.entries(v)
-                .map(([key, value]) => [key, urls(value)])
-                .concat(
-                  'path' in v && 'mime' in v && typeof v.path === 'string'
-                    ? [
-                        [
-                          'url',
-                          this.user.storage
-                            .from('catalog-public')
-                            .getPublicUrl(v.path).data.publicUrl,
-                        ],
-                      ]
-                    : [],
-                ),
-            )
-          : v
+    const urls = (v: unknown): unknown => {
+      if (Array.isArray(v)) return v.map(urls)
+      if (v && typeof v === 'object') {
+        const rec = v as Record<string, unknown>
+        const isPublicReadyMedia =
+          typeof rec.path === 'string' &&
+          typeof rec.mime === 'string' &&
+          rec.visibility !== 'private' &&
+          (rec.status === undefined || rec.status === 'ready')
+        return Object.fromEntries(
+          Object.entries(rec)
+            .map(([key, value]) => [key, urls(value)])
+            .concat(
+              isPublicReadyMedia
+                ? [
+                    [
+                      'url',
+                      this.user.storage
+                        .from('catalog-public')
+                        .getPublicUrl(String(rec.path)).data.publicUrl,
+                    ],
+                  ]
+                : [],
+            ),
+        )
+      }
+      return v
+    }
     return (
-      !privileged &&
-      !args.p_private &&
       [
         'mas_get',
         'mas_list',
         'mas_content',
         'mas_facets',
         'mas_resolve_variant',
+        'mas_command',
+        'mas_retry_job',
       ].includes(name)
         ? urls(projected)
         : projected
     ) as T
   }
+
   list(resource: Resource, filters: Filters, actor?: Actor) {
     return this.rpc<Page>('mas_list', {
       p_resource: resource,
@@ -111,6 +149,7 @@ export class SupabaseRepository implements Repository {
       p_private: Boolean(actor),
     })
   }
+
   get(resource: Resource, id: string, actor?: Actor) {
     return this.rpc<Entity | null>('mas_get', {
       p_resource: resource,
@@ -118,6 +157,7 @@ export class SupabaseRepository implements Repository {
       p_private: Boolean(actor),
     })
   }
+
   command(command: Command) {
     return this.rpc<Entity>(
       'mas_command',
@@ -133,26 +173,31 @@ export class SupabaseRepository implements Repository {
       true,
     )
   }
+
   resolveVariant(id: string) {
     return this.rpc<VariantResolution | null>('mas_resolve_variant', {
       p_id: id,
     })
   }
+
   getUnit(code: string) {
     return this.rpc<VariantResolution['unit'] | null>('mas_unit', {
       p_code: code,
     })
   }
+
   publicContent(key: string) {
     return this.rpc<Record<string, unknown> | null>('mas_content', {
       p_key: key,
     })
   }
+
   facets(filters: Filters) {
     return this.rpc<Record<string, unknown>>('mas_facets', {
       p_filters: filters,
     })
   }
+
   submit(
     kind: 'request' | 'inquiry',
     payload: Record<string, unknown>,
@@ -169,6 +214,7 @@ export class SupabaseRepository implements Repository {
       true,
     )
   }
+
   rateLimit(key: string, maximum: number, windowSeconds: number) {
     return this.rpc<{ allowed: boolean; retryAfter: number }>(
       'mas_rate_limit',

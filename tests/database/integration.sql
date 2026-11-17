@@ -79,6 +79,9 @@ begin
  quotation:=public.mas_command('quotations','create',null,null,jsonb_build_object('requestId',request_id,'locale','ar','currency','EGP','validUntil','2099-01-01','leadTime','One week','terms','Payment on delivery','lines',jsonb_build_array(jsonb_build_object('description','Oil','sku','TEST-SKU','quantity',2,'unit','piece','price','10','discount','0','tax','14')),'totals',jsonb_build_object('net',2000,'tax',280,'total',2280)),agent_id,'aal1');
  quotation:=public.mas_command('quotations','issue',(quotation->>'id')::uuid,1,'{}',agent_id,'aal1');
  perform public.test_assert(quotation->>'number' is not null and quotation->>'status'='issued','quotation issuance allocates a number');
+ perform public.test_assert(quotation->>'pdfStatus'='processing','issued quotation reports PDF processing state');
+ perform public.test_assert((public.mas_retry_job('quotations',(quotation->>'id')::uuid,owner_id,'aal2')->>'pdfStatus')='processing','admin can safely retry quotation PDF job without mutating snapshot');
+ perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','products','delete',product->>'id','{}',owner_id,'aal2'),'MAS_VALIDATION','published product cannot be deleted directly');
  perform public.test_throws(format('select public.mas_command(%L,%L,%L,2,%L,%L,%L)','quotations','update',quotation->>'id','{}',agent_id,'aal1'),'MAS_VALIDATION','issued quotations are immutable');
  revision:=public.mas_command('quotations','revise',(quotation->>'id')::uuid,2,'{}',agent_id,'aal1');
  perform public.test_assert(revision->>'revision'='2' and revision->>'number'=quotation->>'number','revision preserves series number');

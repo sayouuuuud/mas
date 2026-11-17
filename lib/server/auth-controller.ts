@@ -2,9 +2,10 @@ import 'server-only'
 import { z } from 'zod'
 import type { NextRequest } from 'next/server'
 import { authFailure, type RequestScope } from './auth'
-import { readBody, response, limit } from './http'
+import { readBody, response, limit, resolveTrustedOrigin } from './http'
 import { ApiError, assert } from './errors'
-import { requireActor } from './policy'
+import { isAdminRole } from './policy'
+
 export async function authController(
   request: NextRequest,
   path: string[],
@@ -33,9 +34,8 @@ export async function authController(
       const actor = await scope.actor()
       return response({
         id: actor.id,
-        mfaRequired:
-          actor.roles.some((r) => r === 'Owner' || r === 'Sales Manager') &&
-          actor.aal !== 'aal2',
+        role: 'Admin',
+        mfaRequired: actor.aal !== 'aal2',
       })
     } catch (error) {
       await scope.user.auth.signOut({ scope: 'local' })
@@ -59,8 +59,9 @@ export async function authController(
       .object({ email: z.email().max(254) })
       .strict()
       .parse(await readBody(request))
+    const redirectOrigin = resolveTrustedOrigin(request, scope.config)
     const result = await scope.user.auth.resetPasswordForEmail(email, {
-      redirectTo: `${scope.config.origin}/api/v1/auth/callback`,
+      redirectTo: `${redirectOrigin}/api/v1/auth/callback`,
     })
     if (result.error)
       authFailure(
@@ -76,30 +77,79 @@ export async function authController(
   }
   if (action === 'callback' && method === 'GET') {
     const code = request.nextUrl.searchParams.get('code')
-    assert(code && code.length <= 4096, 'A recovery code is required.')
-    const result = await scope.user.auth.exchangeCodeForSession(code)
-    if (result.error)
-      authFailure(
-        result.error,
+    const tokenHash = request.nextUrl.searchParams.get('token_hash')
+    const otpType = request.nextUrl.searchParams.get('type')
+
+    if (code) {
+      assert(code.length <= 4096, 'A valid recovery code is required.')
+      const result = await scope.user.auth.exchangeCodeForSession(code)
+      if (result.error)
+        authFailure(
+          result.error,
+          400,
+          'INVALID_RECOVERY_LINK',
+          'This link is invalid or expired.',
+        )
+    } else if (
+      tokenHash &&
+      otpType &&
+      ['recovery', 'invite', 'email'].includes(otpType)
+    ) {
+      assert(tokenHash.length <= 4096, 'A valid recovery token is required.')
+      const result = await scope.user.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: otpType as 'recovery' | 'invite' | 'email',
+      })
+      if (result.error)
+        authFailure(
+          result.error,
+          400,
+          'INVALID_RECOVERY_LINK',
+          'This link is invalid or expired.',
+        )
+    } else {
+      throw new ApiError(
         400,
         'INVALID_RECOVERY_LINK',
-        'This link is invalid or expired.',
+        'A recovery code is required.',
       )
+    }
+
     const { NextResponse } = await import('next/server')
+    const redirectOrigin = resolveTrustedOrigin(request, scope.config)
     return NextResponse.redirect(
-      `${scope.config.origin}/admin/reset-password?stage=update`,
+      `${redirectOrigin}/admin/reset-password?stage=update`,
     )
   }
+
   const actor = await scope.actor()
   if (action === 'me' && method === 'GET')
     return response({
       ...actor,
-      mfaRequired:
-        actor.roles.some((r) => r === 'Owner' || r === 'Sales Manager') &&
-        actor.aal !== 'aal2',
+      role: 'Admin',
+      mfaRequired: actor.aal !== 'aal2',
     })
+
   if (action === 'password' && method === 'POST') {
-    requireActor(actor)
+    if (!actor.active || !isAdminRole(actor.roles))
+      throw new ApiError(403, 'FORBIDDEN', 'Admin permissions are required.')
+    const factors = await scope.user.auth.mfa.listFactors()
+    if (factors.error)
+      authFailure(
+        factors.error,
+        503,
+        'AUTH_UNAVAILABLE',
+        'Authentication is temporarily unavailable.',
+      )
+    const hasVerifiedFactor = factors.data.all.some(
+      (f) => f.status === 'verified',
+    )
+    if (hasVerifiedFactor && actor.aal !== 'aal2')
+      throw new ApiError(
+        403,
+        'MFA_REQUIRED',
+        'Two-factor verification is required before changing the password.',
+      )
     await limit(scope, request, `password:${actor.id}`, 5, 600)
     const { password } = z
       .object({ password: z.string().min(12).max(128) })
@@ -113,8 +163,9 @@ export async function authController(
         'PASSWORD_UPDATE_FAILED',
         'The password could not be updated. Reauthenticate and try again.',
       )
-    return response({ updated: true })
+    return response({ updated: true, mfaRequired: actor.aal !== 'aal2' })
   }
+
   if (action === 'mfa/factors' && method === 'GET') {
     const result = await scope.user.auth.mfa.listFactors()
     if (result.error)
@@ -133,11 +184,20 @@ export async function authController(
       })),
     )
   }
+
   if (action === 'mfa/enroll' && method === 'POST') {
     await limit(scope, request, `mfa:${actor.id}`, 5, 600)
+    const existing = await scope.user.auth.mfa.listFactors()
+    if (!existing.error) {
+      for (const stale of existing.data.all.filter(
+        (f) => f.status === 'unverified',
+      )) {
+        await scope.user.auth.mfa.unenroll({ factorId: stale.id })
+      }
+    }
     const result = await scope.user.auth.mfa.enroll({
       factorType: 'totp',
-      friendlyName: 'M.A.S authenticator',
+      friendlyName: `M.A.S Admin (${new Date().toISOString().slice(0, 10)})`,
     })
     if (result.error)
       authFailure(
@@ -151,6 +211,7 @@ export async function authController(
       201,
     )
   }
+
   if (action === 'mfa/challenge' && method === 'POST') {
     await limit(scope, request, `mfa:${actor.id}`, 10, 600)
     const input = z
@@ -167,18 +228,12 @@ export async function authController(
       )
     return response({ id: result.data.id, expiresAt: result.data.expires_at })
   }
+
   if (action === 'mfa/unenroll' && method === 'POST') {
     const input = z
       .object({ factorId: z.uuid() })
       .strict()
       .parse(await readBody(request))
-    const level = await scope.user.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (level.error || level.data.currentLevel !== 'aal2')
-      throw new ApiError(
-        403,
-        'MFA_REQUIRED',
-        'Verify two-factor authentication before removing a factor.',
-      )
     const factors = await scope.user.auth.mfa.listFactors()
     if (factors.error)
       throw new ApiError(
@@ -186,16 +241,25 @@ export async function authController(
         'AUTH_UNAVAILABLE',
         'Authentication is temporarily unavailable.',
       )
-    const verified = factors.data.all.filter(
-      (factor) => factor.status === 'verified',
-    )
-    if (
-      actor.roles.some((role) => role === 'Owner' || role === 'Sales Manager')
-    )
+    const target = factors.data.all.find((f) => f.id === input.factorId)
+    if (!target)
+      throw new ApiError(404, 'NOT_FOUND', 'The factor does not exist.')
+    if (target.status === 'verified') {
+      const level = await scope.user.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (level.error || level.data.currentLevel !== 'aal2')
+        throw new ApiError(
+          403,
+          'MFA_REQUIRED',
+          'Verify two-factor authentication before removing a factor.',
+        )
+      const verified = factors.data.all.filter(
+        (factor) => factor.status === 'verified',
+      )
       assert(
         verified.some((factor) => factor.id !== input.factorId),
         'Enroll and verify a replacement before removing the last factor.',
       )
+    }
     const result = await scope.user.auth.mfa.unenroll(input)
     if (result.error)
       authFailure(
@@ -206,6 +270,7 @@ export async function authController(
       )
     return response({ removed: true })
   }
+
   if (action === 'mfa/verify' && method === 'POST') {
     await limit(scope, request, `mfa-verify:${actor.id}`, 10, 600)
     const input = z
@@ -226,6 +291,7 @@ export async function authController(
       )
     return response({ verified: true })
   }
+
   throw new ApiError(
     404,
     'NOT_FOUND',

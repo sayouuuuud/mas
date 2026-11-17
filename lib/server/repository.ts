@@ -1,4 +1,5 @@
 import type { Actor, Entity, Resource } from './contracts'
+
 export type Filters = {
   page: number
   pageSize: number
@@ -18,7 +19,9 @@ export type Filters = {
   sort?: string
   locale?: string
 }
+
 export type Page<T = Entity> = { data: T[]; total: number }
+
 export type Command = {
   resource: Resource
   action: string
@@ -27,6 +30,7 @@ export type Command = {
   data: Record<string, unknown>
   actor: Actor
 }
+
 export type VariantResolution = {
   product: { id: string; name: { ar: string; en: string }; slug: string }
   variant: {
@@ -46,7 +50,13 @@ export type VariantResolution = {
     name: { ar: string; en: string }
   }
 }
+
 export interface Repository {
+  rpc?<T>(
+    name: string,
+    args: Record<string, unknown>,
+    privileged?: boolean,
+  ): Promise<T>
   list(resource: Resource, filters: Filters, actor?: Actor): Promise<Page>
   get(resource: Resource, id: string, actor?: Actor): Promise<Entity | null>
   command(command: Command): Promise<Entity>

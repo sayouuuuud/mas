@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { ApiError } from './errors'
 import { secret } from './environment'
 import type { RequestScope } from './auth'
+
 export async function readBody(
   request: Request,
   max = 1024 * 1024,
@@ -55,9 +56,52 @@ export async function readBody(
     throw new ApiError(400, 'INVALID_JSON', 'Invalid JSON payload.')
   }
 }
-export function originGuard(request: NextRequest, origin: string) {
+
+function isAllowedOrigin(
+  incoming: string,
+  originOrAllowed: string | ReadonlySet<string>,
+  allowDevWorkspaceOrigin = false,
+): boolean {
+  if (typeof originOrAllowed === 'string') return incoming === originOrAllowed
+  if (originOrAllowed.has(incoming)) return true
+  if (
+    allowDevWorkspaceOrigin &&
+    /^https:\/\/workspace-[a-z0-9-]+\.v0\.build$/.test(incoming)
+  ) {
+    return true
+  }
+  return false
+}
+
+export function resolveTrustedOrigin(
+  request: NextRequest,
+  config: {
+    origin: string
+    allowedOrigins?: ReadonlySet<string>
+    allowDevWorkspaceOrigin?: boolean
+  },
+): string {
   const incoming = request.headers.get('origin')
-  if (incoming && incoming !== origin)
+  if (
+    incoming &&
+    isAllowedOrigin(
+      incoming,
+      config.allowedOrigins || config.origin,
+      config.allowDevWorkspaceOrigin,
+    )
+  ) {
+    return incoming
+  }
+  return config.origin
+}
+
+export function originGuard(
+  request: NextRequest,
+  origin: string | ReadonlySet<string>,
+  allowDevWorkspaceOrigin = false,
+) {
+  const incoming = request.headers.get('origin')
+  if (incoming && !isAllowedOrigin(incoming, origin, allowDevWorkspaceOrigin))
     throw new ApiError(
       403,
       'INVALID_ORIGIN',
@@ -70,6 +114,7 @@ export function originGuard(request: NextRequest, origin: string) {
       'A same-origin request is required.',
     )
 }
+
 export async function limit(
   scope: RequestScope,
   request: NextRequest,
@@ -96,6 +141,7 @@ export async function limit(
   if (!result.allowed)
     throw new ApiError(429, 'RATE_LIMITED', `Please try again later.`)
 }
+
 export function response(data: unknown, status = 200, meta?: unknown) {
   return NextResponse.json(
     { data, ...(meta ? { meta } : {}) },
@@ -108,6 +154,7 @@ export function response(data: unknown, status = 200, meta?: unknown) {
     },
   )
 }
+
 export function failure(error: unknown, requestId = randomUUID()) {
   if (error instanceof z.ZodError) {
     const fieldErrors: Record<string, string[]> = Object.create(null)

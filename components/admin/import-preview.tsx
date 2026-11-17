@@ -1,214 +1,236 @@
 'use client'
-import { useState } from 'react'
-import { useDemo } from '@/components/demo/demo-provider'
-import { Field, useCopy } from '@/components/demo/ui'
-import { csvDownload } from '@/lib/frontend-model'
-import { parseCsv } from '@/lib/csv-preview'
-import { bi, type DemoProduct, type CategoryKey } from '@/lib/demo-data'
-export function ImportPreview() {
-  const { products, setProducts, recordActivity, resources } = useDemo()
+
+import { useRef, useState } from 'react'
+import { Upload, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react'
+import { Badge, useCopy } from '@/components/demo/ui'
+import { useLanguage } from '@/components/language-provider'
+import { downloadText } from './frontend-tools'
+import { api, formatApiError } from '@/lib/api-client'
+
+const CSV_TEMPLATE = [
+  'slug,name_ar,name_en,family,category,brand,sku,unit,pack_quantity,pack_unit',
+  'industrial-hydraulic-oil-68,زيت هيدروليك صناعي 68,Industrial Hydraulic Oil 68,oils,,,MAS-HYD-68-20L,drum,20,L',
+].join('\n')
+
+type PreviewProduct = {
+  slug: string
+  nameAr: string
+  nameEn: string
+  family: 'oils' | 'grease' | 'bearings'
+  variants: Array<{ sku: string | null; unitCode: string }>
+}
+
+export function ImportPreview({
+  onImported,
+}: {
+  onImported: () => Promise<void> | void
+}) {
   const c = useCopy()
-  const [rows, setRows] = useState<DemoProduct[]>([])
-  const [errors, setErrors] = useState<string[]>([])
-  const [message, setMessage] = useState('')
+  const { lang } = useLanguage()
+  const [csvText, setCsvText] = useState('')
+  const [preview, setPreview] = useState<{
+    products: PreviewProduct[]
+    count: number
+    token: string
+    expiresAt: string
+  } | null>(null)
   const [busy, setBusy] = useState(false)
-  async function inspect(file: File | undefined) {
-    setRows([])
-    setErrors([])
+  const [message, setMessage] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function runServerPreview(rawCsv: string) {
+    setCsvText(rawCsv)
+    setPreview(null)
     setMessage('')
-    if (!file) return
-    if (file.size > 1024 * 1024) {
-      setErrors([c('الحد الأقصى 1MB.', 'Maximum size is 1MB.')])
-      return
-    }
+    setErrorMsg('')
+    if (!rawCsv.trim()) return
+
     setBusy(true)
     try {
-      const parsed = parseCsv(await file.text())
-      const header = [
-        'slug',
-        'name_ar',
-        'name_en',
-        'category',
-        'brand',
-        'sku',
-        'pack',
-      ]
-      if (
-        parsed.length < 2 ||
-        header.some((name, i) => parsed[0][i] !== name) ||
-        parsed.length > 201
-      )
-        throw new Error('header')
-      const next: DemoProduct[] = []
-      const problems: string[] = []
-      const usedSkus = new Set(
-        products.flatMap((p) => p.variants.map((v) => v.sku.toLowerCase())),
-      )
-      const usedSlugs = new Set(products.map((p) => p.slug))
-      parsed.slice(1).forEach((row, index) => {
-        const [slug, ar, en, category, brand, sku, pack] = row.map((value) =>
-          value.trim(),
-        )
-        if (
-          row.length !== header.length ||
-          !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) ||
-          !ar?.trim() ||
-          !en?.trim() ||
-          !['oils', 'grease', 'bearings'].includes(category) ||
-          !resources.brands.some(
-            (b) => b.id === brand && b.status !== 'archived',
-          ) ||
-          !sku ||
-          !(Number(pack) > 0) ||
-          !Number.isFinite(Number(pack)) ||
-          usedSkus.has(sku.toLowerCase()) ||
-          usedSlugs.has(slug)
-        ) {
-          problems.push(
-            `${c('صف', 'Row')} ${index + 2}: ${c('راجع الحقول والتكرارات والكود والتصنيف.', 'Check fields, duplicates, SKU and category.')}`,
-          )
-          return
-        }
-        usedSkus.add(sku.toLowerCase())
-        usedSlugs.add(slug)
-        const id = `demo-${Date.now() + index}`
-        next.push({
-          id,
-          slug,
-          name: bi(ar, en),
-          summary: bi('مسودة مستوردة للمراجعة.', 'Imported draft for review.'),
-          category: category as CategoryKey,
-          brand,
-          sectorIds: [],
-          image:
-            category === 'oils'
-              ? '/images/product-oils.png'
-              : category === 'grease'
-                ? '/images/product-grease.png'
-                : '/images/product-bearings.png',
-          status: 'draft',
-          featured: false,
-          specs: [],
-          variants: [
-            {
-              id: `${id}-0`,
-              sku,
-              pack,
-              label: bi(`خيار ${pack}`, `Option ${pack}`),
-              availability: 'on_request',
-              unit:
-                category === 'bearings'
-                  ? bi('قطعة', 'piece')
-                  : bi('عبوة', 'pack'),
-            },
-          ],
-        })
+      const res = await api<{
+        products: PreviewProduct[]
+        count: number
+        token: string
+        expiresAt: string
+      }>('/admin/imports/preview', {
+        method: 'POST',
+        body: { csv: rawCsv },
       })
-      setRows(next)
-      setErrors(problems)
-    } catch {
-      setErrors([
-        c(
-          'ملف CSV غير صالح. استخدم القالب (حتى 200 صف).',
-          'Invalid CSV. Use the template (up to 200 rows).',
-        ),
-      ])
+      setPreview(res.data)
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
     } finally {
       setBusy(false)
     }
   }
+
+  async function applyServerImport() {
+    if (busy || !preview || !csvText.trim()) return
+    setBusy(true)
+    setErrorMsg('')
+    setMessage('')
+    try {
+      const res = await api<{ count: number; ids: string[] }>(
+        '/admin/imports/apply',
+        {
+          method: 'POST',
+          body: { csv: csvText, token: preview.token },
+        },
+      )
+      setPreview(null)
+      setCsvText('')
+      setMessage(
+        c(
+          `تم استيراد ${res.data.count} منتج كمسودة في معاملة ذرية واحدة.`,
+          `Atomically imported ${res.data.count} draft product(s).`,
+        ),
+      )
+      await onImported()
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <details className="panel mb-6 bg-white">
-      <summary className="cursor-pointer font-bold">
-        {c(
-          'استيراد CSV ومعاينة الأخطاء محليًا',
-          'Local CSV import & error preview',
-        )}
-      </summary>
-      <div className="mt-5 space-y-4">
-        <p className="text-sm text-muted-foreground">
-          {c(
-            'تُضاف الصفوف كمسودات محلية فقط، دون تعديل المنتجات الحالية. أخطاء الصفوف تمنع التطبيق حتى تصحيح الملف.',
-            'Rows become local drafts only. Existing products are unchanged; errors prevent applying the file.',
-          )}
-        </p>
-        <button
-          className="btn-outline"
-          onClick={() =>
-            csvDownload(
-              'mas-product-template.csv',
-              [
-                'slug',
-                'name_ar',
-                'name_en',
-                'category',
-                'brand',
-                'sku',
-                'pack',
-              ],
-              [
-                [
-                  'sample-oil',
-                  'منتج تجريبي',
-                  'Sample product',
-                  'oils',
-                  'ola-energy',
-                  'SAMPLE-001',
-                  '20',
-                ],
-              ],
-            )
-          }
-        >
-          {c('تنزيل القالب', 'Download template')}
-        </button>
-        <Field label={c('ملف CSV', 'CSV file')}>
+    <div className="panel mb-5 space-y-4 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold">
+            {c('معاينة واستيراد المنتجات الذري عبر CSV', 'Atomic CSV Product Import')}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {c(
+              'يتحقق الخادم من الرموز والتصنيفات ووحدات البيع النشطة أولًا، وتفشل العملية بالكامل إذا وُجد خطأ في أي صف.',
+              'Server validates slugs, categories and active selling units first; rolls back completely if any row fails.',
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() =>
+              downloadText('mas-products-template.csv', CSV_TEMPLATE)
+            }
+          >
+            {c('تنزيل القالب المعتمد', 'Download CSV template')}
+          </button>
           <input
+            ref={inputRef}
             type="file"
             accept=".csv,text/csv"
-            onChange={(e) => {
-              void inspect(e.target.files?.[0])
-              e.target.value = ''
+            className="sr-only"
+            onChange={async (event) => {
+              const file = event.target.files?.[0]
+              if (file) await runServerPreview(await file.text())
+              event.target.value = ''
             }}
           />
-        </Field>
-        {busy && (
-          <p role="status">{c('جارٍ تحليل الملف محليًا…', 'Parsing locally…')}</p>
-        )}
-        <ul className="text-sm text-red-700">
-          {errors.map((error, i) => (
-            <li key={i}>{error}</li>
-          ))}
-        </ul>
-        <p>
-          {rows.length} {c('مسودة صالحة للمعاينة', 'valid draft previews')}
-        </p>
-        {rows.slice(0, 5).map((row) => (
-          <p className="text-sm" key={row.id}>
-            {row.name.ar} · {row.variants[0].sku}
-          </p>
-        ))}
-        <button
-          className="btn-primary"
-          disabled={busy || !rows.length || errors.length > 0}
-          onClick={() => {
-            setProducts((all) => [...all, ...rows])
-            recordActivity('products.imported', String(rows.length))
-            setMessage(
-              c(
-                'تمت إضافة المسودات للواجهة فقط.',
-                'Drafts added to the interface only.',
-              ),
-            )
-            setRows([])
-          }}
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
+            {c('اختيار ملف CSV للمعاينة', 'Choose CSV for preview')}
+          </button>
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50/70 p-3.5 text-sm text-red-800"
         >
-          {c('تطبيق المسودات محليًا', 'Apply drafts locally')}
-        </button>
-        <p role="status" className="text-sm text-primary">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {preview && (
+        <div className="space-y-4 border-t pt-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge tone="green">
+              {preview.count} {c('منتج صالح للاستيراد', 'valid product(s)')}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              {c('رمز المعاينة صالح حتى:', 'Preview token valid until:')}{' '}
+              {new Date(preview.expiresAt).toLocaleTimeString()}
+            </span>
+          </div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Slug</th>
+                  <th>{c('الاسم بالعربية', 'Arabic name')}</th>
+                  <th>{c('العائلة', 'Family')}</th>
+                  <th>{c('المتغيرات / الوحدات', 'Variants / Units')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.products.map((p) => (
+                  <tr key={p.slug}>
+                    <td dir="ltr" className="font-mono text-xs">
+                      {p.slug}
+                    </td>
+                    <td>{p.nameAr}</td>
+                    <td>{p.family}</td>
+                    <td dir="ltr" className="font-mono text-xs">
+                      {p.variants
+                        .map((v) => `${v.sku || 'no-sku'} (${v.unitCode})`)
+                        .join(', ')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={busy}
+              onClick={() => void applyServerImport()}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="size-4" />
+              )}
+              {c(
+                'تأكيد الاستيراد كمسودات',
+                'Confirm atomic import as drafts',
+              )}
+            </button>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={busy}
+              onClick={() => {
+                setPreview(null)
+                setCsvText('')
+              }}
+            >
+              {c('إلغاء', 'Cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <p role="status" className="text-sm font-medium text-primary">
           {message}
         </p>
-      </div>
-    </details>
+      )}
+    </div>
   )
 }

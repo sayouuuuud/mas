@@ -20,13 +20,8 @@ export const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(180)
 export const status = z.enum(['draft', 'published', 'archived'])
-export const role = z.enum([
-  'Owner',
-  'Catalog Manager',
-  'Content Editor',
-  'Sales Manager',
-  'Sales Agent',
-])
+// Single administration role: Admin (stored internally as Owner for RPC/RLS compatibility).
+export const role = z.enum(['Admin', 'Owner'])
 export type Role = z.infer<typeof role>
 export type Actor = {
   id: string
@@ -252,6 +247,7 @@ export const inquiryInput = z
   })
   .strict()
 export type RequestInput = z.infer<typeof requestInput>
+export type InquiryInput = z.infer<typeof inquiryInput>
 export const requestStatus = z.enum([
   'new',
   'assigned',
@@ -329,6 +325,11 @@ export type Quotation = Entity &
     requestId: string
     status: string
     revision: number
+    number?: string
+    issuedAt?: string
+    pdfPath?: string
+    pdfStatus?: 'none' | 'processing' | 'ready' | 'failed'
+    pdfError?: string | null
     totals?: unknown
   }
 export const contactInput = z
@@ -417,11 +418,21 @@ export const mediaInput = z
     (m) => m.mime === 'application/pdf' || m.size <= 5 * 1024 * 1024,
     'Images must not exceed 5MB.',
   )
+
+// Keep Owner internally in PostgreSQL profiles for RPC/RLS compatibility while
+// presenting and validating a single Admin role across API and UI.
+const adminRolesInput = z
+  .array(role)
+  .min(1)
+  .max(2)
+  .default(['Admin'])
+  .transform((): Role[] => ['Owner'])
+
 export const invitationInput = z
   .object({
     email: z.email().max(254),
     displayName: z.string().trim().min(2).max(120),
-    roles: z.array(role).min(1).max(5),
+    roles: adminRolesInput,
   })
   .strict()
 export const teamUpdate = z
@@ -429,7 +440,7 @@ export const teamUpdate = z
     version: z.number().int().positive(),
     displayName: z.string().trim().min(2).max(120),
     active: z.boolean(),
-    roles: z.array(role).min(1).max(5),
+    roles: adminRolesInput,
   })
   .strict()
 export const resourceSchemas = {
@@ -476,6 +487,7 @@ export const listing = z
     pack: z.string().max(40).optional(),
     sort: z.enum(['featured', 'name', 'latest']).default('featured'),
     assignedTo: uuid.optional(),
+    requestId: uuid.optional(),
     from: z.iso.date().optional(),
     to: z.iso.date().optional(),
     attribute: uuid.optional(),

@@ -4,7 +4,7 @@ import type { Actor } from './contracts'
 import type { BackendService } from './services'
 import type { Filters } from './repository'
 import { ApiError } from './errors'
-import { has } from './policy'
+import { requireActor } from './policy'
 
 // Spreadsheet programs interpret these prefixes even inside quoted CSV cells.
 export function csvCell(value: unknown): string {
@@ -21,21 +21,15 @@ export function csvCell(value: unknown): string {
 export async function createExport(
   service: BackendService,
   actor: Actor,
-  resource: 'products' | 'quote_requests' | 'contacts',
+  resource:
+    | 'products'
+    | 'quote_requests'
+    | 'contacts'
+    | 'inquiries'
+    | 'quotations',
   filters?: Filters,
 ) {
-  if (resource === 'products' && !has(actor, 'Catalog Manager'))
-    throw new ApiError(
-      403,
-      'FORBIDDEN',
-      'Catalog export permissions are required.',
-    )
-  if (resource !== 'products' && !has(actor, 'Sales Manager'))
-    throw new ApiError(
-      403,
-      'FORBIDDEN',
-      'Only sales managers may export customer information.',
-    )
+  requireActor(actor)
   const query = { ...filters, page: 1, pageSize: 1000 }
   const result = await service.list(resource, query, actor)
   if (result.total > 1000)
@@ -49,14 +43,18 @@ export async function createExport(
       ? ['id', 'slug', 'name', 'status', 'categoryId', 'brandId']
       : resource === 'contacts'
         ? ['id', 'name', 'phone', 'email', 'organizationId']
-        : [
-            'id',
-            'reference',
-            'status',
-            'customerSnapshot',
-            'assignedTo',
-            'createdAt',
-          ]
+        : resource === 'inquiries'
+          ? ['id', 'reference', 'status', 'customerSnapshot', 'message', 'createdAt']
+          : resource === 'quotations'
+            ? ['id', 'number', 'revision', 'requestId', 'status', 'currency', 'validUntil', 'totals']
+            : [
+                'id',
+                'reference',
+                'status',
+                'customerSnapshot',
+                'assignedTo',
+                'createdAt',
+              ]
   await service.repository.command({
     resource: 'audit_logs',
     action: 'export',

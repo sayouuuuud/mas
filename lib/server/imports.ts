@@ -9,8 +9,8 @@ import { parseCsv } from '../csv-preview'
 import { BackendService, stableHash } from './services'
 import { readBody, response, limit } from './http'
 import { secret } from './environment'
-import { ApiError, assert } from './errors'
-import { has } from './policy'
+import { ApiError, assert, unavailable } from './errors'
+import { requireActor } from './policy'
 
 export const importHeaders = [
   'slug',
@@ -24,14 +24,14 @@ export const importHeaders = [
   'pack_quantity',
   'pack_unit',
 ]
+
 export async function importController(
   request: NextRequest,
   scope: RequestScope,
   actor: Actor,
   action: string,
 ) {
-  if (!has(actor, 'Catalog Manager'))
-    throw new ApiError(403, 'FORBIDDEN', 'Catalog permissions are required.')
+  requireActor(actor)
   await limit(scope, request, `import:${actor.id}`, 10, 600, actor.id)
   const input = z
     .object({
@@ -168,6 +168,7 @@ export async function importController(
       timingSafeEqual(Buffer.from(signature), Buffer.from(expected)),
     'The import preview changed or expired. Preview it again.',
   )
+  if (!scope.repository.rpc) throw unavailable()
   const result = await scope.repository.rpc<Entity[]>(
     'mas_import_products',
     { p_products: products, p_actor: actor.id, p_aal: actor.aal },

@@ -2,6 +2,22 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useCopy } from '@/components/demo/ui'
 
+export function downloadText(
+  filename: string,
+  content: string,
+  mime = 'text/csv;charset=utf-8',
+) {
+  const blob = new Blob(['\uFEFF' + content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 export function useUnsavedChanges(dirty: boolean) {
   const c = useCopy()
   useEffect(() => {
@@ -23,8 +39,8 @@ export function useUnsavedChanges(dirty: boolean) {
       if (
         !window.confirm(
           c(
-            'لديك تعديلات غير مطبقة. هل تريد مغادرة الصفحة؟',
-            'You have unapplied changes. Leave this page?',
+            'لديك تعديلات غير محفوظة. هل تريد مغادرة الصفحة؟',
+            'You have unsaved changes. Leave this page?',
           ),
         )
       ) {
@@ -40,6 +56,7 @@ export function useUnsavedChanges(dirty: boolean) {
     }
   }, [dirty, c])
 }
+
 function ConfirmDialog({
   message,
   action,
@@ -64,14 +81,15 @@ function ConfirmDialog({
       aria-labelledby="confirm-title"
     >
       <h2 id="confirm-title" className="text-xl font-bold">
-        {c('تأكيد الإجراء في المعاينة', 'Confirm preview action')}
+        {c('تأكيد الإجراء', 'Confirm action')}
       </h2>
       <p className="my-5 leading-8 text-muted-foreground">{message}</p>
       <div className="flex justify-end gap-3">
-        <button autoFocus className="btn-outline" onClick={close}>
+        <button type="button" autoFocus className="btn-outline" onClick={close}>
           {c('إلغاء', 'Cancel')}
         </button>
         <button
+          type="button"
           className="btn-primary"
           onClick={() => {
             action()
@@ -84,6 +102,7 @@ function ConfirmDialog({
     </dialog>
   )
 }
+
 export function useConfirmAction() {
   const [pending, setPending] = useState<{
     message: string
@@ -97,6 +116,7 @@ export function useConfirmAction() {
     ) : null,
   }
 }
+
 export function Pagination({
   page,
   pages,
@@ -119,6 +139,7 @@ export function Pagination({
       </span>
       <div className="flex gap-2">
         <button
+          type="button"
           className="btn-outline"
           disabled={page <= 1}
           onClick={() => onChange(page - 1)}
@@ -126,6 +147,7 @@ export function Pagination({
           {c('السابق', 'Previous')}
         </button>
         <button
+          type="button"
           className="btn-outline"
           disabled={page >= pages}
           onClick={() => onChange(page + 1)}
@@ -136,6 +158,7 @@ export function Pagination({
     </nav>
   )
 }
+
 export function Tabs({
   value,
   onChange,
@@ -184,6 +207,7 @@ export function Tabs({
     </div>
   )
 }
+
 export function PreviewDialog({
   children,
   close,
@@ -208,6 +232,7 @@ export function PreviewDialog({
       onClose={close}
     >
       <button
+        type="button"
         autoFocus
         className="btn-outline mb-4"
         onClick={() => ref.current?.close()}

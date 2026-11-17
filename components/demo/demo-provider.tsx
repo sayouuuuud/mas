@@ -5,173 +5,157 @@ import {
   useContext,
   useEffect,
   useState,
-  useRef,
-  useCallback,
   type ReactNode,
 } from 'react'
+import { api, BackendError } from '@/lib/api-client'
+import { useLiveQuery } from '@/lib/live-query'
 import {
-  initialProducts,
-  initialRequests,
-  type DemoProduct,
-  type DemoRequest,
-} from '@/lib/demo-data'
+  resolveReferenceImage,
+  type LocalizedText,
+  type ReferenceRecord,
+  type UnitRecord,
+} from '@/lib/types'
 
-import { resourceConfigs, type ResourceRow } from '@/lib/demo-resources'
-import type {
-  PreviewAudit,
-  PreviewMedia,
-  PreviewQuotation,
-} from '@/lib/frontend-model'
+export type CartItem = {
+  variantId: string
+  quantity: number
+  productId?: string
+  productSlug?: string
+  productName?: LocalizedText
+  variantLabel?: LocalizedText
+  sku?: string
+  unitCode?: string
+  unitName?: LocalizedText
+  precision?: number
+  minQuantity?: number
+  quantityStep?: number
+}
 
-export type CartItem = { variantId: string; quantity: number }
-type DemoContextValue = {
+export type SubmissionReceipt = {
+  reference: string
+  receivedAt: string
+  kind: 'request' | 'inquiry'
+  itemCount: number
+}
+
+type VisitorWorkspaceValue = {
   comparison: string[]
   setComparison: React.Dispatch<React.SetStateAction<string[]>>
-  lastSubmission: {
-    reference: string
-    kind: 'request' | 'inquiry'
-    itemCount: number
-  } | null
+  lastSubmission: SubmissionReceipt | null
   setLastSubmission: React.Dispatch<
-    React.SetStateAction<{
-      reference: string
-      kind: 'request' | 'inquiry'
-      itemCount: number
-    } | null>
+    React.SetStateAction<SubmissionReceipt | null>
   >
-  resources: Record<string, ResourceRow[]>
-  setResources: React.Dispatch<
-    React.SetStateAction<Record<string, ResourceRow[]>>
-  >
-  audit: PreviewAudit[]
-  recordActivity: (action: string, entity: string) => void
-  media: PreviewMedia[]
-  setMedia: React.Dispatch<React.SetStateAction<PreviewMedia[]>>
-  trackMediaUrl: (file: File) => string
-  quotations: PreviewQuotation[]
-  setQuotations: React.Dispatch<React.SetStateAction<PreviewQuotation[]>>
-  products: DemoProduct[]
-  setProducts: React.Dispatch<React.SetStateAction<DemoProduct[]>>
-  requests: DemoRequest[]
-  setRequests: React.Dispatch<React.SetStateAction<DemoRequest[]>>
   cart: CartItem[]
   setCart: React.Dispatch<React.SetStateAction<CartItem[]>>
   hydrated: boolean
-  addToCart: (variantId: string, quantity: number) => void
+  addToCart: (
+    variantId: string,
+    quantity: number,
+    meta?: Omit<CartItem, 'variantId' | 'quantity'>,
+  ) => void
 }
-const DemoContext = createContext<DemoContextValue | null>(null)
+
+const CART_STORAGE_KEY = 'mas-rfq-cart'
+const RECEIPT_STORAGE_KEY = 'mas-last-submission'
+const COMPARE_STORAGE_KEY = 'mas-comparison'
+
+const DemoContext = createContext<VisitorWorkspaceValue | null>(null)
+
 export function DemoProvider({ children }: { children: ReactNode }) {
   const [comparison, setComparison] = useState<string[]>([])
-  const [lastSubmission, setLastSubmission] = useState<{
-    reference: string
-    kind: 'request' | 'inquiry'
-    itemCount: number
-  } | null>(null)
-  const [resources, setResources] = useState<Record<string, ResourceRow[]>>(
-    () =>
-      Object.fromEntries(
-        Object.entries(resourceConfigs).map(([key, config]) => [
-          key,
-          config.rows.map((row) => ({
-            status: 'published',
-            order: '0',
-            ...row,
-          })),
-        ]),
-      ),
-  )
-  const [audit, setAudit] = useState<PreviewAudit[]>([])
-  const [media, setMedia] = useState<PreviewMedia[]>([])
-  const [quotations, setQuotations] = useState<PreviewQuotation[]>([])
-  const mediaUrls = useRef(new Set<string>())
-  const trackMediaUrl = (file: File) => {
-    const url = URL.createObjectURL(file)
-    mediaUrls.current.add(url)
-    return url
-  }
-  useEffect(() => {
-    const urls = mediaUrls.current
-    return () => urls.forEach((url) => URL.revokeObjectURL(url))
-  }, [])
-  const recordActivity = useCallback(
-    (action: string, entity: string) =>
-      setAudit((all) =>
-        [
-          {
-            id: crypto.randomUUID(),
-            at: new Date().toISOString(),
-            action,
-            entity,
-          },
-          ...all,
-        ].slice(0, 500),
-      ),
-    [],
-  )
-  const [products, setProducts] = useState(initialProducts)
-  const [requests, setRequests] = useState<DemoRequest[]>(() =>
-    initialRequests.map((request) => ({
-      ...request,
-      items: request.items.map((item) => {
-        const p = initialProducts.find((p) =>
-          p.variants.some((v) => v.id === item.variantId),
-        )
-        const v = p?.variants.find((v) => v.id === item.variantId)
-        return {
-          ...item,
-          ...(p && v
-            ? {
-                snapshot: {
-                  name: { ...p.name },
-                  sku: v.sku,
-                  label: { ...v.label },
-                  unit: { ...v.unit },
-                },
-              }
-            : {}),
-        }
-      }),
-    })),
-  )
+  const [lastSubmission, setLastSubmission] =
+    useState<SubmissionReceipt | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [hydrated, setHydrated] = useState(false)
+
   useEffect(() => {
     try {
-      const raw: unknown = JSON.parse(
-        sessionStorage.getItem('mas-demo-cart') || '[]',
+      const rawCart: unknown = JSON.parse(
+        sessionStorage.getItem(CART_STORAGE_KEY) || '[]',
       )
-      if (Array.isArray(raw))
+      if (Array.isArray(rawCart)) {
         setCart(
-          raw
+          rawCart
             .filter(
               (item): item is CartItem =>
-                !!item &&
+                Boolean(item) &&
                 typeof item === 'object' &&
-                typeof item.variantId === 'string' &&
-                Number.isFinite(item.quantity) &&
-                item.quantity > 0 &&
-                item.quantity <= 99999 &&
-                initialProducts.some((p) =>
-                  p.variants.some((v) => v.id === item.variantId),
-                ),
+                typeof (item as CartItem).variantId === 'string' &&
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                  (item as CartItem).variantId,
+                ) &&
+                Number.isFinite((item as CartItem).quantity) &&
+                (item as CartItem).quantity >= 0.001 &&
+                (item as CartItem).quantity <= 99999,
             )
             .slice(0, 30),
         )
+      }
+      const rawReceipt: unknown = JSON.parse(
+        sessionStorage.getItem(RECEIPT_STORAGE_KEY) || 'null',
+      )
+      if (
+        rawReceipt &&
+        typeof rawReceipt === 'object' &&
+        typeof (rawReceipt as SubmissionReceipt).reference === 'string'
+      ) {
+        setLastSubmission(rawReceipt as SubmissionReceipt)
+      }
+      const rawCompare: unknown = JSON.parse(
+        sessionStorage.getItem(COMPARE_STORAGE_KEY) || '[]',
+      )
+      if (Array.isArray(rawCompare)) {
+        setComparison(
+          rawCompare
+            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+            .slice(0, 3),
+        )
+      }
     } catch {
-      /* Storage can be unavailable; keep an in-memory cart. */
+      // Session storage may be unavailable in restricted contexts.
     }
     setHydrated(true)
   }, [])
+
   useEffect(() => {
-    if (hydrated) {
-      try {
-        sessionStorage.setItem('mas-demo-cart', JSON.stringify(cart))
-      } catch {
-        /* In-memory fallback. */
-      }
+    if (!hydrated) return
+    try {
+      sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart))
+    } catch {
+      // Keep in-memory state when storage is blocked.
     }
   }, [cart, hydrated])
-  function addToCart(variantId: string, quantity: number) {
+
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      if (lastSubmission) {
+        sessionStorage.setItem(
+          RECEIPT_STORAGE_KEY,
+          JSON.stringify(lastSubmission),
+        )
+      } else {
+        sessionStorage.removeItem(RECEIPT_STORAGE_KEY)
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, [lastSubmission, hydrated])
+
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      sessionStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(comparison))
+    } catch {
+      // Ignore storage errors
+    }
+  }, [comparison, hydrated])
+
+  function addToCart(
+    variantId: string,
+    quantity: number,
+    meta?: Omit<CartItem, 'variantId' | 'quantity'>,
+  ) {
     if (!Number.isFinite(quantity) || quantity < 0.001 || quantity > 99999)
       return
     setCart((current) => {
@@ -179,14 +163,22 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       if (found)
         return current.map((item) =>
           item.variantId === variantId
-            ? { ...item, quantity: Math.min(99999, item.quantity + quantity) }
+            ? {
+                ...item,
+                ...meta,
+                quantity: Math.min(
+                  99999,
+                  Number((item.quantity + quantity).toFixed(3)),
+                ),
+              }
             : item,
         )
       return current.length < 30
-        ? [...current, { variantId, quantity }]
+        ? [...current, { variantId, quantity, ...meta }]
         : current
     })
   }
+
   return (
     <DemoContext.Provider
       value={{
@@ -194,19 +186,6 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         setComparison,
         lastSubmission,
         setLastSubmission,
-        resources,
-        setResources,
-        audit,
-        recordActivity,
-        media,
-        setMedia,
-        trackMediaUrl,
-        quotations,
-        setQuotations,
-        products,
-        setProducts,
-        requests,
-        setRequests,
         cart,
         setCart,
         addToCart,
@@ -217,36 +196,96 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     </DemoContext.Provider>
   )
 }
+
 export function useDemo() {
   const context = useContext(DemoContext)
   if (!context) throw new Error('DemoProvider is required')
   return context
 }
 
+export function usePublicBootstrap() {
+  return useLiveQuery('/public/bootstrap', async () => {
+    const res = await api<{
+      navigation?: Array<{ [key: string]: unknown }>
+      settings?: Record<string, any> | null
+      locations?: Array<{ kind: string; [key: string]: any }>
+      categories?: Array<{ id: string; [key: string]: any }>
+    }>('/public/bootstrap')
+    return res.data
+  })
+}
+
 export function useCatalogData() {
-  const { resources } = useDemo()
+  const categoriesQuery = useLiveQuery(
+    '/catalog/categories?pageSize=48',
+    async () =>
+      (await api<ReferenceRecord[]>('/catalog/categories?pageSize=48')).data,
+  )
+  const brandsQuery = useLiveQuery(
+    '/catalog/brands?pageSize=48',
+    async () =>
+      (await api<ReferenceRecord[]>('/catalog/brands?pageSize=48')).data,
+  )
+  const sectorsQuery = useLiveQuery(
+    '/catalog/sectors?pageSize=48',
+    async () =>
+      (await api<ReferenceRecord[]>('/catalog/sectors?pageSize=48')).data,
+  )
+  const unitsQuery = useLiveQuery('/content/units', async () => {
+    try {
+      const res = await api<{ items: UnitRecord[] }>('/content/units')
+      return res.data.items || []
+    } catch (err) {
+      if (err instanceof BackendError && err.status === 404) return []
+      throw err
+    }
+  })
+
+  const error =
+    categoriesQuery.error ||
+    brandsQuery.error ||
+    sectorsQuery.error ||
+    unitsQuery.error
+  const isLoading =
+    categoriesQuery.isLoading ||
+    brandsQuery.isLoading ||
+    sectorsQuery.isLoading ||
+    unitsQuery.isLoading
+
   return {
-    categories: resources.categories.map((row) => ({
-      id: row.id,
-      name: { ar: row.nameAr, en: row.nameEn },
-      description: { ar: row.description || '', en: row.descriptionEn || '' },
-      image: row.image || '/images/product-oils.png',
-      status: row.status,
-      parent: row.parent || '',
+    isLoading,
+    error,
+    refresh: async () => {
+      await Promise.all([
+        categoriesQuery.refresh(),
+        brandsQuery.refresh(),
+        sectorsQuery.refresh(),
+        unitsQuery.refresh(),
+      ])
+    },
+    units: unitsQuery.data || [],
+    categories: (categoriesQuery.data || []).map((row) => ({
+      ...row,
+      slug: row.slug || row.id,
+      description: row.description || { ar: '', en: '' },
+      image: resolveReferenceImage(row, 'image') || '/images/product-oils.png',
+      status: 'published' as const,
+      parent: row.parentId || '',
     })),
-    brands: resources.brands.map((row) => ({
-      id: row.id,
-      name: { ar: row.nameAr, en: row.nameEn },
-      logo: row.logo || undefined,
-      description: { ar: row.description || '', en: row.descriptionEn || '' },
+    brands: (brandsQuery.data || []).map((row) => ({
+      ...row,
+      slug: row.slug || row.id,
+      logo: resolveReferenceImage(row, 'logo'),
+      description: row.description || { ar: '', en: '' },
       website: row.website || '',
-      status: row.status,
+      status: 'published' as const,
     })),
-    sectors: resources.sectors.map((row) => ({
-      id: row.id,
-      name: { ar: row.nameAr, en: row.nameEn },
-      description: { ar: row.description || '', en: row.descriptionEn || '' },
-      status: row.status,
+    sectors: (sectorsQuery.data || []).map((row) => ({
+      ...row,
+      slug: row.slug || row.id,
+      image: resolveReferenceImage(row, 'image'),
+      description: row.description || { ar: '', en: '' },
+      status: 'published' as const,
     })),
   }
 }

@@ -6,7 +6,8 @@ import { useLanguage } from '@/components/language-provider'
 import { ActionLink } from '@/components/site/action-link'
 import { SectionHeading } from '@/components/site/section-heading'
 import { productKeys, type ProductKey } from '@/lib/site'
-import { usePublicHref } from '@/components/demo/public-link'
+import { PublicLink as Link } from '@/components/demo/public-link'
+import { usePublicBootstrap } from '@/components/demo/demo-provider'
 import { cn } from '@/lib/utils'
 
 const productImages: Record<ProductKey, string> = {
@@ -18,12 +19,13 @@ const productImages: Record<ProductKey, string> = {
 function ProductCard({
   productKey,
   wide,
+  href,
 }: {
   productKey: ProductKey
   wide: boolean
+  href: string
 }) {
   const { t, lang } = useLanguage()
-  const publicHref = usePublicHref()
   const item = t.products.items[productKey]
   const Arrow = lang === 'ar' ? ArrowLeft : ArrowRight
 
@@ -76,21 +78,22 @@ function ProductCard({
       >
         <Arrow className="size-5 transition-transform duration-300 motion-safe:ltr:group-hover:translate-x-0.5 motion-safe:rtl:group-hover:-translate-x-0.5" />
       </span>
-      <a
-        href={publicHref(`/categories/${productKey}`)}
-
+      <Link
+        href={href}
         className="absolute inset-0 z-10 rounded-[var(--notch-r)]"
       >
         <span className="sr-only">
           {t.products.request}: {item.title}
         </span>
-      </a>
+      </Link>
     </li>
   )
 }
 
 export function Products() {
   const { t } = useLanguage()
+  const bootstrap = usePublicBootstrap()
+  const categories = bootstrap.data?.categories || []
 
   return (
     <section
@@ -112,13 +115,23 @@ export function Products() {
         </div>
 
         <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
-          {productKeys.map((key, index) => (
-            <ProductCard
-              key={key}
-              productKey={key}
-              wide={index === productKeys.length - 1}
-            />
-          ))}
+          {productKeys.map((key, index) => {
+            const matched = categories.find(
+              (cat) =>
+                cat.slug === key || (cat.family === key && !cat.parentId),
+            )
+            const href = matched
+              ? `/categories/${matched.slug}`
+              : `/products?family=${key}`
+            return (
+              <ProductCard
+                key={key}
+                productKey={key}
+                wide={index === productKeys.length - 1}
+                href={href}
+              />
+            )
+          })}
         </ul>
       </div>
     </section>

@@ -1,9 +1,17 @@
 'use client'
 
-import { Building2, Headset, Mail, Phone, Printer, Store, Warehouse } from 'lucide-react'
+import {
+  Building2,
+  Headset,
+  Mail,
+  Phone,
+  Printer,
+  Store,
+  Warehouse,
+} from 'lucide-react'
 import { WhatsAppIcon } from '@/components/icons'
 import { useLanguage } from '@/components/language-provider'
-import { addresses, company, phones, whatsappLink } from '@/lib/site'
+import { useSiteInfo } from '@/components/demo/content-preview'
 
 type Row = {
   icon: React.ComponentType<{ className?: string }>
@@ -23,21 +31,42 @@ function IconBadge({ icon: Icon }: { icon: Row['icon'] }) {
 
 export function ContactInfo() {
   const { t, lang } = useLanguage()
+  const { company, phones, addresses, whatsappHref } = useSiteInfo()
   const c = t.quote.contact
 
   const rows: Row[] = [
-    { icon: Phone, label: c.mobile, value: phones.mobile.display, href: phones.mobile.href },
+    {
+      icon: Phone,
+      label: c.mobile,
+      value: phones.mobile.display,
+      href: phones.mobile.href,
+    },
     {
       icon: WhatsAppIcon,
       label: c.whatsapp,
       value: phones.mobile.display,
-      href: whatsappLink(t.whatsappFloat.message),
+      href: `${whatsappHref}?text=${encodeURIComponent(t.whatsappFloat.message)}`,
       external: true,
     },
-    { icon: Building2, label: c.office, value: phones.office.display, href: phones.office.href },
-    { icon: Store, label: c.branch, value: phones.branch.display, href: phones.branch.href },
+    {
+      icon: Building2,
+      label: c.office,
+      value: phones.office.display,
+      href: phones.office.href,
+    },
+    {
+      icon: Store,
+      label: c.branch,
+      value: phones.branch.display,
+      href: phones.branch.href,
+    },
     { icon: Printer, label: c.fax, value: phones.fax.display },
-    { icon: Mail, label: c.email, value: company.email, href: `mailto:${company.email}` },
+    {
+      icon: Mail,
+      label: c.email,
+      value: company.email,
+      href: `mailto:${company.email}`,
+    },
   ]
 
   const locations = [
@@ -56,7 +85,9 @@ export function ContactInfo() {
               <>
                 <IconBadge icon={row.icon} />
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-sm text-background/60">{row.label}</span>
+                  <span className="text-sm text-background/60">
+                    {row.label}
+                  </span>
                   <span dir="ltr" className="truncate text-start font-bold">
                     {row.value}
                   </span>
@@ -68,7 +99,9 @@ export function ContactInfo() {
                 {row.href ? (
                   <a
                     href={row.href}
-                    {...(row.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                    {...(row.external
+                      ? { target: '_blank', rel: 'noopener noreferrer' }
+                      : {})}
                     className="flex items-center gap-4 py-3 transition-colors hover:text-accent"
                   >
                     {content}
@@ -83,7 +116,10 @@ export function ContactInfo() {
         <p className="flex items-center gap-2 text-sm text-background/70">
           <Headset className="size-4 shrink-0 text-accent" aria-hidden="true" />
           <span>
-            {c.support}: <span className="font-bold text-background">{company.support[lang]}</span>
+            {c.support}:{' '}
+            <span className="font-bold text-background">
+              {company.support[lang]}
+            </span>
           </span>
         </p>
       </div>
@@ -95,8 +131,12 @@ export function ContactInfo() {
             <li key={location.label} className="flex items-start gap-4">
               <IconBadge icon={location.icon} />
               <span className="flex flex-col gap-0.5">
-                <span className="text-sm text-background/60">{location.label}</span>
-                <span className="leading-relaxed font-medium">{location.value}</span>
+                <span className="text-sm text-background/60">
+                  {location.label}
+                </span>
+                <span className="leading-relaxed font-medium">
+                  {location.value}
+                </span>
               </span>
             </li>
           ))}

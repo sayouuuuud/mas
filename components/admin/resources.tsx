@@ -1,24 +1,91 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { Plus, Search, ImagePlus, FileText, Trash2, Save } from 'lucide-react'
-import { brands, categories, sectors } from '@/lib/demo-data'
-import { useLanguage } from '@/components/language-provider'
-import { Badge, EmptyState, Field, useCopy } from '@/components/demo/ui'
-import { useDemo } from '@/components/demo/demo-provider'
-import {
-  Pagination,
-  Tabs,
-  useConfirmAction,
-  PreviewDialog,
-  useUnsavedChanges,
-} from './frontend-tools'
-import { csvDownload, phoneE164 } from '@/lib/frontend-model'
-import { addresses, company, phones } from '@/lib/site'
 
-import type { PreviewMedia } from '@/lib/frontend-model'
-import { resourceConfigs, type ResourceRow } from '@/lib/demo-resources'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  AlertTriangle,
+  Archive,
+  Check,
+  CheckCircle2,
+  Download,
+  EyeOff,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Send,
+  Trash2,
+  Upload,
+} from 'lucide-react'
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  useCopy,
+} from '@/components/demo/ui'
+import { useLanguage } from '@/components/language-provider'
+import { useAdminSession } from './admin-shell'
+import { Pagination } from './frontend-tools'
+import {
+  api,
+  BackendError,
+  buildApiPath,
+  downloadServerExport,
+  formatApiError,
+  saveResource,
+  uploadAdminMedia,
+} from '@/lib/api-client'
+import { invalidateLiveQueries, useLiveQuery } from '@/lib/live-query'
+import type {
+  AdminQuoteRequest,
+  AdminTeamMember,
+  AttributeRecord,
+  CategoryRecord,
+  CompanySettingsRecord,
+  MediaAssetRecord,
+  OrganizationRecord,
+  PublishStatus,
+  UnitRecord,
+} from '@/lib/types'
+
+const SECTION_META: Record<
+  string,
+  {
+    ar: string
+    en: string
+    publishable?: boolean
+    exportResource?: 'contacts'
+  }
+> = {
+  categories: { ar: 'التصنيفات', en: 'Categories', publishable: true },
+  brands: { ar: 'العلامات التجارية', en: 'Brands', publishable: true },
+  sectors: { ar: 'القطاعات الصناعية', en: 'Sectors', publishable: true },
+  attributes: { ar: 'قاموس المواصفات الفنية', en: 'Technical Attributes' },
+  units: { ar: 'وحدات البيع والقياس', en: 'Selling & Measure Units' },
+  customers: {
+    ar: 'جهات اتصال العملاء',
+    en: 'Customer Contacts',
+    exportResource: 'contacts',
+  },
+  organizations: { ar: 'المؤسسات والشركات', en: 'Organizations' },
+  content: { ar: 'محتوى الموقع والسياسات', en: 'Site Content & Policies', publishable: true },
+  navigation: { ar: 'قوائم التنقل', en: 'Navigation Menus' },
+  locations: { ar: 'الفروع والمخازن', en: 'Locations & Branches' },
+  team: { ar: 'حسابات الأدمن', en: 'Administrator Accounts' },
+}
+
+function toSlug(val: string) {
+  return val
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 export function ResourceWorkspace({
   section,
   id,
@@ -26,1246 +93,2249 @@ export function ResourceWorkspace({
   section: string
   id?: string
 }) {
-  const config = resourceConfigs[section]
   const c = useCopy()
   const { lang } = useLanguage()
-  const {
-    resources,
-    setResources,
-    products,
-    requests,
-    setRequests,
-    recordActivity,
-  } = useDemo()
-  const rows = resources[section] || []
+  const router = useRouter()
+  const meta = SECTION_META[section] || { ar: section, en: section }
+
   const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState<ResourceRow | null>(() =>
-    id === 'new'
-      ? { id: `new-${Date.now()}`, status: 'draft' }
-      : rows.find((r) => r.id === id) || null,
-  )
-  const [baseline, setBaseline] = useState(() => JSON.stringify(selected))
-  const [message, setMessage] = useState('')
-  const [tab, setTab] = useState('details')
-  const { confirm, confirmation } = useConfirmAction()
-  useUnsavedChanges(!!selected && JSON.stringify(selected) !== baseline)
-  const filtered = rows.filter(
-    (r) =>
-      (!status || r.status === status) &&
-      Object.values(r).join(' ').toLowerCase().includes(q.toLowerCase()),
-  )
-  const pages = Math.max(1, Math.ceil(filtered.length / 8))
-  const currentPage = Math.min(page, pages)
-  const columns = config.fields
-    .filter((f) => f.key !== 'nameEn' && f.type !== 'textarea')
-    .slice(0, 3)
-  const open = (row: ResourceRow | null) => {
-    const change = () => {
-      setSelected(row)
-      setBaseline(JSON.stringify(row))
-      setTab('details')
-      setMessage('')
-    }
-    if (selected && JSON.stringify(selected) !== baseline)
-      confirm(
-        c(
-          'التعديلات الحالية غير مطبقة. تجاهلها؟',
-          'Discard unapplied changes?',
-        ),
-        change,
-      )
-    else change()
-  }
-  const saveRows = (next: ResourceRow[]) =>
-    setResources((all) => ({ ...all, [section]: next }))
-  const dependent = (row: ResourceRow) => {
-    if (
-      section === 'team' &&
-      row.role === 'Owner' &&
-      row.status === 'active' &&
-      rows.filter((r) => r.role === 'Owner' && r.status === 'active').length <=
-        1
-    )
-      return true
-    if (['categories', 'brands', 'sectors'].includes(section))
-      return (
-        products.some((p) =>
-          section === 'categories'
-            ? p.category === row.id
-            : section === 'brands'
-              ? p.brand === row.id
-              : p.sectorIds.includes(row.id),
-        ) ||
-        (section === 'categories' &&
-          rows.some((r) => r.parent === row.id || r.parent === row.nameAr))
-      )
-    if (section === 'customers')
-      return requests.some((r) => r.customerId === row.id)
-    if (section === 'units')
-      return products.some((p) =>
-        p.variants.some((v) => v.unit.en === row.code),
-      )
-    return false
-  }
-  const changeState = (row: ResourceRow) => {
-    const next = row.status === 'archived' ? 'draft' : 'archived'
-    if (next === 'archived' && dependent(row)) {
-      setMessage(
-        c(
-          'السجل مرتبط بمنتجات أو طلبات؛ غيّر الارتباطات قبل أرشفته.',
-          'This entry has dependencies. Update its references before archiving.',
-        ),
-      )
-      return
-    }
-    confirm(
-      c(
-        'تغيير الحالة داخل المتصفح فقط؟',
-        'Change the status in the browser only?',
-      ),
-      () => {
-        saveRows(
-          rows.map((r) => (r.id === row.id ? { ...r, status: next } : r)),
-        )
-        recordActivity(`${section}.${next}`, row.id)
-        setMessage(c('تم تحديث الحالة محليًا.', 'Status updated locally.'))
-      },
-    )
-  }
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selected) return
-    const clean = Object.fromEntries(
-      Object.entries(selected).map(([k, v]) => [
-        k,
-        typeof v === 'string' ? v.trim() : '',
-      ]),
-    ) as ResourceRow
-    for (const field of config.fields) {
-      if (field.required && !clean[field.key]) {
-        setMessage(c('أكمل الحقول المطلوبة.', 'Complete all required fields.'))
-        return
-      }
-    }
-    if (
-      clean.status === 'published' &&
-      ['categories', 'brands', 'sectors', 'content'].includes(section) &&
-      (!clean.nameAr || !clean.nameEn)
-    ) {
-      setMessage(
-        c('النشر يحتاج الاسم باللغتين.', 'Publishing requires both languages.'),
-      )
-      return
-    }
-    if (clean.slug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(clean.slug)) {
-      setMessage(c('راجع صيغة الرابط المختصر.', 'Check the slug format.'))
-      return
-    }
-    for (const key of ['slug', 'code', 'email'])
-      if (
-        clean[key] &&
-        rows.some(
-          (r) =>
-            r.id !== clean.id &&
-            r[key]?.toLowerCase() === clean[key].toLowerCase(),
-        )
-      ) {
-        setMessage(
-          c(
-            'الرابط أو الكود أو البريد مستخدم بالفعل.',
-            'Slug, code or email is already in use.',
-          ),
-        )
-        return
-      }
-    for (const key of ['image', 'logo'])
-      if (
-        clean[key] &&
-        !/^\/(images|partners)\/[a-zA-Z0-9_./-]+$/.test(clean[key])
-      ) {
-        setMessage(
-          c(
-            'اختر مسار صورة من مجلدات المشروع images أو partners.',
-            'Choose an image from the project images or partners folders.',
-          ),
-        )
-        return
-      }
-    if (clean.website && !/^https:\/\/[^\s]+$/.test(clean.website)) {
-      setMessage(
-        c(
-          'الموقع الرسمي يحتاج رابط HTTPS صحيحًا.',
-          'Use a valid HTTPS website URL.',
-        ),
-      )
-      return
-    }
-    if (clean.parent && clean.parent !== '—') {
-      let cursor = rows.find(
-        (r) => r.id === clean.parent || r.nameAr === clean.parent,
-      )
-      const seen = new Set([clean.id])
-      while (cursor) {
-        if (seen.has(cursor.id)) {
-          setMessage(
-            c(
-              'العلاقة تؤدي إلى دورة في شجرة التصنيف.',
-              'This creates a category cycle.',
-            ),
-          )
-          return
-        }
-        seen.add(cursor.id)
-        cursor = rows.find(
-          (r) => r.id === cursor?.parent || r.nameAr === cursor?.parent,
-        )
-      }
-    }
-    if (clean.type === 'option' && !clean.choices?.trim()) {
-      setMessage(c('أضف خيارات الخاصية أولًا.', 'Add attribute options first.'))
-      return
-    }
-    if (
-      section === 'navigation' &&
-      (!/^\/[a-z0-9/-]*$/.test(clean.href) || clean.href.startsWith('//'))
-    ) {
-      setMessage(
-        c(
-          'استخدم مسارًا داخليًا صالحًا مثل /products.',
-          'Use a valid internal path such as /products.',
-        ),
-      )
-      return
-    }
-    if (
-      section === 'team' &&
-      rows.find((r) => r.id === clean.id)?.role === 'Owner' &&
-      (clean.status !== 'active' || clean.role !== 'Owner') &&
-      rows.filter((r) => r.role === 'Owner' && r.status === 'active').length <=
-        1
-    ) {
-      setMessage(
-        c(
-          'لا يمكن تعطيل آخر مدير نظام فعال في المعاينة.',
-          'Cannot disable the last active owner in the preview.',
-        ),
-      )
-      return
-    }
-    if (section === 'content' && clean.status === 'published')
-      clean.publishedSnapshot = JSON.stringify({
-        ...clean,
-        previewUpdated: 'yes',
-        publishedSnapshot: '',
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const listPath = !id
+    ? buildApiPath(`/admin/${section}`, {
+        page,
+        pageSize: 15,
+        q: q.trim() || undefined,
       })
-    clean.previewUpdated = 'yes'
-    saveRows(
-      rows.some((r) => r.id === clean.id)
-        ? rows.map((r) => (r.id === clean.id ? clean : r))
-        : [...rows, clean],
-    )
-    recordActivity(`${section}.saved`, clean.id)
-    setSelected(clean)
-    setBaseline(JSON.stringify(clean))
-    setMessage(
-      c(
-        'تم تطبيق التعديل على المعاينة المشتركة.',
-        'Applied to the shared preview.',
-      ),
-    )
+    : null
+
+  const listQuery = useLiveQuery(listPath, async () => {
+    if (!listPath) throw new Error('Detail mode')
+    const res = await api<any[]>(listPath)
+    return {
+      data: res.data,
+      meta: res.meta || {
+        page: 1,
+        pageSize: 15,
+        total: res.data.length,
+        totalPages: 1,
+      },
+    }
+  })
+
+  if (id) {
+    return <ResourceEditor section={section} id={id} />
   }
-  const fields = config.fields.filter((f) =>
-    tab === 'seo' ? f.key.startsWith('seo') : !f.key.startsWith('seo'),
-  )
-  const customerRequests = selected
-    ? requests.filter((r) => r.customerId === selected.id)
-    : []
+
+  const rows = listQuery.data?.data || []
+  const pagination = listQuery.data?.meta || {
+    page: 1,
+    pageSize: 15,
+    total: 0,
+    totalPages: 1,
+  }
+
+  async function handleDelete(row: any) {
+    if (busy) return
+    if (
+      !window.confirm(
+        c('هل أنت متأكد من حذف هذا السجل؟', 'Delete this record permanently?'),
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      await api(`/admin/${section}/${row.id || row.userId}`, {
+        method: 'DELETE',
+        body: { version: row.version },
+      })
+      invalidateLiveQueries(`/admin/${section}`)
+      invalidateLiveQueries('/public/')
+      await listQuery.refresh()
+      setFeedback(c('تم حذف السجل بنجاح.', 'Record deleted.'))
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function displayRowTitle(row: any) {
+    if (section === 'team') return row.displayName
+    if (row.name && typeof row.name === 'object') {
+      return lang === 'ar' ? row.name.ar : row.name.en
+    }
+    return row.name || row.key || row.code || row.id
+  }
+
+  function displayRowSub(row: any) {
+    if (section === 'team') return c('الدور الوحيد: الأدمن', 'Single role: Admin')
+    if (section === 'customers')
+      return [row.phone, row.email].filter(Boolean).join(' · ')
+    if (section === 'organizations')
+      return [row.city, row.governorate].filter(Boolean).join(' — ')
+    if (section === 'units') return `${row.code} · precision: ${row.precision}`
+    if (section === 'attributes') return `${row.code} · ${row.type} (${row.scope})`
+    if (section === 'navigation') return `${row.area} · ${row.path}`
+    if (section === 'locations') return `${row.kind} · ${row.phone || ''}`
+    if (section === 'content')
+      return `key: ${row.key}${row.policyVersion ? ` · ${row.policyVersion}` : ''}`
+    return row.slug ? `/${row.slug}` : ''
+  }
+
+  function displayRowBadge(row: any) {
+    if (row.status) {
+      const tone =
+        row.status === 'published'
+          ? 'green'
+          : row.status === 'draft'
+            ? 'gold'
+            : 'muted'
+      return <Badge tone={tone}>{row.status}</Badge>
+    }
+    if (typeof row.active === 'boolean') {
+      return (
+        <Badge tone={row.active ? 'green' : 'muted'}>
+          {row.active ? c('نشط', 'Active') : c('معطّل', 'Inactive')}
+        </Badge>
+      )
+    }
+    if (typeof row.published === 'boolean') {
+      return (
+        <Badge tone={row.published ? 'green' : 'muted'}>
+          {row.published ? c('منشور', 'Published') : c('مخفي', 'Hidden')}
+        </Badge>
+      )
+    }
+    return null
+  }
+
   return (
     <>
-      {confirmation}
       <div className="admin-heading">
         <div>
-          <h1>{c(config.ar, config.en)}</h1>
-          <p>{c(...config.description)}</p>
+          <h1>{c(meta.ar, meta.en)}</h1>
+          <p>
+            {section === 'team'
+              ? c(
+                  'نموذج وصول موحد بدور وحيد هو «الأدمن» مع حماية آخر حساب نشط.',
+                  'Single-role access model (Admin) with last-active-admin protection.',
+                )
+              : c(
+                  'إدارة السجلات الحية المحفوظة في قاعدة البيانات مع التحقق من الإصدارات.',
+                  'Manage live database records with optimistic concurrency protection.',
+                )}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            className="btn-outline"
-            onClick={() =>
-              csvDownload(
-                `demo-${section}.csv`,
-                columns.map((f) => f.en),
-                filtered.map((r) => columns.map((f) => r[f.key] || '')),
-              )
-            }
-          >
-            {c('تصدير CSV', 'Export CSV')}
-          </button>
-          <button
-            className="btn-primary"
-            onClick={() => open({ id: `new-${Date.now()}`, status: 'draft' })}
-          >
+          {meta.exportResource && (
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  await downloadServerExport(meta.exportResource!, {
+                    q: q.trim() || undefined,
+                  })
+                  invalidateLiveQueries('/admin/audit-log')
+                } catch (err) {
+                  setErrorMsg(formatApiError(err, lang))
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              <Download className="size-4" />
+              CSV
+            </button>
+          )}
+          <Link href={`/admin/${section}/new`} className="btn-primary">
             <Plus className="size-4" />
-            {c('إضافة تجريبية', 'Add sample')}
-          </button>
+            {section === 'team'
+              ? c('دعوة أدمن جديد', 'Invite Admin')
+              : c('إضافة سجل', 'New record')}
+          </Link>
         </div>
       </div>
-      <p role="status" className="mb-4 text-sm text-primary">
-        {message}
-      </p>
-      <div
-        className={`grid items-start gap-6 ${selected ? 'xl:grid-cols-[1.1fr_1fr]' : ''}`}
-      >
-        <section className="panel min-w-0 bg-white">
-          <div className="mb-5 flex flex-wrap gap-3">
+
+      {feedback && (
+        <p role="status" className="mb-4 text-sm font-medium text-primary">
+          {feedback}
+        </p>
+      )}
+      {errorMsg && (
+        <p role="alert" className="mb-4 text-sm font-medium text-red-700">
+          {errorMsg}
+        </p>
+      )}
+
+      <div className="panel bg-white">
+        {section !== 'team' && (
+          <div className="mb-4">
             <input
-              aria-label={c('بحث', 'Search')}
-              className="control flex-1"
-              placeholder={c('ابحث في القائمة…', 'Search entries…')}
+              className="control"
               value={q}
               onChange={(e) => {
                 setQ(e.target.value)
                 setPage(1)
               }}
+              placeholder={c('بحث…', 'Search…')}
             />
-            <select
-              aria-label={c('تصفية الحالة', 'Filter status')}
-              className="control w-auto"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value)
-                setPage(1)
-              }}
-            >
-              <option value="">{c('كل الحالات', 'All statuses')}</option>
-              {[
-                'draft',
-                'published',
-                'archived',
-                'active',
-                'inactive',
-                'new',
-                'resolved',
-              ].map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
           </div>
-          {filtered.length ? (
-            <div
-              className="table-scroll"
-              tabIndex={0}
-              role="region"
-              aria-label={c('جدول البيانات', 'Data table')}
-            >
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {columns.map((f) => (
-                      <th key={f.key}>{c(f.ar, f.en)}</th>
-                    ))}
-                    <th>{c('الإجراءات', 'Actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered
-                    .slice((currentPage - 1) * 8, currentPage * 8)
-                    .map((row) => (
-                      <tr key={row.id}>
-                        {columns.map((f) => (
-                          <td key={f.key}>
-                            {f.key === 'nameAr' && lang === 'en' && row.nameEn
-                              ? row.nameEn
-                              : row[f.key] || '—'}
-                          </td>
-                        ))}
-                        <td>
-                          <div className="flex flex-wrap gap-3">
-                            <button
-                              className="text-primary underline"
-                              onClick={() => open({ ...row })}
-                            >
-                              {c('فتح', 'Open')}
-                            </button>
-                            <button
-                              className="text-primary"
-                              onClick={() =>
-                                open({
-                                  ...row,
-                                  id: `new-${Date.now()}`,
-                                  slug: row.slug
-                                    ? `${row.slug}-copy`
-                                    : row.slug,
-                                  code: row.code
-                                    ? `${row.code}-copy`
-                                    : row.code,
-                                  email: section === 'team' ? '' : row.email,
-                                  status: 'draft',
-                                })
-                              }
-                            >
-                              {c('نسخ', 'Duplicate')}
-                            </button>
-                            <button onClick={() => changeState(row)}>
-                              {row.status === 'archived'
-                                ? c('استعادة', 'Restore')
-                                : c('أرشفة', 'Archive')}
-                            </button>
-                            <button
-                              className="text-red-700"
-                              onClick={() => {
-                                if (dependent(row)) {
-                                  setMessage(
-                                    c(
-                                      'لا يمكن حذف سجل مرتبط.',
-                                      'Referenced entries cannot be deleted.',
-                                    ),
-                                  )
-                                  return
-                                }
-                                confirm(
-                                  c(
-                                    'حذف هذا السجل من بيانات العرض؟',
-                                    'Delete this preview entry?',
-                                  ),
-                                  () => {
-                                    saveRows(
-                                      rows.filter((r) => r.id !== row.id),
-                                    )
-                                    if (selected?.id === row.id) {
-                                      setSelected(null)
-                                      setBaseline('null')
-                                    }
-                                    recordActivity(`${section}.deleted`, row.id)
-                                  },
-                                )
-                              }}
-                            >
-                              {c('حذف', 'Delete')}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState
-              title={c('لا توجد نتائج', 'No results')}
-              description={c(
-                'جرّب تغيير البحث أو الحالة.',
-                'Change the search or status filter.',
-              )}
-            />
-          )}
-          <Pagination
-            page={currentPage}
-            pages={pages}
-            total={filtered.length}
-            onChange={setPage}
-          />
-        </section>
-        {selected && (
-          <form className="panel min-w-0 space-y-5 bg-white" onSubmit={submit}>
-            <div className="flex justify-between">
-              <h2 className="font-bold">
-                {c('تحرير البيانات', 'Edit details')}
-              </h2>
-              <button
-                type="button"
-                className="text-sm text-muted-foreground"
-                onClick={() => open(null)}
-              >
-                {c('إغلاق', 'Close')}
-              </button>
-            </div>
-            <Tabs
-              value={tab}
-              onChange={setTab}
-              label={c('أقسام التحرير', 'Editor sections')}
-              items={[
-                { id: 'details', label: c('البيانات', 'Details') },
-                ...(config.fields.some((f) => f.key.startsWith('seo'))
-                  ? [{ id: 'seo', label: c('محركات البحث', 'SEO') }]
-                  : []),
-                ...(['customers', 'inquiries'].includes(section)
-                  ? [
-                      {
-                        id: 'history',
-                        label: c('المتابعة والطلبات', 'History & requests'),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-            <div role="tabpanel" id={`panel-${tab}`} className="space-y-5">
-              {tab === 'history' ? (
-                <>
-                  <h3 className="font-bold">
-                    {c('الطلبات المرتبطة', 'Linked requests')}
-                  </h3>
-                  {(section === 'customers'
-                    ? customerRequests
-                    : requests.filter(
-                        (r) => r.id === selected.convertedRequestId,
-                      )
-                  ).map((r) => (
-                    <Link
-                      className="block rounded-lg border p-3 text-primary"
-                      key={r.id}
-                      href={`/admin/quote-requests/${r.id}`}
-                    >
-                      {r.id} · {r.status}
-                    </Link>
-                  ))}
-                  {!customerRequests.length && section === 'customers' && (
-                    <p className="text-sm text-muted-foreground">
-                      {c('لم تُربط طلبات بعد.', 'No linked requests yet.')}
-                    </p>
-                  )}
-                  {section === 'inquiries' && (
-                    <>
-                      <p className="text-sm">
-                        {c(
-                          'يتم إنشاء طلب تجريبي فقط بعد إضافة وصف بند وكمية. لا تُرسل رسالة خارجية.',
-                          'A sample request requires an item description and quantity. No external message is sent.',
-                        )}
-                      </p>
-                      <Field
-                        label={c(
-                          'وصف البند للتحويل',
-                          'Item description for conversion',
-                        )}
-                      >
-                        <textarea
-                          className="control"
-                          minLength={3}
-                          value={selected.conversionDescription || ''}
-                          onChange={(e) =>
-                            setSelected({
-                              ...selected,
-                              conversionDescription: e.target.value,
-                            })
-                          }
-                        />
-                      </Field>
-                      <Field label={c('كمية التحويل', 'Conversion quantity')}>
-                        <input
-                          className="control"
-                          type="number"
-                          min={1}
-                          max={99999}
-                          value={selected.conversionQuantity || '1'}
-                          onChange={(e) =>
-                            setSelected({
-                              ...selected,
-                              conversionQuantity: e.target.value,
-                            })
-                          }
-                        />
-                      </Field>
-                      <button
-                        type="button"
-                        className="btn-outline"
-                        disabled={!!selected.convertedRequestId}
-                        onClick={() => {
-                          if (
-                            (selected.conversionDescription || '').trim()
-                              .length < 3 ||
-                            !Number.isInteger(
-                              Number(selected.conversionQuantity || 1),
-                            ) ||
-                            Number(selected.conversionQuantity || 1) < 1 ||
-                            Number(selected.conversionQuantity || 1) > 99999
-                          ) {
-                            setMessage(
-                              c(
-                                'أكمل وصف البند وكمية صحيحة.',
-                                'Enter an item description and valid quantity.',
-                              ),
-                            )
-                            return
-                          }
-                          const requestId = `DEMO-RFQ-${Date.now()}`
-                          setRequests((all) => [
-                            ...all,
-                            {
-                              id: requestId,
-                              name: selected.nameAr,
-                              company: c('استفسار محوّل', 'Converted inquiry'),
-                              status: 'new',
-                              owner: selected.owner || '',
-                              date: new Date().toISOString().slice(0, 10),
-                              priority: 'normal',
-                              items: [
-                                {
-                                  description: selected.conversionDescription,
-                                  quantity: Number(
-                                    selected.conversionQuantity || 1,
-                                  ),
-                                  unit: 'pack',
-                                },
-                              ],
-                              notes: [],
-                            },
-                          ])
-                          const next = {
-                            ...selected,
-                            convertedRequestId: requestId,
-                            status: 'resolved',
-                          }
-                          saveRows(
-                            rows.map((r) => (r.id === next.id ? next : r)),
-                          )
-                          setSelected(next)
-                          setBaseline(JSON.stringify(next))
-                          recordActivity('inquiry.converted', selected.id)
-                          setMessage(
-                            c(
-                              'تم إنشاء طلب محلي وربطه بالاستفسار.',
-                              'Created and linked a local request.',
-                            ),
-                          )
-                        }}
-                      >
-                        {selected.convertedRequestId
-                          ? c('تم التحويل بالفعل', 'Already converted')
-                          : c(
-                              'تحويل إلى طلب تجريبي',
-                              'Convert to sample request',
-                            )}
-                      </button>
-                    </>
-                  )}
-                </>
-              ) : (
-                fields.map((f) => (
-                  <Field
-                    key={f.key}
-                    label={`${c(f.ar, f.en)}${f.required ? ' *' : ''}`}
-                  >
-                    {f.type === 'textarea' ? (
-                      <textarea
-                        className="control"
-                        rows={4}
-                        maxLength={2000}
-                        required={f.required && tab === 'details'}
-                        value={selected[f.key] || ''}
-                        onChange={(e) =>
-                          setSelected({ ...selected, [f.key]: e.target.value })
-                        }
-                      />
-                    ) : f.type === 'select' ? (
-                      <select
-                        className="control"
-                        required={f.required}
-                        value={selected[f.key] || ''}
-                        onChange={(e) =>
-                          setSelected({ ...selected, [f.key]: e.target.value })
-                        }
-                      >
-                        <option value="">{c('اختر…', 'Choose…')}</option>
-                        {(f.key === 'parent'
-                          ? [
-                              { id: '—', label: c('بدون أب', 'No parent') },
-                              ...resources.categories
-                                .filter((r) => r.id !== selected.id)
-                                .map((r) => ({
-                                  id: r.id,
-                                  label: lang === 'ar' ? r.nameAr : r.nameEn,
-                                })),
-                            ]
-                          : f.options?.map((o) => ({ id: o, label: o })) || []
-                        ).map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="control"
-                        maxLength={254}
-                        type={
-                          f.type === 'email'
-                            ? 'email'
-                            : f.type === 'url'
-                              ? 'url'
-                              : f.type === 'number'
-                                ? 'number'
-                                : f.type === 'date'
-                                  ? 'date'
-                                  : f.type === 'tel'
-                                    ? 'tel'
-                                    : 'text'
-                        }
-                        min={f.min}
-                        max={f.max}
-                        required={f.required && tab === 'details'}
-                        value={selected[f.key] || ''}
-                        onChange={(e) =>
-                          setSelected({ ...selected, [f.key]: e.target.value })
-                        }
-                      />
-                    )}
-                  </Field>
-                ))
-              )}
-            </div>
-            <button className="btn-primary">
-              <Save className="size-4" />
-              {c('تطبيق في المعاينة', 'Apply to preview')}
-            </button>
-            <button
-              type="button"
-              className="btn-outline ms-2"
-              onClick={() =>
-                open(
-                  rows.find((r) => r.id === selected.id)
-                    ? { ...rows.find((r) => r.id === selected.id)! }
-                    : null,
-                )
-              }
-            >
-              {c('تراجع عن التعديلات', 'Discard changes')}
-            </button>
-          </form>
         )}
-      </div>
-      {section === 'team' && (
-        <section className="panel mt-6 bg-white">
-          <h2 className="mb-5 text-xl font-bold">
-            {c('مصفوفة الأدوار المخططة', 'Planned role matrix')}
-          </h2>
-          <p className="mb-5 text-sm text-muted-foreground">
-            {c(
-              'هذه سياسة العرض المطلوبة؛ تفعيلها وتأمينها ينتظر المصادقة وRLS.',
-              'This shows the intended policy. Enforcement requires authentication and RLS.',
+
+        {listQuery.isLoading ? (
+          <LoadingState />
+        ) : listQuery.error ? (
+          <ErrorState
+            error={listQuery.error}
+            onRetry={() => void listQuery.refresh()}
+          />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title={c('لا توجد سجلات بعد', 'No records yet')}
+            description={c(
+              'ابدأ بإضافة أول سجل في هذا القسم.',
+              'Create your first record in this section.',
             )}
-          </p>
-          <div className="table-scroll" tabIndex={0}>
+            action={
+              <Link href={`/admin/${section}/new`} className="btn-primary">
+                <Plus className="size-4" />
+                {c('إضافة سجل جديد', 'Create record')}
+              </Link>
+            }
+          />
+        ) : (
+          <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  {[
-                    'Role',
-                    c('الكتالوج', 'Catalog'),
-                    c('المحتوى', 'Content'),
-                    c('المبيعات', 'Sales'),
-                    c('الفريق والإعدادات', 'Team & settings'),
-                  ].map((t) => (
-                    <th key={t}>{t}</th>
-                  ))}
+                  <th>{c('الاسم / البيان', 'Name')}</th>
+                  <th>{c('التفاصيل', 'Details')}</th>
+                  <th>{c('الحالة', 'Status')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {[
-                  ['Owner', '✓', '✓', '✓', '✓'],
-                  ['Catalog Manager', '✓', '—', '—', '—'],
-                  ['Content Editor', '—', '✓', '—', '—'],
-                  [
-                    'Sales Manager',
-                    '—',
-                    '—',
-                    c('كل الطلبات', 'All requests'),
-                    '—',
-                  ],
-                  [
-                    'Sales Agent',
-                    '—',
-                    '—',
-                    c('المسند فقط', 'Assigned only'),
-                    '—',
-                  ],
-                ].map((row) => (
-                  <tr key={row[0]}>
-                    {row.map((value, i) => (
-                      <td key={i}>{value}</td>
-                    ))}
-                  </tr>
-                ))}
+                {rows.map((row) => {
+                  const rowId = section === 'team' ? row.userId : row.id
+                  return (
+                    <tr key={rowId}>
+                      <td className="font-semibold">{displayRowTitle(row)}</td>
+                      <td dir="ltr" className="font-mono text-xs text-muted-foreground">
+                        {displayRowSub(row)}
+                      </td>
+                      <td>{displayRowBadge(row)}</td>
+                      <td className="text-end">
+                        <div className="flex items-center justify-end gap-3">
+                          <Link
+                            href={`/admin/${section}/${rowId}`}
+                            className="font-semibold text-primary hover:underline"
+                          >
+                            {c('تحرير', 'Edit')}
+                          </Link>
+                          {section !== 'team' && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className="text-xs text-red-700 hover:underline"
+                              onClick={() => void handleDelete(row)}
+                            >
+                              {c('حذف', 'Delete')}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
-        </section>
+        )}
+
+        {pagination.total > 0 && (
+          <Pagination
+            page={pagination.page}
+            pages={Math.max(1, pagination.totalPages)}
+            total={pagination.total}
+            onChange={setPage}
+          />
+        )}
+      </div>
+    </>
+  )
+}
+
+function ResourceEditor({ section, id }: { section: string; id: string }) {
+  const c = useCopy()
+  const { lang } = useLanguage()
+  const router = useRouter()
+  const session = useAdminSession()
+  const isNew = id === 'new'
+  const meta = SECTION_META[section] || { ar: section, en: section }
+
+  const detailQuery = useLiveQuery(
+    !isNew && section !== 'team' ? `/admin/${section}/${id}` : null,
+    async () => (await api<any>(`/admin/${section}/${id}`)).data,
+  )
+
+  const teamListQuery = useLiveQuery(
+    section === 'team' && !isNew ? '/admin/team?page=1&pageSize=48' : null,
+    async () =>
+      (await api<AdminTeamMember[]>('/admin/team?page=1&pageSize=48')).data,
+  )
+
+  const categoriesQuery = useLiveQuery(
+    ['categories', 'attributes'].includes(section)
+      ? '/admin/categories?page=1&pageSize=48'
+      : null,
+    async () =>
+      (await api<CategoryRecord[]>('/admin/categories?page=1&pageSize=48')).data,
+  )
+
+  const unitsQuery = useLiveQuery(
+    section === 'attributes' ? '/admin/units?page=1&pageSize=48' : null,
+    async () =>
+      (await api<UnitRecord[]>('/admin/units?page=1&pageSize=48')).data,
+  )
+
+  const mediaQuery = useLiveQuery(
+    ['categories', 'brands', 'sectors', 'content'].includes(section)
+      ? '/admin/media?page=1&pageSize=48'
+      : null,
+    async () =>
+      (await api<MediaAssetRecord[]>('/admin/media?page=1&pageSize=48')).data,
+  )
+
+  const orgsQuery = useLiveQuery(
+    section === 'customers' ? '/admin/organizations?page=1&pageSize=48' : null,
+    async () =>
+      (await api<OrganizationRecord[]>('/admin/organizations?page=1&pageSize=48'))
+        .data,
+  )
+
+  const customerRequestsQuery = useLiveQuery(
+    section === 'customers' && !isNew
+      ? '/admin/quote-requests?page=1&pageSize=48'
+      : null,
+    async () =>
+      (
+        await api<AdminQuoteRequest[]>(
+          '/admin/quote-requests?page=1&pageSize=48',
+        )
+      ).data,
+  )
+
+  const record =
+    section === 'team'
+      ? (teamListQuery.data || []).find((m) => m.userId === id)
+      : detailQuery.data
+
+  const [form, setForm] = useState<Record<string, any>>({})
+  const [attrOptionsText, setAttrOptionsText] = useState('')
+  const [attrCategoryRules, setAttrCategoryRules] = useState<
+    Array<{ categoryId: string; required: boolean; min: string; max: string }>
+  >([])
+  const [initializedKey, setInitializedKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  useEffect(() => {
+    if (isNew && initializedKey !== `new:${section}`) {
+      setForm({
+        nameAr: '',
+        nameEn: '',
+        slug: '',
+        key: '',
+        code: '',
+        family: 'oils',
+        parentId: '',
+        imageMediaId: '',
+        logoMediaId: '',
+        website: '',
+        order: 0,
+        precision: 0,
+        active: true,
+        published: true,
+        status: 'draft',
+        descriptionAr: '',
+        descriptionEn: '',
+        bodyAr: '',
+        bodyEn: '',
+        ctaLabelAr: '',
+        ctaLabelEn: '',
+        ctaPath: '',
+        policyVersion: '',
+        type: 'text',
+        scope: 'product',
+        unitId: '',
+        filterable: false,
+        area: 'header',
+        path: '/',
+        kind: 'hq',
+        addressAr: '',
+        addressEn: '',
+        hoursAr: '',
+        hoursEn: '',
+        phone: '',
+        mapUrl: '',
+        email: '',
+        namePlain: '',
+        city: '',
+        governorate: '',
+        notes: '',
+        organizationId: '',
+        preferredChannel: 'phone',
+        displayName: '',
+        seoTitleAr: '',
+        seoTitleEn: '',
+        seoDescAr: '',
+        seoDescEn: '',
+      })
+      setAttrOptionsText('')
+      setAttrCategoryRules([])
+      setInitializedKey(`new:${section}`)
+    } else if (
+      !isNew &&
+      record &&
+      initializedKey !== `${section}:${id}:${record.version}`
+    ) {
+      setForm({
+        nameAr: record.name?.ar || '',
+        nameEn: record.name?.en || '',
+        slug: record.slug || '',
+        key: record.key || '',
+        code: record.code || '',
+        family: record.family || 'oils',
+        parentId: record.parentId || '',
+        imageMediaId: record.imageMediaId || '',
+        logoMediaId: record.logoMediaId || '',
+        website: record.website || '',
+        order: Number(record.order || 0),
+        precision: Number(record.precision || 0),
+        active: record.active !== false,
+        published: record.published !== false,
+        status: record.status || 'draft',
+        descriptionAr: record.description?.ar || '',
+        descriptionEn: record.description?.en || '',
+        bodyAr: record.body?.ar || '',
+        bodyEn: record.body?.en || '',
+        ctaLabelAr: record.ctaLabel?.ar || '',
+        ctaLabelEn: record.ctaLabel?.en || '',
+        ctaPath: record.ctaPath || '',
+        policyVersion: record.policyVersion || '',
+        type: record.type || 'text',
+        scope: record.scope || 'product',
+        unitId: record.unitId || '',
+        filterable: Boolean(record.filterable),
+        area: record.area || 'header',
+        path: record.path || '/',
+        kind: record.kind || 'hq',
+        addressAr: record.address?.ar || '',
+        addressEn: record.address?.en || '',
+        hoursAr: record.hours?.ar || '',
+        hoursEn: record.hours?.en || '',
+        phone: record.phone || '',
+        mapUrl: record.mapUrl || '',
+        email: record.email || '',
+        namePlain: typeof record.name === 'string' ? record.name : '',
+        city: record.city || '',
+        governorate: record.governorate || '',
+        notes: record.notes || '',
+        organizationId: record.organizationId || '',
+        preferredChannel: record.preferredChannel || 'phone',
+        displayName: record.displayName || '',
+        seoTitleAr: record.seoTitle?.ar || '',
+        seoTitleEn: record.seoTitle?.en || '',
+        seoDescAr: record.seoDescription?.ar || '',
+        seoDescEn: record.seoDescription?.en || '',
+      })
+      if (section === 'attributes') {
+        const attr = record as AttributeRecord
+        setAttrOptionsText(
+          (attr.options || [])
+            .map((o) => `${o.code}|${o.label.ar}|${o.label.en}`)
+            .join('\n'),
+        )
+        setAttrCategoryRules(
+          (attr.categories || []).map((r) => ({
+            categoryId: r.categoryId,
+            required: Boolean(r.required),
+            min: r.min != null ? String(r.min) : '',
+            max: r.max != null ? String(r.max) : '',
+          })),
+        )
+      }
+      setInitializedKey(`${section}:${id}:${record.version}`)
+    }
+  }, [isNew, record, section, id, initializedKey])
+
+  if (!isNew && (detailQuery.isLoading || teamListQuery.isLoading)) {
+    return <LoadingState />
+  }
+  if (!isNew && !record) {
+    return (
+      <ErrorState
+        error={detailQuery.error || teamListQuery.error}
+        onRetry={() =>
+          void (section === 'team'
+            ? teamListQuery.refresh()
+            : detailQuery.refresh())
+        }
+      />
+    )
+  }
+
+  const readyImages = (mediaQuery.data || []).filter(
+    (m) =>
+      m.visibility === 'public' && m.status === 'ready' && m.kind === 'image',
+  )
+
+  function buildPayload() {
+    switch (section) {
+      case 'categories':
+        return {
+          slug: form.slug || toSlug(form.nameEn || form.nameAr),
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          description: {
+            ar: form.descriptionAr.trim(),
+            en: form.descriptionEn.trim(),
+          },
+          family: form.family,
+          parentId: form.parentId || null,
+          imageMediaId: form.imageMediaId || null,
+          order: Number(form.order || 0),
+          seoTitle: { ar: form.seoTitleAr.trim(), en: form.seoTitleEn.trim() },
+          seoDescription: {
+            ar: form.seoDescAr.trim(),
+            en: form.seoDescEn.trim(),
+          },
+          status: form.status as PublishStatus,
+        }
+      case 'brands':
+        return {
+          slug: form.slug || toSlug(form.nameEn || form.nameAr),
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          description: {
+            ar: form.descriptionAr.trim(),
+            en: form.descriptionEn.trim(),
+          },
+          website: form.website.trim() || null,
+          logoMediaId: form.logoMediaId || null,
+          imageMediaId: form.imageMediaId || null,
+          order: Number(form.order || 0),
+          seoTitle: { ar: form.seoTitleAr.trim(), en: form.seoTitleEn.trim() },
+          seoDescription: {
+            ar: form.seoDescAr.trim(),
+            en: form.seoDescEn.trim(),
+          },
+          status: form.status as PublishStatus,
+        }
+      case 'sectors':
+        return {
+          slug: form.slug || toSlug(form.nameEn || form.nameAr),
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          description: {
+            ar: form.descriptionAr.trim(),
+            en: form.descriptionEn.trim(),
+          },
+          imageMediaId: form.imageMediaId || null,
+          order: Number(form.order || 0),
+          seoTitle: { ar: form.seoTitleAr.trim(), en: form.seoTitleEn.trim() },
+          seoDescription: {
+            ar: form.seoDescAr.trim(),
+            en: form.seoDescEn.trim(),
+          },
+          status: form.status as PublishStatus,
+        }
+      case 'units':
+        return {
+          code: form.code.trim(),
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          precision: Number(form.precision || 0),
+          active: Boolean(form.active),
+        }
+      case 'attributes': {
+        const parsedOptions = ['option', 'multi_option'].includes(form.type)
+          ? attrOptionsText
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .map((line) => {
+                const [codePart, arPart, enPart] = line
+                  .split('|')
+                  .map((s) => s.trim())
+                const existing = (record?.options || []).find(
+                  (o: any) => o.code === codePart,
+                )
+                return {
+                  ...(existing?.id ? { id: existing.id } : {}),
+                  code: codePart,
+                  label: {
+                    ar: arPart || codePart,
+                    en: enPart || arPart || codePart,
+                  },
+                }
+              })
+          : []
+        return {
+          code: form.code.trim().toLowerCase(),
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          type: form.type,
+          scope: form.scope,
+          unitId: form.unitId || null,
+          filterable: Boolean(form.filterable),
+          options: parsedOptions,
+          categories: attrCategoryRules.map((r, idx) => ({
+            categoryId: r.categoryId,
+            required: r.required,
+            min: r.min !== '' ? Number(r.min) : null,
+            max: r.max !== '' ? Number(r.max) : null,
+            order: idx,
+          })),
+        }
+      }
+      case 'customers':
+        return {
+          organizationId: form.organizationId || null,
+          name: form.namePlain.trim(),
+          email: form.email.trim() || null,
+          phone: form.phone.trim(),
+          preferredChannel: form.preferredChannel,
+          notes: form.notes.trim() || null,
+          active: Boolean(form.active),
+        }
+      case 'organizations':
+        return {
+          name: form.namePlain.trim(),
+          city: form.city.trim() || null,
+          governorate: form.governorate.trim() || null,
+          notes: form.notes.trim() || null,
+        }
+      case 'content':
+        return {
+          key: form.key.trim().toLowerCase(),
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          body: { ar: form.bodyAr.trim(), en: form.bodyEn.trim() },
+          ctaLabel: { ar: form.ctaLabelAr.trim(), en: form.ctaLabelEn.trim() },
+          ctaPath: form.ctaPath.trim() || null,
+          policyVersion: form.policyVersion.trim() || null,
+          mediaIds: [],
+          seoTitle: { ar: form.seoTitleAr.trim(), en: form.seoTitleEn.trim() },
+          seoDescription: {
+            ar: form.seoDescAr.trim(),
+            en: form.seoDescEn.trim(),
+          },
+          status: form.status as PublishStatus,
+        }
+      case 'navigation':
+        return {
+          area: form.area,
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          path: form.path.trim().startsWith('/')
+            ? form.path.trim()
+            : `/${form.path.trim()}`,
+          order: Number(form.order || 0),
+          active: Boolean(form.active),
+        }
+      case 'locations':
+        return {
+          kind: form.kind,
+          name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
+          address: { ar: form.addressAr.trim(), en: form.addressEn.trim() },
+          phone: form.phone.trim() || null,
+          mapUrl: form.mapUrl.trim() || null,
+          hours: { ar: form.hoursAr.trim(), en: form.hoursEn.trim() },
+          published: Boolean(form.published),
+        }
+      default:
+        return {}
+    }
+  }
+
+  async function handleSubmit(e?: FormEvent) {
+    e?.preventDefault()
+    if (busy) return null
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      if (section === 'team') {
+        if (isNew) {
+          await api('/admin/team', {
+            method: 'POST',
+            body: {
+              email: form.email.trim(),
+              displayName: form.displayName.trim(),
+              roles: ['Admin'],
+            },
+          })
+          invalidateLiveQueries('/admin/team')
+          router.replace('/admin/team')
+          return null
+        } else {
+          await api(`/admin/team/${id}`, {
+            method: 'PATCH',
+            body: {
+              version: record.version,
+              displayName: form.displayName.trim(),
+              active: Boolean(form.active),
+              roles: ['Admin'],
+            },
+          })
+          invalidateLiveQueries('/admin/team')
+          await teamListQuery.refresh()
+          setFeedback(
+            c('تم تحديث حساب الأدمن بنجاح.', 'Admin account updated.'),
+          )
+          return record
+        }
+      }
+
+      const payload = buildPayload()
+      const saved = await saveResource<any>(
+        `/admin/${section}`,
+        payload,
+        isNew ? undefined : id,
+        record?.version,
+      )
+      invalidateLiveQueries(`/admin/${section}`)
+      invalidateLiveQueries('/public/')
+      if (isNew) {
+        router.replace(`/admin/${section}/${saved.id}`)
+      } else {
+        await detailQuery.refresh()
+      }
+      setFeedback(c('تم حفظ السجل بنجاح.', 'Record saved successfully.'))
+      return saved
+    } catch (err) {
+      if (err instanceof BackendError && err.status === 409 && !isNew) {
+        await detailQuery.refresh()
+      }
+      setErrorMsg(formatApiError(err, lang))
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function runPublishAction(action: 'publish' | 'unpublish' | 'archive') {
+    if (busy || !meta.publishable) return
+    const saved = await handleSubmit()
+    if (!saved) return
+    setBusy(true)
+    setErrorMsg('')
+    try {
+      await api(`/admin/${section}/${saved.id}/${action}`, {
+        method: 'POST',
+        body: { version: saved.version },
+      })
+      invalidateLiveQueries(`/admin/${section}`)
+      invalidateLiveQueries('/public/')
+      if (isNew) {
+        router.replace(`/admin/${section}/${saved.id}`)
+      } else {
+        await detailQuery.refresh()
+      }
+      setFeedback(
+        action === 'publish'
+          ? c('تم النشر بنجاح.', 'Published successfully.')
+          : action === 'unpublish'
+            ? c('تمت الإعادة إلى المسودة.', 'Moved back to draft.')
+            : c('تمت الأرشفة.', 'Archived.'),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const isSelfTeam = section === 'team' && !isNew && session?.userId === id
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="admin-heading">
+        <div>
+          <Link href={`/admin/${section}`} className="text-sm text-primary">
+            {c('العودة للقائمة', 'Back to list')}
+          </Link>
+          <h1 className="mt-2">
+            {isNew
+              ? `${c('إضافة', 'New')} — ${c(meta.ar, meta.en)}`
+              : `${c('تحرير', 'Edit')} — ${c(meta.ar, meta.en)}`}
+          </h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={busy} className="btn-primary">
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Check className="size-4" />
+            )}
+            {section === 'team' && isNew
+              ? c('إرسال دعوة الأدمن', 'Send Admin Invitation')
+              : c('حفظ', 'Save')}
+          </button>
+          {meta.publishable && record?.status !== 'published' && (
+            <button
+              type="button"
+              disabled={busy}
+              className="btn-outline"
+              onClick={() => void runPublishAction('publish')}
+            >
+              <Send className="size-4" />
+              {c('نشر', 'Publish')}
+            </button>
+          )}
+          {meta.publishable && record?.status === 'published' && (
+            <button
+              type="button"
+              disabled={busy}
+              className="btn-outline"
+              onClick={() => void runPublishAction('unpublish')}
+            >
+              <EyeOff className="size-4" />
+              {c('إلغاء النشر', 'Unpublish')}
+            </button>
+          )}
+          {meta.publishable && !isNew && record?.status !== 'archived' && (
+            <button
+              type="button"
+              disabled={busy}
+              className="btn-outline"
+              onClick={() => void runPublishAction('archive')}
+            >
+              <Archive className="size-4" />
+              {c('أرشفة', 'Archive')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {feedback && (
+        <p role="status" className="mb-5 flex items-center gap-2 text-sm font-medium text-primary">
+          <CheckCircle2 className="size-4 shrink-0" />
+          {feedback}
+        </p>
+      )}
+      {errorMsg && (
+        <p role="alert" className="mb-5 text-sm font-medium text-red-700">
+          {errorMsg}
+        </p>
+      )}
+
+      <div className="panel grid gap-5 bg-white md:grid-cols-2">
+        {section === 'team' ? (
+          <>
+            {isNew && (
+              <Field label={c('البريد الإلكتروني للأدمن', 'Admin email address')}>
+                <input
+                  type="email"
+                  required
+                  dir="ltr"
+                  className="control"
+                  value={form.email || ''}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </Field>
+            )}
+            <Field label={c('الاسم المعروض', 'Display name')}>
+              <input
+                required
+                className="control"
+                value={form.displayName || ''}
+                onChange={(e) =>
+                  setForm({ ...form, displayName: e.target.value })
+                }
+              />
+            </Field>
+            <Field label={c('مستوى الصلاحية', 'Access role')}>
+              <input
+                className="control bg-muted/50"
+                disabled
+                value={c('الأدمن (كامل الصلاحيات مع MFA)', 'Admin (Full access + MFA)')}
+              />
+            </Field>
+            {!isNew && (
+              <label className="flex items-center gap-3 self-end pb-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  disabled={isSelfTeam}
+                  checked={Boolean(form.active)}
+                  onChange={(e) =>
+                    setForm({ ...form, active: e.target.checked })
+                  }
+                />
+                {isSelfTeam
+                  ? c(
+                      'الحساب نشط (لا يمكن للأدمن تعطيل حسابه الشخصي)',
+                      'Active (cannot deactivate your own account)',
+                    )
+                  : c('الحساب نشط ومسموح له بالدخول', 'Account active')}
+              </label>
+            )}
+          </>
+        ) : section === 'customers' ? (
+          <>
+            <Field label={c('اسم جهة الاتصال', 'Contact name')}>
+              <input
+                required
+                className="control"
+                value={form.namePlain || ''}
+                onChange={(e) =>
+                  setForm({ ...form, namePlain: e.target.value })
+                }
+              />
+            </Field>
+            <Field label={c('المؤسسة / الشركة', 'Organization')}>
+              <select
+                className="control"
+                value={form.organizationId || ''}
+                onChange={(e) =>
+                  setForm({ ...form, organizationId: e.target.value })
+                }
+              >
+                <option value="">{c('بدون مؤسسة', 'Unlinked')}</option>
+                {(orgsQuery.data || []).map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={c('الهاتف', 'Phone')}>
+              <input
+                required
+                dir="ltr"
+                className="control"
+                value={form.phone || ''}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </Field>
+            <Field label={c('البريد الإلكتروني', 'Email')}>
+              <input
+                type="email"
+                dir="ltr"
+                className="control"
+                value={form.email || ''}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </Field>
+            <Field label={c('القناة المفضلة', 'Preferred channel')}>
+              <select
+                className="control"
+                value={form.preferredChannel || 'phone'}
+                onChange={(e) =>
+                  setForm({ ...form, preferredChannel: e.target.value })
+                }
+              >
+                <option value="phone">{c('هاتف', 'Phone')}</option>
+                <option value="whatsapp">{c('واتساب', 'WhatsApp')}</option>
+                <option value="email">{c('بريد إلكتروني', 'Email')}</option>
+              </select>
+            </Field>
+            <label className="flex items-center gap-3 self-end pb-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={Boolean(form.active)}
+                onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              />
+              {c('عميل نشط', 'Active contact')}
+            </label>
+            <div className="md:col-span-2">
+              <Field label={c('ملاحظات المبيعات', 'Sales notes')}>
+                <textarea
+                  rows={3}
+                  className="control"
+                  value={form.notes || ''}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </Field>
+            </div>
+            {!isNew && (
+              <div className="md:col-span-2 border-t pt-4">
+                <strong className="mb-2 block text-sm">
+                  {c('طلبات عروض الأسعار المرتبطة بهذا العميل', 'Quote requests linked to this customer')}
+                </strong>
+                <div className="flex flex-wrap gap-2">
+                  {(customerRequestsQuery.data || [])
+                    .filter((r) => r.contactId === id)
+                    .map((r) => (
+                      <Link
+                        key={r.id}
+                        href={`/admin/quote-requests/${r.id}`}
+                        dir="ltr"
+                        className="btn-outline font-mono text-xs"
+                      >
+                        {r.reference} ({r.status})
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : section === 'organizations' ? (
+          <>
+            <Field label={c('اسم الشركة / المؤسسة', 'Company / Organization name')}>
+              <input
+                required
+                className="control"
+                value={form.namePlain || ''}
+                onChange={(e) =>
+                  setForm({ ...form, namePlain: e.target.value })
+                }
+              />
+            </Field>
+            <Field label={c('المدينة', 'City')}>
+              <input
+                className="control"
+                value={form.city || ''}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+              />
+            </Field>
+            <Field label={c('المحافظة', 'Governorate')}>
+              <input
+                className="control"
+                value={form.governorate || ''}
+                onChange={(e) =>
+                  setForm({ ...form, governorate: e.target.value })
+                }
+              />
+            </Field>
+            <div className="md:col-span-2">
+              <Field label={c('ملاحظات', 'Notes')}>
+                <textarea
+                  rows={3}
+                  className="control"
+                  value={form.notes || ''}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </Field>
+            </div>
+          </>
+        ) : (
+          <>
+            <Field label={c('الاسم بالعربية', 'Arabic name')}>
+              <input
+                required
+                className="control"
+                value={form.nameAr || ''}
+                onChange={(e) => setForm({ ...form, nameAr: e.target.value })}
+              />
+            </Field>
+            <Field label={c('الاسم بالإنجليزية', 'English name')}>
+              <input
+                required
+                dir="ltr"
+                className="control"
+                value={form.nameEn || ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setForm((prev) => ({
+                    ...prev,
+                    nameEn: val,
+                    slug:
+                      isNew && !prev.slug ? toSlug(val) : prev.slug,
+                  }))
+                }}
+              />
+            </Field>
+
+            {['categories', 'brands', 'sectors'].includes(section) && (
+              <>
+                <Field label={c('رمز الرابط اللاتيني (Slug)', 'URL slug')}>
+                  <input
+                    required
+                    dir="ltr"
+                    className="control font-mono"
+                    value={form.slug || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, slug: toSlug(e.target.value) })
+                    }
+                  />
+                </Field>
+                <Field label={c('ترتيب العرض', 'Display order')}>
+                  <input
+                    type="number"
+                    className="control"
+                    value={form.order ?? 0}
+                    onChange={(e) =>
+                      setForm({ ...form, order: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+                {section === 'categories' && (
+                  <>
+                    <Field label={c('العائلة', 'Product family')}>
+                      <select
+                        className="control"
+                        value={form.family || 'oils'}
+                        onChange={(e) =>
+                          setForm({ ...form, family: e.target.value })
+                        }
+                      >
+                        <option value="oils">{c('زيوت', 'Oils')}</option>
+                        <option value="grease">{c('شحومات', 'Grease')}</option>
+                        <option value="bearings">
+                          {c('رولمان بلي', 'Bearings')}
+                        </option>
+                      </select>
+                    </Field>
+                    <Field label={c('التصنيف الأب (اختياري)', 'Parent category')}>
+                      <select
+                        className="control"
+                        value={form.parentId || ''}
+                        onChange={(e) =>
+                          setForm({ ...form, parentId: e.target.value })
+                        }
+                      >
+                        <option value="">{c('تصنيف رئيسي', 'Top-level')}</option>
+                        {(categoriesQuery.data || [])
+                          .filter((cat) => cat.id !== id)
+                          .map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {lang === 'ar' ? cat.name.ar : cat.name.en}
+                            </option>
+                          ))}
+                      </select>
+                    </Field>
+                  </>
+                )}
+                {section === 'brands' && (
+                  <>
+                    <Field label={c('الموقع الرسمي للعلامة', 'Official website')}>
+                      <input
+                        type="url"
+                        dir="ltr"
+                        className="control"
+                        placeholder="https://example.com"
+                        value={form.website || ''}
+                        onChange={(e) =>
+                          setForm({ ...form, website: e.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label={c('شعار العلامة (Media)', 'Brand logo')}>
+                      <select
+                        className="control"
+                        value={form.logoMediaId || ''}
+                        onChange={(e) =>
+                          setForm({ ...form, logoMediaId: e.target.value })
+                        }
+                      >
+                        <option value="">{c('بدون شعار', 'None')}</option>
+                        {readyImages.map((img) => (
+                          <option key={img.id} value={img.id}>
+                            {img.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </>
+                )}
+                <Field label={c('صورة الغلاف (Media)', 'Cover image')}>
+                  <select
+                    className="control"
+                    value={form.imageMediaId || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, imageMediaId: e.target.value })
+                    }
+                  >
+                    <option value="">{c('بدون صورة', 'None')}</option>
+                    {readyImages.map((img) => (
+                      <option key={img.id} value={img.id}>
+                        {img.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={c('الوصف بالعربية', 'Arabic description')}>
+                  <textarea
+                    rows={3}
+                    className="control"
+                    value={form.descriptionAr || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, descriptionAr: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('الوصف بالإنجليزية', 'English description')}>
+                  <textarea
+                    rows={3}
+                    dir="ltr"
+                    className="control"
+                    value={form.descriptionEn || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, descriptionEn: e.target.value })
+                    }
+                  />
+                </Field>
+              </>
+            )}
+
+            {section === 'units' && (
+              <>
+                <Field label={c('الرمز الفني للوحدة (مثل L أو kg أو drum)', 'Unit code (e.g. L, kg, drum, pc)')}>
+                  <input
+                    required
+                    dir="ltr"
+                    className="control font-mono"
+                    value={form.code || ''}
+                    onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  />
+                </Field>
+                <Field label={c('عدد الخانات العشرية المسموحة (0..3)', 'Decimal precision (0..3)')}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={3}
+                    className="control"
+                    value={form.precision ?? 0}
+                    onChange={(e) =>
+                      setForm({ ...form, precision: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+                <label className="flex items-center gap-3 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.active)}
+                    onChange={(e) =>
+                      setForm({ ...form, active: e.target.checked })
+                    }
+                  />
+                  {c('وحدة بيع نشطة متاحة في الكتالوج والطلبات', 'Active unit')}
+                </label>
+              </>
+            )}
+
+            {section === 'attributes' && (
+              <>
+                <Field label={c('الرمز البرمجي (حروف صغيرة وأرقام و _)', 'Attribute code (lowercase_snake_case)')}>
+                  <input
+                    required
+                    dir="ltr"
+                    className="control font-mono"
+                    placeholder="iso_vg"
+                    value={form.code || ''}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        code: e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9_]/g, '_'),
+                      })
+                    }
+                  />
+                </Field>
+                <Field label={c('نوع القيمة', 'Data type')}>
+                  <select
+                    className="control"
+                    value={form.type || 'text'}
+                    onChange={(e) => setForm({ ...form, type: e.target.value })}
+                  >
+                    <option value="text">{c('نص', 'Text')}</option>
+                    <option value="number">{c('رقم', 'Number')}</option>
+                    <option value="boolean">{c('نعم / لا', 'Boolean')}</option>
+                    <option value="option">
+                      {c('اختيار مفرد من قائمة', 'Single option')}
+                    </option>
+                    <option value="multi_option">
+                      {c('اختيار متعدد', 'Multi option')}
+                    </option>
+                  </select>
+                </Field>
+                <Field label={c('نطاق الخاصية', 'Scope')}>
+                  <select
+                    className="control"
+                    value={form.scope || 'product'}
+                    onChange={(e) =>
+                      setForm({ ...form, scope: e.target.value })
+                    }
+                  >
+                    <option value="product">
+                      {c('على مستوى المنتج', 'Product level')}
+                    </option>
+                    <option value="variant">
+                      {c('على مستوى المتغير', 'Variant level')}
+                    </option>
+                  </select>
+                </Field>
+                <Field label={c('وحدة القياس المرتبطة (اختياري)', 'Measurement unit')}>
+                  <select
+                    className="control"
+                    value={form.unitId || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, unitId: e.target.value })
+                    }
+                  >
+                    <option value="">{c('بدون وحدة', 'None')}</option>
+                    {(unitsQuery.data || []).map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.code}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <label className="flex items-center gap-3 text-sm font-medium md:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.filterable)}
+                    onChange={(e) =>
+                      setForm({ ...form, filterable: e.target.checked })
+                    }
+                  />
+                  {c('متاح كمرشح بحث في الكتالوج', 'Filterable in catalog')}
+                </label>
+
+                {['option', 'multi_option'].includes(form.type) && (
+                  <div className="md:col-span-2">
+                    <Field
+                      label={c(
+                        'خيارات القائمة (سطر لكل خيار بالصيغة: code|العربية|English)',
+                        'Options (one per line: code|Arabic|English)',
+                      )}
+                    >
+                      <textarea
+                        rows={4}
+                        dir="ltr"
+                        className="control font-mono text-xs"
+                        placeholder={'nlgi-2|درجة NLGI 2|NLGI Grade 2'}
+                        value={attrOptionsText}
+                        onChange={(e) => setAttrOptionsText(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                <div className="md:col-span-2 space-y-3 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm">
+                      {c(
+                        'قواعد ربط الخاصية بالتصنيفات (إلزامي للنشر / حدود رقمية)',
+                        'Category rules (required to publish / numeric bounds)',
+                      )}
+                    </strong>
+                    <button
+                      type="button"
+                      className="btn-outline text-xs"
+                      onClick={() => {
+                        const firstCat = categoriesQuery.data?.[0]?.id || ''
+                        if (!firstCat) return
+                        setAttrCategoryRules((prev) => [
+                          ...prev,
+                          {
+                            categoryId: firstCat,
+                            required: true,
+                            min: '',
+                            max: '',
+                          },
+                        ])
+                      }}
+                    >
+                      <Plus className="size-3.5" />
+                      {c('إضافة قاعدة تصنيف', 'Add category rule')}
+                    </button>
+                  </div>
+                  {attrCategoryRules.map((rule, idx) => (
+                    <div
+                      key={idx}
+                      className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[1fr_auto_100px_100px_auto] sm:items-center"
+                    >
+                      <select
+                        className="control"
+                        value={rule.categoryId}
+                        onChange={(e) =>
+                          setAttrCategoryRules((prev) =>
+                            prev.map((r, i) =>
+                              i === idx
+                                ? { ...r, categoryId: e.target.value }
+                                : r,
+                            ),
+                          )
+                        }
+                      >
+                        {(categoriesQuery.data || []).map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {lang === 'ar' ? cat.name.ar : cat.name.en}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={rule.required}
+                          onChange={(e) =>
+                            setAttrCategoryRules((prev) =>
+                              prev.map((r, i) =>
+                                i === idx
+                                  ? { ...r, required: e.target.checked }
+                                  : r,
+                              ),
+                            )
+                          }
+                        />
+                        {c('إلزامي', 'Required')}
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Min"
+                        className="control text-xs"
+                        value={rule.min}
+                        onChange={(e) =>
+                          setAttrCategoryRules((prev) =>
+                            prev.map((r, i) =>
+                              i === idx ? { ...r, min: e.target.value } : r,
+                            ),
+                          )
+                        }
+                      />
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Max"
+                        className="control text-xs"
+                        value={rule.max}
+                        onChange={(e) =>
+                          setAttrCategoryRules((prev) =>
+                            prev.map((r, i) =>
+                              i === idx ? { ...r, max: e.target.value } : r,
+                            ),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="icon-button text-red-700"
+                        onClick={() =>
+                          setAttrCategoryRules((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          )
+                        }
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {section === 'content' && (
+              <>
+                <Field
+                  label={c(
+                    'مفتاح الكتلة (مثل privacy أو terms أو about أو home-hero)',
+                    'Block key (e.g. privacy, terms, about, home-hero, footer)',
+                  )}
+                >
+                  <input
+                    required
+                    dir="ltr"
+                    className="control font-mono"
+                    placeholder="privacy"
+                    value={form.key || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, key: toSlug(e.target.value) })
+                    }
+                  />
+                </Field>
+                <Field
+                  label={c(
+                    'إصدار السياسة (مطلوب عند key = privacy، مثل 2026-04)',
+                    'Policy version (required when key = privacy, e.g. 2026-04)',
+                  )}
+                >
+                  <input
+                    dir="ltr"
+                    className="control font-mono"
+                    placeholder="2026-04"
+                    value={form.policyVersion || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, policyVersion: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('النص بالعربية', 'Arabic body')}>
+                  <textarea
+                    rows={6}
+                    className="control"
+                    value={form.bodyAr || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, bodyAr: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('النص بالإنجليزية', 'English body')}>
+                  <textarea
+                    rows={6}
+                    dir="ltr"
+                    className="control"
+                    value={form.bodyEn || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, bodyEn: e.target.value })
+                    }
+                  />
+                </Field>
+              </>
+            )}
+
+            {section === 'navigation' && (
+              <>
+                <Field label={c('منطقة القائمة', 'Navigation area')}>
+                  <select
+                    className="control"
+                    value={form.area || 'header'}
+                    onChange={(e) => setForm({ ...form, area: e.target.value })}
+                  >
+                    <option value="header">{c('الشريط العلوي', 'Header')}</option>
+                    <option value="footer">{c('التذييل', 'Footer')}</option>
+                  </select>
+                </Field>
+                <Field label={c('المسار الداخلي (يبدأ بـ /)', 'Path (starts with /)')}>
+                  <input
+                    required
+                    dir="ltr"
+                    className="control font-mono"
+                    placeholder="/products"
+                    value={form.path || '/'}
+                    onChange={(e) => setForm({ ...form, path: e.target.value })}
+                  />
+                </Field>
+                <Field label={c('الترتيب', 'Order')}>
+                  <input
+                    type="number"
+                    className="control"
+                    value={form.order ?? 0}
+                    onChange={(e) =>
+                      setForm({ ...form, order: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+                <label className="flex items-center gap-3 self-end pb-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.active)}
+                    onChange={(e) =>
+                      setForm({ ...form, active: e.target.checked })
+                    }
+                  />
+                  {c('رابط مفعل', 'Active link')}
+                </label>
+              </>
+            )}
+
+            {section === 'locations' && (
+              <>
+                <Field label={c('نوع الموقع', 'Location kind')}>
+                  <select
+                    className="control"
+                    value={form.kind || 'hq'}
+                    onChange={(e) => setForm({ ...form, kind: e.target.value })}
+                  >
+                    <option value="hq">{c('المقر الرئيسي', 'Headquarters')}</option>
+                    <option value="branch">{c('فرع', 'Branch')}</option>
+                    <option value="warehouse">{c('مخزن', 'Warehouse')}</option>
+                  </select>
+                </Field>
+                <Field label={c('الهاتف', 'Phone')}>
+                  <input
+                    dir="ltr"
+                    className="control"
+                    value={form.phone || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, phone: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('العنوان بالعربية', 'Arabic address')}>
+                  <input
+                    required
+                    className="control"
+                    value={form.addressAr || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, addressAr: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('العنوان بالإنجليزية', 'English address')}>
+                  <input
+                    required
+                    dir="ltr"
+                    className="control"
+                    value={form.addressEn || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, addressEn: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('مواعيد العمل بالعربية', 'Arabic hours')}>
+                  <input
+                    className="control"
+                    value={form.hoursAr || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, hoursAr: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field label={c('مواعيد العمل بالإنجليزية', 'English hours')}>
+                  <input
+                    dir="ltr"
+                    className="control"
+                    value={form.hoursEn || ''}
+                    onChange={(e) =>
+                      setForm({ ...form, hoursEn: e.target.value })
+                    }
+                  />
+                </Field>
+                <label className="flex items-center gap-3 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.published)}
+                    onChange={(e) =>
+                      setForm({ ...form, published: e.target.checked })
+                    }
+                  />
+                  {c('منشور في صفحة تواصل معنا', 'Published on Contact page')}
+                </label>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </form>
+  )
+}
+
+export function MediaWorkspace() {
+  const c = useCopy()
+  const { lang } = useLanguage()
+  const session = useAdminSession()
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const [selectedId, setSelectedId] = useState<string>('')
+  const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>(
+    'public',
+  )
+  const [uploadAltAr, setUploadAltAr] = useState('')
+  const [uploadAltEn, setUploadAltEn] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editAltAr, setEditAltAr] = useState('')
+  const [editAltEn, setEditAltEn] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const mediaQuery = useLiveQuery('/admin/media?page=1&pageSize=48', async () => {
+    return (await api<MediaAssetRecord[]>('/admin/media?page=1&pageSize=48')).data
+  })
+
+  const files = mediaQuery.data || []
+  const selected = files.find((f) => f.id === selectedId) || files[0] || null
+
+  useEffect(() => {
+    if (!selected) return
+    setEditName(selected.name)
+    setEditAltAr(selected.alt?.ar || '')
+    setEditAltEn(selected.alt?.en || '')
+  }, [selected?.id, selected?.version])
+
+  async function handleFileSelect(file: File) {
+    if (busy) return
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      const kind =
+        file.type === 'application/pdf'
+          ? 'document'
+          : 'image'
+      const uploaded = await uploadAdminMedia(file, {
+        name: file.name,
+        alt: {
+          ar: uploadAltAr.trim() || file.name,
+          en: uploadAltEn.trim() || file.name,
+        },
+        visibility: uploadVisibility,
+        kind,
+      })
+      setSelectedId(uploaded.id)
+      invalidateLiveQueries('/admin/media')
+      await mediaQuery.refresh()
+      setFeedback(
+        uploaded.status === 'quarantined'
+          ? c(
+              'تم رفع الملف إلى منطقة الحجر الأمني (quarantined) وجدولة فحص البرمجيات الخبيثة.',
+              'File uploaded to quarantine and scheduled for malware scanning.',
+            )
+          : c('تم رفع الملف بنجاح.', 'File uploaded successfully.'),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="admin-heading">
+        <div>
+          <h1>{c('مكتبة الوسائط والنشرات الفنية', 'Media & Technical Documents')}</h1>
+          <p>
+            {c(
+              'رفع الصور وملفات TDS/SDS مع الحجر الأمني الإلزامي وفحص النصوص البديلة قبل النشر العام.',
+              'Upload images and TDS/SDS PDFs with mandatory security quarantine and bilingual alt text.',
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            className="sr-only"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void handleFileSelect(f)
+              e.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
+            {c('رفع صورة أو PDF', 'Upload image or PDF')}
+          </button>
+        </div>
+      </div>
+
+      {session && session.mediaScannerConfigured === false && (
+        <div className="panel mb-6 flex items-start gap-3 border-amber-300 bg-amber-50/80 text-sm text-amber-950">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-700" />
+          <div>
+            <strong>
+              {c(
+                'فاحص الملفات الأمني الخارجي غير مضبوط في متغيرات البيئة الحالية:',
+                'External malware scanner is not configured in current environment:',
+              )}
+            </strong>{' '}
+            {c(
+              'ستبقى الملفات المرفوعة في حالة الحجر الأمني (quarantined) ولن تُرقّى إلى ready للنشر العام حتى ضبط MEDIA_SCANNER_URL و MEDIA_SCANNER_KEY.',
+              'Uploaded files remain strictly in quarantined status and will not be promoted to ready until MEDIA_SCANNER_URL and MEDIA_SCANNER_KEY are configured.',
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="panel mb-6 grid gap-4 bg-white md:grid-cols-3">
+        <Field label={c('مستوى ظهور الملف الجديد', 'Visibility for next upload')}>
+          <select
+            className="control"
+            value={uploadVisibility}
+            onChange={(e) => setUploadVisibility(e.target.value as any)}
+          >
+            <option value="public">
+              {c('عام (للكتالوج بعد الفحص)', 'Public (catalog after scan)')}
+            </option>
+            <option value="private">
+              {c('خاص (للإدارة فقط)', 'Private (admin only)')}
+            </option>
+          </select>
+        </Field>
+        <Field label={c('النص البديل بالعربية قبل الرفع', 'Default Arabic alt text')}>
+          <input
+            className="control"
+            value={uploadAltAr}
+            onChange={(e) => setUploadAltAr(e.target.value)}
+          />
+        </Field>
+        <Field label={c('النص البديل بالإنجليزية قبل الرفع', 'Default English alt text')}>
+          <input
+            className="control"
+            dir="ltr"
+            value={uploadAltEn}
+            onChange={(e) => setUploadAltEn(e.target.value)}
+          />
+        </Field>
+      </div>
+
+      {feedback && (
+        <p role="status" className="mb-4 text-sm font-medium text-primary">
+          {feedback}
+        </p>
+      )}
+      {errorMsg && (
+        <p role="alert" className="mb-4 text-sm font-medium text-red-700">
+          {errorMsg}
+        </p>
+      )}
+
+      {mediaQuery.isLoading ? (
+        <LoadingState />
+      ) : mediaQuery.error ? (
+        <ErrorState
+          error={mediaQuery.error}
+          onRetry={() => void mediaQuery.refresh()}
+        />
+      ) : files.length === 0 ? (
+        <EmptyState
+          title={c('مكتبة الوسائط فارغة', 'Media library is empty')}
+          description={c(
+            'ارفع صور المنتجات أو النشرات الفنية بصيغة JPEG أو PNG أو WebP أو PDF.',
+            'Upload JPEG, PNG, WebP images or PDF data sheets.',
+          )}
+        />
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="panel grid gap-4 bg-white sm:grid-cols-2 xl:grid-cols-3">
+            {files.map((f) => {
+              const activeCard = selected?.id === f.id
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setSelectedId(f.id)}
+                  className={`rounded-xl border p-4 text-start transition ${
+                    activeCard ? 'border-primary ring-2 ring-primary/15' : ''
+                  }`}
+                >
+                  <div className="mb-3 flex aspect-video items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
+                    {f.kind === 'image' ? (
+                      <ImageIcon className="size-8" />
+                    ) : (
+                      <FileText className="size-8" />
+                    )}
+                  </div>
+                  <strong className="block truncate text-sm">{f.name}</strong>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <Badge
+                      tone={
+                        f.status === 'ready'
+                          ? 'green'
+                          : f.status === 'quarantined'
+                            ? 'gold'
+                            : 'red'
+                      }
+                    >
+                      {f.status}
+                    </Badge>
+                    <Badge tone="muted">{f.visibility}</Badge>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {selected && (
+            <div className="panel space-y-4 bg-white">
+              <h2 className="text-lg font-bold">
+                {c('خصائص الملف المحدد', 'Selected asset metadata')}
+              </h2>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p dir="ltr" className="font-mono">
+                  {selected.mimeType} · {(selected.sizeBytes / 1024).toFixed(1)} KB
+                </p>
+                <p>
+                  {c('حالة الفحص:', 'Scan status:')}{' '}
+                  <strong>{selected.status}</strong>
+                </p>
+                {selected.scanDetail && (
+                  <p className="text-amber-800">{selected.scanDetail}</p>
+                )}
+              </div>
+
+              <Field label={c('اسم الملف المعروض', 'Display name')}>
+                <input
+                  className="control"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </Field>
+              <Field label={c('النص البديل بالعربية (Alt AR)', 'Arabic alt text')}>
+                <input
+                  className="control"
+                  value={editAltAr}
+                  onChange={(e) => setEditAltAr(e.target.value)}
+                />
+              </Field>
+              <Field label={c('النص البديل بالإنجليزية (Alt EN)', 'English alt text')}>
+                <input
+                  className="control"
+                  dir="ltr"
+                  value={editAltEn}
+                  onChange={(e) => setEditAltEn(e.target.value)}
+                />
+              </Field>
+
+              <button
+                type="button"
+                className="btn-primary w-full"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  setErrorMsg('')
+                  setFeedback('')
+                  try {
+                    await api(`/admin/media/${selected.id}`, {
+                      method: 'PATCH',
+                      body: {
+                        version: selected.version,
+                        name: editName.trim(),
+                        alt: { ar: editAltAr.trim(), en: editAltEn.trim() },
+                      },
+                    })
+                    invalidateLiveQueries('/admin/media')
+                    await mediaQuery.refresh()
+                    setFeedback(c('تم تحديث بيانات الملف.', 'Asset metadata saved.'))
+                  } catch (err) {
+                    setErrorMsg(formatApiError(err, lang))
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+              >
+                <Check className="size-4" />
+                {c('حفظ البيانات البديلة', 'Save metadata')}
+              </button>
+
+              {selected.status === 'quarantined' && (
+                <button
+                  type="button"
+                  className="btn-outline w-full"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true)
+                    setErrorMsg('')
+                    try {
+                      await api('/admin/jobs', {
+                        method: 'POST',
+                        body: { mediaId: selected.id },
+                      })
+                      await mediaQuery.refresh()
+                      setFeedback(
+                        c(
+                          'تمت محاولة الفحص الأمني وتحديث حالة الملف.',
+                          'Media scan executed and status refreshed.',
+                        ),
+                      )
+                    } catch (err) {
+                      setErrorMsg(formatApiError(err, lang))
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
+                >
+                  <RefreshCw className="size-4" />
+                  {c('تشغيل الفحص الأمني الآن', 'Run malware scan now')}
+                </button>
+              )}
+
+              {selected.status === 'ready' && (
+                <button
+                  type="button"
+                  className="btn-outline w-full"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true)
+                    setErrorMsg('')
+                    try {
+                      const res = await api<{ url: string }>(
+                        `/admin/media/${selected.id}/download`,
+                      )
+                      window.open(res.data.url, '_blank', 'noopener,noreferrer')
+                    } catch (err) {
+                      setErrorMsg(formatApiError(err, lang))
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
+                >
+                  <Download className="size-4" />
+                  {c('فتح / تنزيل الملف الموقّع', 'Open signed file URL')}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="btn-outline w-full text-red-700"
+                disabled={busy}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      c('حذف هذا الملف نهائيًا؟', 'Delete this file permanently?'),
+                    )
+                  ) {
+                    return
+                  }
+                  setBusy(true)
+                  setErrorMsg('')
+                  try {
+                    await api(`/admin/media/${selected.id}`, {
+                      method: 'DELETE',
+                      body: { version: selected.version },
+                    })
+                    setSelectedId('')
+                    invalidateLiveQueries('/admin/media')
+                    await mediaQuery.refresh()
+                    setFeedback(c('تم حذف الملف.', 'Asset deleted.'))
+                  } catch (err) {
+                    setErrorMsg(formatApiError(err, lang))
+                  } finally {
+                    setBusy(false)
+                  }
+                }}
+              >
+                <Trash2 className="size-4" />
+                {c('حذف الملف', 'Delete file')}
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </>
   )
 }
 
-export function MediaWorkspace() {
-  const { media, setMedia, trackMediaUrl, products, recordActivity } = useDemo()
-  const c = useCopy()
-  const [q, setQ] = useState('')
-  const [message, setMessage] = useState('')
-  const [preview, setPreview] = useState<string | null>(null)
-  const { confirm, confirmation } = useConfirmAction()
-  async function choose(files: FileList | null) {
-    let rejected = 0
-    const additions: PreviewMedia[] = []
-    for (const file of Array.from(files || [])) {
-      const allowed =
-        ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(
-          file.type,
-        ) &&
-        file.size > 0 &&
-        file.size <= (file.type === 'application/pdf' ? 20 : 5) * 1024 * 1024
-      if (!allowed) {
-        rejected++
-        continue
-      }
-      const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer())
-      const head = String.fromCharCode(...bytes)
-      const signature =
-        file.type === 'application/pdf'
-          ? head.startsWith('%PDF-')
-          : file.type === 'image/png'
-            ? bytes[0] === 137 && head.slice(1, 4) === 'PNG'
-            : file.type === 'image/jpeg'
-              ? bytes[0] === 255 && bytes[1] === 216
-              : head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP'
-      if (!signature) {
-        rejected++
-        continue
-      }
-      additions.push({
-        id: crypto.randomUUID(),
-        name: file.name,
-        url: trackMediaUrl(file),
-        mime: file.type,
-        size: file.size,
-        altAr: '',
-        altEn: '',
-        status: 'ready' as const,
-      })
-    }
-    setMedia((all) => [...all, ...additions])
-    if (additions.length)
-      recordActivity('media.selected', String(additions.length))
-    setMessage(
-      rejected
-        ? c(
-            'استُبعدت ملفات غير مدعومة أو أكبر من الحد أو لا تطابق نوعها.',
-            'Unsupported, oversized or mismatched files were excluded.',
-          )
-        : c(
-            'الملفات محلية فقط، ولم تُرفع لخادم.',
-            'Files are local only; nothing was uploaded.',
-          ),
-    )
-  }
-  const rows = media.filter((m) =>
-    m.name.toLowerCase().includes(q.toLowerCase()),
-  )
-  return (
-    <>
-      {confirmation}
-      <div className="admin-heading">
-        <div>
-          <h1>{c('مكتبة الوسائط', 'Media library')}</h1>
-          <p>
-            {c(
-              'اختيار ومعاينة وربط الصور والملفات محليًا. لا فحص خادم أو رفع فعلي.',
-              'Select, preview and link local media. No server scanning or uploads.',
-            )}
-          </p>
-        </div>
-      </div>
-      <label className="upload-zone">
-        <ImagePlus className="mx-auto mb-4 size-10 text-primary" />
-        <strong>{c('اختر صورًا أو PDF', 'Choose images or PDFs')}</strong>
-        <span className="mt-2 block text-sm text-muted-foreground">
-          JPG / PNG / WebP ≤ 5 MB · PDF ≤ 20 MB
-        </span>
-        <input
-          className="mt-5 block max-w-full text-sm"
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={(e) => {
-            void choose(e.target.files)
-            e.target.value = ''
-          }}
-        />
-      </label>
-      <p role="status" className="my-4 text-sm text-primary">
-        {message}
-      </p>
-      <input
-        className="control mb-5"
-        placeholder={c('بحث باسم الملف', 'Search file name')}
-        aria-label={c('بحث الوسائط', 'Search media')}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {rows.map((file) => (
-          <article className="panel min-w-0 space-y-4 bg-white" key={file.id}>
-            {file.mime.startsWith('image/') ? (
-              <img
-                className="aspect-video w-full rounded-lg object-contain"
-                src={file.url}
-                alt={file.altAr || file.name}
-              />
-            ) : (
-              <FileText className="my-8 size-12 text-primary" />
-            )}
-            <h2 className="truncate text-sm font-bold">{file.name}</h2>
-            <p className="text-xs text-muted-foreground">
-              {Math.round(file.size / 1024)} KB · {file.mime}
-            </p>
-            <Badge>
-              {file.status === 'archived'
-                ? c('مؤرشف محليًا', 'Archived locally')
-                : c('معاينة محلية', 'Local preview')}
-            </Badge>
-            {(['ar', 'en'] as const).map((locale) => (
-              <Field
-                key={locale}
-                label={
-                  locale === 'ar'
-                    ? c('النص البديل عربي', 'Arabic alt text')
-                    : c('النص البديل إنجليزي', 'English alt text')
-                }
-              >
-                <input
-                  className="control"
-                  maxLength={200}
-                  value={locale === 'ar' ? file.altAr : file.altEn}
-                  onChange={(e) =>
-                    setMedia((all) =>
-                      all.map((m) =>
-                        m.id === file.id
-                          ? {
-                              ...m,
-                              [locale === 'ar' ? 'altAr' : 'altEn']:
-                                e.target.value,
-                            }
-                          : m,
-                      ),
-                    )
-                  }
-                />
-              </Field>
-            ))}
-            <p className="text-xs">
-              {c('الاستخدامات', 'Usage')}:{' '}
-              {products
-                .filter(
-                  (p) =>
-                    p.mainMediaId === file.id || p.mediaIds?.includes(file.id),
-                )
-                .map((p) => p.name.ar)
-                .join('، ') || c('غير مرتبط', 'Not linked')}
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <button
-                className="text-primary underline"
-                onClick={() => setPreview(file.id)}
-              >
-                {c('معاينة', 'Preview')}
-              </button>
-              <button
-                className="text-sm"
-                onClick={() => {
-                  if (
-                    products.some(
-                      (p) =>
-                        p.mainMediaId === file.id ||
-                        p.mediaIds?.includes(file.id),
-                    )
-                  ) {
-                    setMessage(
-                      c(
-                        'استبدل استخدامات الملف أولًا.',
-                        'Replace this file usage first.',
-                      ),
-                    )
-                    return
-                  }
-                  confirm(
-                    c('أرشفة الملف المحلي؟', 'Archive this local file?'),
-                    () => {
-                      setMedia((all) =>
-                        all.map((m) =>
-                          m.id === file.id
-                            ? {
-                                ...m,
-                                status:
-                                  m.status === 'archived'
-                                    ? 'ready'
-                                    : 'archived',
-                              }
-                            : m,
-                        ),
-                      )
-                      recordActivity('media.archive_changed', file.id)
-                    },
-                  )
-                }}
-              >
-                {file.status === 'archived'
-                  ? c('استعادة', 'Restore')
-                  : c('أرشفة', 'Archive')}
-              </button>
-              <button
-                className="text-red-700"
-                onClick={() => {
-                  if (
-                    products.some(
-                      (p) =>
-                        p.mainMediaId === file.id ||
-                        p.mediaIds?.includes(file.id),
-                    )
-                  ) {
-                    setMessage(
-                      c(
-                        'لا يمكن حذف ملف مستخدم بمنتج.',
-                        'Cannot delete media used by a product.',
-                      ),
-                    )
-                    return
-                  }
-                  confirm(
-                    c('إزالة الملف من المعاينة؟', 'Remove this local file?'),
-                    () => {
-                      setMedia((all) => all.filter((m) => m.id !== file.id))
-                      URL.revokeObjectURL(file.url)
-                      recordActivity('media.deleted', file.id)
-                    },
-                  )
-                }}
-              >
-                {c('حذف', 'Delete')}
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-      {!rows.length && (
-        <EmptyState
-          title={c('لا توجد ملفات محلية', 'No local files')}
-          description={c(
-            'اختر ملفًا لمعاينته وربطه بالمنتجات.',
-            'Select a file to preview and link it to products.',
-          )}
-        />
-      )}
-      <h2 className="mb-5 mt-10 text-xl font-bold">
-        {c('صور المشروع', 'Project images')}
-      </h2>
-      <div className="grid gap-5 sm:grid-cols-3">
-        {categories.map((cat) => (
-          <div className="panel bg-white" key={cat.id}>
-            <Image
-              src={cat.image}
-              alt={c(cat.name.ar, cat.name.en)}
-              width={300}
-              height={220}
-              className="mb-4 aspect-video w-full rounded-lg object-cover"
-            />
-            <p>{c(cat.name.ar, cat.name.en)}</p>
-          </div>
-        ))}
-      </div>
-      {preview && (
-        <PreviewDialog
-          close={() => setPreview(null)}
-          label={c('معاينة الملف', 'File preview')}
-        >
-          {media.find((m) => m.id === preview)?.mime === 'application/pdf' ? (
-            <iframe
-              className="h-[65vh] w-full"
-              src={media.find((m) => m.id === preview)?.url}
-              title={c('معاينة PDF محلي', 'Local PDF preview')}
-            />
-          ) : (
-            <img
-              className="max-h-[65vh] w-full object-contain"
-              src={media.find((m) => m.id === preview)?.url}
-              alt={media.find((m) => m.id === preview)?.name}
-            />
-          )}
-        </PreviewDialog>
-      )}
-    </>
-  )
-}
 export function SettingsWorkspace() {
   const c = useCopy()
-  const { resources, setResources, recordActivity } = useDemo()
-  const initial = resources.settings?.[0] || {
-    id: 'company',
-    nameAr: company.name.ar,
-    nameEn: company.name.en,
-    email: company.email,
-    mobile: phones.mobile.display,
-    office: phones.office.display,
-    branchPhone: phones.branch.display,
-    fax: phones.fax.display,
-    whatsapp: '201004998655',
-    supportAr: company.support.ar,
-    supportEn: company.support.en,
-    hqAr: addresses.hq.ar,
-    hqEn: addresses.hq.en,
-    branchAr: addresses.branch.ar,
-    branchEn: addresses.branch.en,
-    storesAr: addresses.stores.ar,
-    storesEn: addresses.stores.en,
-    hoursAr: '',
-    hoursEn: '',
-    replyTimeAr: '',
-    replyTimeEn: '',
-    currency: 'EGP',
+  const { lang } = useLanguage()
+
+  const settingsQuery = useLiveQuery(
+    '/admin/settings?page=1&pageSize=1',
+    async () =>
+      (await api<CompanySettingsRecord[]>('/admin/settings?page=1&pageSize=1'))
+        .data,
+  )
+
+  const current = settingsQuery.data?.[0] || null
+
+  const [nameAr, setNameAr] = useState('')
+  const [nameEn, setNameEn] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [whatsapp, setWhatsapp] = useState('')
+  const [supportAr, setSupportAr] = useState('')
+  const [supportEn, setSupportEn] = useState('')
+  const [responseTargetAr, setResponseTargetAr] = useState('')
+  const [responseTargetEn, setResponseTargetEn] = useState('')
+  const [initializedKey, setInitializedKey] = useState('')
+
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  useEffect(() => {
+    if (current && initializedKey !== `${current.id}:${current.version}`) {
+      setNameAr(current.name?.ar || '')
+      setNameEn(current.name?.en || '')
+      setEmail(current.email || '')
+      setPhone(current.phone || '')
+      setWhatsapp(current.whatsapp || '')
+      setSupportAr(current.support?.ar || '')
+      setSupportEn(current.support?.en || '')
+      setResponseTargetAr(current.responseTarget?.ar || '')
+      setResponseTargetEn(current.responseTarget?.en || '')
+      setInitializedKey(`${current.id}:${current.version}`)
+    }
+  }, [current, initializedKey])
+
+  if (settingsQuery.isLoading) return <LoadingState />
+  if (settingsQuery.error) {
+    return (
+      <ErrorState
+        error={settingsQuery.error}
+        onRetry={() => void settingsQuery.refresh()}
+      />
+    )
   }
-  const [draft, setDraft] = useState<ResourceRow>(initial)
-  const [baseline, setBaseline] = useState(JSON.stringify(initial))
-  const [message, setMessage] = useState('')
-  const [tab, setTab] = useState('company')
-  useUnsavedChanges(JSON.stringify(draft) !== baseline)
-  const tabs = [
-    { id: 'company', label: c('الشركة والتواصل', 'Company & contact') },
-    { id: 'locations', label: c('الفروع وساعات العمل', 'Locations & hours') },
-    { id: 'defaults', label: c('القيم الافتراضية', 'Defaults') },
-  ]
-  const fields =
-    tab === 'company'
-      ? [
-          ['nameAr', 'الاسم عربي', 'Arabic name'],
-          ['nameEn', 'الاسم إنجليزي', 'English name'],
-          ['email', 'البريد العام', 'Public email'],
-          ['mobile', 'الموبايل', 'Mobile'],
-          ['office', 'هاتف الإدارة', 'Office phone'],
-          ['branchPhone', 'هاتف الفرع', 'Branch phone'],
-          ['fax', 'فاكس', 'Fax'],
-          ['whatsapp', 'واتساب دولي', 'International WhatsApp'],
-          ['supportAr', 'الدعم الفني عربي', 'Arabic support name'],
-          ['supportEn', 'الدعم الفني إنجليزي', 'English support name'],
-        ]
-      : tab === 'locations'
-        ? [
-            ['hqAr', 'عنوان الإدارة عربي', 'Arabic HQ'],
-            ['hqEn', 'عنوان الإدارة إنجليزي', 'English HQ'],
-            ['branchAr', 'عنوان الفرع عربي', 'Arabic branch'],
-            ['branchEn', 'عنوان الفرع إنجليزي', 'English branch'],
-            ['storesAr', 'المخازن عربي', 'Arabic warehouses'],
-            ['storesEn', 'المخازن إنجليزي', 'English warehouses'],
-            ['hoursAr', 'ساعات العمل عربي', 'Arabic opening hours'],
-            ['hoursEn', 'ساعات العمل إنجليزي', 'English opening hours'],
-          ]
-        : [
-            ['replyTimeAr', 'مدة الرد عربي', 'Arabic response target'],
-            ['replyTimeEn', 'مدة الرد إنجليزي', 'English response target'],
-          ]
+
+  async function handleSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setFeedback('')
+    setErrorMsg('')
+    try {
+      const payload = {
+        name: { ar: nameAr.trim(), en: nameEn.trim() },
+        email: email.trim(),
+        phone: phone.trim(),
+        whatsapp: whatsapp.trim() || null,
+        support: { ar: supportAr.trim(), en: supportEn.trim() },
+        currency: 'EGP',
+        timezone: 'Africa/Cairo',
+        responseTarget: {
+          ar: responseTargetAr.trim(),
+          en: responseTargetEn.trim(),
+        },
+      }
+      await saveResource<CompanySettingsRecord>(
+        '/admin/settings',
+        payload,
+        current?.id,
+        current?.version,
+      )
+      invalidateLiveQueries('/admin/settings')
+      invalidateLiveQueries('/public/bootstrap')
+      await settingsQuery.refresh()
+      setFeedback(
+        c(
+          'تم حفظ إعدادات الشركة وتحديث الموقع العام.',
+          'Company settings saved and public website refreshed.',
+        ),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <>
+    <form onSubmit={handleSave}>
       <div className="admin-heading">
         <div>
-          <h1>{c('إعدادات الموقع', 'Site settings')}</h1>
+          <h1>{c('إعدادات الشركة العامة', 'Company Settings')}</h1>
           <p>
             {c(
-              'تعديلات محلية على بيانات الشركة؛ لا تضع مفاتيح أو بيانات سرية.',
-              'Local company settings; do not enter secrets or API keys.',
+              'البيانات الرسمية للشركة وقنوات التواصل والمنطقة الزمنية المعتمدة (Africa/Cairo).',
+              'Official company profile, contact channels and Africa/Cairo operational settings.',
             )}
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/locations" className="btn-outline">
+            {c('إدارة الفروع والمخازن', 'Manage locations')}
+          </Link>
+          <button type="submit" disabled={busy} className="btn-primary">
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Check className="size-4" />
+            )}
+            {c('حفظ الإعدادات', 'Save settings')}
+          </button>
+        </div>
       </div>
-      <form
-        className="panel space-y-6 bg-white"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (
-            !draft.nameAr.trim() ||
-            !draft.nameEn.trim() ||
-            !/^\S+@\S+\.\S+$/.test(draft.email) ||
-            !/^\d{8,15}$/.test(draft.whatsapp) ||
-            !draft.mobile.trim() ||
-            ['mobile', 'office', 'branchPhone', 'fax'].some(
-              (key) =>
-                draft[key] && !/^\+\d{8,15}$/.test(phoneE164(draft[key])),
-            )
-          ) {
-            setMessage(
-              c(
-                'راجع الاسم باللغتين والبريد والهواتف ورقم واتساب الدولي.',
-                'Check bilingual names, email, phone numbers and international WhatsApp number.',
-              ),
-            )
-            return
-          }
-          setResources((all) => ({ ...all, settings: [draft] }))
-          setBaseline(JSON.stringify(draft))
-          recordActivity('settings.saved', 'company')
-          setMessage(
-            c('تم تطبيق إعدادات المعاينة.', 'Preview settings applied.'),
-          )
-        }}
-      >
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          items={tabs}
-          label={c('الإعدادات', 'Settings')}
-        />
-        <div
-          role="tabpanel"
-          id={`panel-${tab}`}
-          className="grid gap-5 md:grid-cols-2"
-        >
-          {fields.map(([key, ar, en]) => (
-            <Field key={key} label={c(ar, en)}>
-              <input
-                className="control"
-                maxLength={500}
-                type={key === 'email' ? 'email' : 'text'}
-                value={draft[key] || ''}
-                onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
-              />
-            </Field>
-          ))}
-          {tab === 'defaults' && (
-            <>
-              <Field label={c('العملة', 'Currency')}>
-                <select
-                  className="control"
-                  value={draft.currency}
-                  onChange={(e) =>
-                    setDraft({ ...draft, currency: e.target.value })
-                  }
-                >
-                  {['EGP', 'USD', 'EUR'].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label={c('المنطقة الزمنية', 'Timezone')}>
-                <input className="control" readOnly value="Africa/Cairo" />
-              </Field>
-            </>
-          )}
-        </div>
-        <div className="flex gap-3">
-          <button className="btn-primary">
-            {c('تطبيق في المعاينة', 'Apply to preview')}
-          </button>
-          <button
-            type="button"
-            className="btn-outline"
-            onClick={() => {
-              setDraft(initial)
-              setBaseline(JSON.stringify(initial))
-            }}
-          >
-            {c('إلغاء التعديلات', 'Discard changes')}
-          </button>
-        </div>
-        <p role="status" className="text-primary">
-          {message}
+
+      {feedback && (
+        <p role="status" className="mb-5 flex items-center gap-2 text-sm font-medium text-primary">
+          <CheckCircle2 className="size-4 shrink-0" />
+          {feedback}
         </p>
-      </form>
-    </>
+      )}
+      {errorMsg && (
+        <p role="alert" className="mb-5 text-sm font-medium text-red-700">
+          {errorMsg}
+        </p>
+      )}
+
+      <div className="panel grid gap-5 bg-white md:grid-cols-2">
+        <Field label={c('اسم الشركة بالعربية', 'Company name (Arabic)')}>
+          <input
+            required
+            className="control"
+            value={nameAr}
+            onChange={(e) => setNameAr(e.target.value)}
+          />
+        </Field>
+        <Field label={c('اسم الشركة بالإنجليزية', 'Company name (English)')}>
+          <input
+            required
+            dir="ltr"
+            className="control"
+            value={nameEn}
+            onChange={(e) => setNameEn(e.target.value)}
+          />
+        </Field>
+        <Field label={c('البريد الإلكتروني الرسمي', 'Official email')}>
+          <input
+            type="email"
+            required
+            dir="ltr"
+            className="control"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label={c('هاتف المبيعات الرئيسي', 'Primary sales phone')}>
+          <input
+            required
+            dir="ltr"
+            className="control"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+        </Field>
+        <Field label={c('رقم واتساب الأعمال (اختياري)', 'WhatsApp number (optional)')}>
+          <input
+            dir="ltr"
+            className="control"
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+          />
+        </Field>
+        <Field label={c('العملة والمنطقة الزمنية', 'Currency & Timezone')}>
+          <input
+            disabled
+            dir="ltr"
+            className="control bg-muted/50 font-mono"
+            value="EGP · Africa/Cairo"
+          />
+        </Field>
+        <Field label={c('نبذة الدعم بالعربية', 'Support note (Arabic)')}>
+          <input
+            className="control"
+            value={supportAr}
+            onChange={(e) => setSupportAr(e.target.value)}
+          />
+        </Field>
+        <Field label={c('نبذة الدعم بالإنجليزية', 'Support note (English)')}>
+          <input
+            dir="ltr"
+            className="control"
+            value={supportEn}
+            onChange={(e) => setSupportEn(e.target.value)}
+          />
+        </Field>
+        <Field label={c('مستهدف سرعة الرد بالعربية', 'Response target (Arabic)')}>
+          <input
+            className="control"
+            placeholder="خلال يوم عمل واحد"
+            value={responseTargetAr}
+            onChange={(e) => setResponseTargetAr(e.target.value)}
+          />
+        </Field>
+        <Field label={c('مستهدف سرعة الرد بالإنجليزية', 'Response target (English)')}>
+          <input
+            dir="ltr"
+            className="control"
+            placeholder="Within one business day"
+            value={responseTargetEn}
+            onChange={(e) => setResponseTargetEn(e.target.value)}
+          />
+        </Field>
+      </div>
+    </form>
   )
 }

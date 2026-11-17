@@ -7,37 +7,49 @@ import { Globe, Menu, Phone, ShoppingBag, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useDemo } from '@/components/demo/demo-provider'
 import { Logo } from '@/components/logo'
-import { useSiteInfo } from '@/components/demo/content-preview'
-import { phones } from '@/lib/site'
+import {
+  usePublicNavigation,
+  useSiteInfo,
+} from '@/components/demo/content-preview'
 import { cn } from '@/lib/utils'
 
-const links = [
+const DEFAULT_HEADER_LINKS = [
   ['/products', 'المنتجات', 'Products'],
   ['/brands', 'العلامات التجارية', 'Brands'],
   ['/sectors', 'القطاعات', 'Sectors'],
   ['/about', 'عن الشركة', 'About'],
   ['/contact', 'تواصل معنا', 'Contact'],
 ] as const
+
 export function Header() {
   const { phones } = useSiteInfo()
   const { lang, toggle } = useLanguage()
-  const { cart, resources } = useDemo()
-  const links = resources.navigation
-    .filter((r) => r.area === 'header' && r.status === 'published')
+  const { cart } = useDemo()
+  const { data: navItems = [] } = usePublicNavigation()
+
+  const headerRows = navItems
+    .filter((r) => r.area === 'header')
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-    .map((r) => [r.href, r.nameAr, r.nameEn])
+
+  const links: ReadonlyArray<readonly [string, string, string]> =
+    headerRows.length > 0
+      ? headerRows.map((r) => [r.path, r.name.ar, r.name.en] as const)
+      : DEFAULT_HEADER_LINKS
+
   const rawPathname = usePathname()
   const pathname = rawPathname.replace(/^\/(ar|en)(?=\/|$)/, '') || '/'
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const c = (ar: string, en: string) => (lang === 'ar' ? ar : en)
   const solid = pathname !== '/' || scrolled || open
+
   useEffect(() => {
     const scroll = () => setScrolled(window.scrollY > 32)
     scroll()
     window.addEventListener('scroll', scroll, { passive: true })
     return () => window.removeEventListener('scroll', scroll)
   }, [])
+
   useEffect(() => {
     const close = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -45,9 +57,11 @@ export function Header() {
     document.addEventListener('keydown', close)
     return () => document.removeEventListener('keydown', close)
   }, [])
+
   useEffect(() => {
     setOpen(false)
   }, [pathname])
+
   return (
     <>
       <a href="#main-content" className="skip-link">
@@ -114,7 +128,7 @@ export function Header() {
             >
               <ul className="flex gap-6 lg:gap-9">
                 {links.map(([href, ar, en]) => (
-                  <li key={href}>
+                  <li key={`${href}-${en}`}>
                     <Link
                       href={href}
                       aria-current={
@@ -141,7 +155,7 @@ export function Header() {
           >
             <ul>
               {links.map(([href, ar, en]) => (
-                <li key={href}>
+                <li key={`${href}-${en}`}>
                   <Link className="block py-3" href={href}>
                     {c(ar, en)}
                   </Link>
