@@ -141,12 +141,26 @@ const paths: Record<string, unknown> = {
   },
   '/admin/me': {
     get: operation(
-      'Current active staff identity; privileged roles require aal2',
+      'Current active admin identity; requires MFA (aal2)',
       true,
     ),
   },
+  '/admin/jobs': {
+    post: operation(
+      'Drain pending background jobs and optionally retry quotation PDF or quarantined media scan',
+      true,
+      {
+        type: 'object',
+        properties: {
+          quotationId: { type: 'string', format: 'uuid' },
+          mediaId: { type: 'string', format: 'uuid' },
+        },
+        additionalProperties: false,
+      },
+    ),
+  },
   '/admin/reports': {
-    get: operation('Sales report scoped to assigned requests for agents', true),
+    get: operation('Sales and request summary report', true),
   },
   '/admin/exports': {
     post: operation('Audited CSV export, at most 1,000 records', true),

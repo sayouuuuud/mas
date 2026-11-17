@@ -3,7 +3,14 @@ import { z } from 'zod'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requestScope } from './auth'
 import { authController } from './auth-controller'
-import { response, failure, readBody, originGuard, limit } from './http'
+import {
+  response,
+  failure,
+  readBody,
+  originGuard,
+  limit,
+  resolveTrustedOrigin,
+} from './http'
 import { BackendService, productSchema, variantSchema } from './services'
 import {
   resourceSchemas,
@@ -18,7 +25,7 @@ import {
   type ListInput,
 } from './contracts'
 import { ApiError, missing, assert, unavailable } from './errors'
-import { requireActor, has } from './policy'
+import { requireActor } from './policy'
 import type { Filters } from './repository'
 import { secret } from './environment'
 
@@ -43,6 +50,7 @@ const mapping: Record<string, Resource> = {
   team: 'profiles',
   'audit-log': 'audit_logs',
 }
+
 function normalizeFilters(input: ListInput): Filters {
   const split = (v: string | undefined) =>
     v ? v.split(',').filter(Boolean).slice(0, 20) : undefined
@@ -55,6 +63,7 @@ function normalizeFilters(input: ListInput): Filters {
     pack: input.pack ? [input.pack] : undefined,
   }
 }
+
 function filters(request: NextRequest): Filters {
   return normalizeFilters(
     listing.parse(Object.fromEntries(request.nextUrl.searchParams)),
@@ -67,6 +76,7 @@ const envelope = z
     data: z.record(z.string(), z.unknown()),
   })
   .strict()
+
 function page(result: { data: unknown[]; total: number }, query: Filters) {
   return response(result.data, 200, {
     page: query.page,
@@ -75,6 +85,7 @@ function page(result: { data: unknown[]; total: number }, query: Filters) {
     totalPages: Math.ceil(result.total / query.pageSize),
   })
 }
+
 function safeReference(row: Record<string, unknown>) {
   return Object.fromEntries(
     [
@@ -96,6 +107,7 @@ function safeReference(row: Record<string, unknown>) {
       .map((k) => [k, row[k]]),
   )
 }
+
 export async function handle(request: NextRequest, path: string[]) {
   let scope: ReturnType<typeof requestScope> | undefined
   try {
@@ -152,7 +164,12 @@ export async function handle(request: NextRequest, path: string[]) {
       root === 'internal'
     if (!known) throw missing()
     scope = requestScope(request)
-    if (method !== 'GET') originGuard(request, scope.config.origin)
+    if (method !== 'GET')
+      originGuard(
+        request,
+        scope.config.allowedOrigins || scope.config.origin,
+        scope.config.allowDevWorkspaceOrigin,
+      )
     if (root === 'auth')
       return scope.apply(await authController(request, path.slice(1), scope))
     const service = new BackendService(scope.repository)
@@ -225,10 +242,25 @@ export async function handle(request: NextRequest, path: string[]) {
     const actor = await scope.actor()
     requireActor(actor)
     if (part === 'me' && path.length === 2 && method === 'GET')
-      return scope.apply(response(actor))
+      return scope.apply(
+        response({
+          ...actor,
+          role: 'Admin',
+          mediaScannerConfigured: Boolean(
+            scope.config.scannerUrl &&
+              scope.config.scannerKey &&
+              scope.config.scannerKey.length >= 32,
+          ),
+          jobsConfigured: Boolean(
+            scope.config.jobSecret && scope.config.jobSecret.length >= 32,
+          ),
+        }),
+      )
+    if (part === 'jobs' && path.length === 2 && method === 'POST') {
+      const { adminJobsController } = await import('./jobs')
+      return scope.apply(await adminJobsController(request, scope, actor))
+    }
     if (part === 'reports' && path.length === 2 && method === 'GET') {
-      if (!has(actor, 'Sales Manager', 'Sales Agent'))
-        throw new ApiError(403, 'FORBIDDEN', 'Sales permissions are required.')
       return scope.apply(
         response(
           await scope.repository.rpc('mas_reports', {
@@ -240,7 +272,13 @@ export async function handle(request: NextRequest, path: string[]) {
     if (part === 'exports' && method === 'POST' && path.length === 2) {
       const input = z
         .object({
-          resource: z.enum(['products', 'quote_requests', 'contacts']),
+          resource: z.enum([
+            'products',
+            'quote_requests',
+            'contacts',
+            'inquiries',
+            'quotations',
+          ]),
           filters: listing.optional(),
         })
         .strict()
@@ -270,12 +308,6 @@ export async function handle(request: NextRequest, path: string[]) {
       method === 'POST' &&
       path.length === 3
     ) {
-      if (!has(actor, 'Catalog Manager'))
-        throw new ApiError(
-          403,
-          'FORBIDDEN',
-          'Catalog permissions are required.',
-        )
       const input = z
         .object({
           operation: z.enum(['archive', 'unpublish']),
@@ -314,8 +346,6 @@ export async function handle(request: NextRequest, path: string[]) {
       )
     }
     if (resource === 'profiles') {
-      if (!has(actor))
-        throw new ApiError(403, 'FORBIDDEN', 'Only the owner can manage staff.')
       if (method === 'POST' && !id) {
         const input = invitationInput.parse(await readBody(request))
         if (!scope.service) throw unavailable()
@@ -325,9 +355,10 @@ export async function handle(request: NextRequest, path: string[]) {
           actor,
           data: input,
         })
-        const result = await scope.service!.auth.admin.inviteUserByEmail(
+        const redirectOrigin = resolveTrustedOrigin(request, scope.config)
+        const result = await scope.service.auth.admin.inviteUserByEmail(
           input.email,
-          { redirectTo: `${scope.config.origin}/api/v1/auth/callback` },
+          { redirectTo: `${redirectOrigin}/api/v1/auth/callback` },
         )
         if (result.error || !result.data.user)
           throw new ApiError(
@@ -492,25 +523,39 @@ export async function handle(request: NextRequest, path: string[]) {
                 .enum(['sent', 'accepted', 'rejected', 'expired'])
                 .parse(input.status)
             : (action as 'issue' | 'revise')
-        return scope.apply(
-          response(
-            await service.quotationAction(
-              id,
-              input.version,
-              next,
-              input.reason,
-              input.channel,
-              actor,
-            ),
-            next === 'revise' ? 201 : 200,
-          ),
+        const updated = await service.quotationAction(
+          id,
+          input.version,
+          next,
+          input.reason,
+          input.channel,
+          actor,
         )
+        if (next === 'issue') {
+          try {
+            const { drainJobs } = await import('./jobs')
+            await drainJobs(scope, {
+              maxBatches: 6,
+              batchSize: 5,
+              timeBudgetMs: 20000,
+            })
+            const refreshed = await service.read(resource, id, actor)
+            return scope.apply(response(refreshed, 200))
+          } catch {
+            // Never lose an already-issued quotation when PDF generation is delayed or fails.
+            const latest = await service
+              .read(resource, id, actor)
+              .catch(() => updated)
+            return scope.apply(response(latest, 200))
+          }
+        }
+        return scope.apply(response(updated, next === 'revise' ? 201 : 200))
       }
       if (action === 'download' && method === 'GET') {
         const row = await service.read(resource, id, actor)
         assert(row.pdfPath && scope.service, 'The quotation PDF is not ready.')
-        const result = await scope
-          .service!.storage.from('sales-private')
+        const result = await scope.service.storage
+          .from('sales-private')
           .createSignedUrl(String(row.pdfPath), 60, { download: true })
         if (result.error)
           throw new ApiError(

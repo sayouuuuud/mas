@@ -1,12 +1,14 @@
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { AdminPage } from '@/components/admin/admin-page'
-import { initialProducts, initialRequests } from '@/lib/demo-data'
+
 export const metadata: Metadata = {
-  title: 'M.A.S | معاينة لوحة الإدارة',
+  title: 'M.A.S | لوحة الإدارة',
   robots: { index: false, follow: false },
 }
-const sections = [
+
+const SECTIONS = [
   'products',
   'categories',
   'brands',
@@ -17,16 +19,22 @@ const sections = [
   'quote-requests',
   'quotations',
   'customers',
+  'organizations',
   'inquiries',
   'content',
   'navigation',
+  'locations',
   'settings',
   'team',
   'audit-log',
   'reports',
   'login',
   'reset-password',
-]
+] as const
+
+const VALID_ID =
+  /^(?:new|[a-z0-9]+(?:-[a-z0-9]+)*|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
 export default async function Page({
   params,
 }: {
@@ -34,30 +42,34 @@ export default async function Page({
 }) {
   const { path = [] } = await params
   const [section, id] = path
-  if (path.length > 2 || (section && !sections.includes(section))) notFound()
-  if (id) {
-    const allow =
-      section === 'products'
-        ? id === 'new' ||
-          initialProducts.some((p) => p.id === id) ||
-          /^demo-\d+$/.test(id)
-        : section === 'quote-requests' || section === 'quotations'
-          ? initialRequests.some((r) => r.id === id) ||
-            /^DEMO-(RFQ|Q)-[0-9-]+$/.test(id)
-          : [
-              'categories',
-              'brands',
-              'sectors',
-              'attributes',
-              'units',
-              'customers',
-              'inquiries',
-              'content',
-              'navigation',
-              'team',
-            ].includes(section) && /^[a-z0-9-]+$/.test(id)
-    if (!allow) notFound()
+
+  if (
+    path.length > 2 ||
+    (section && !(SECTIONS as readonly string[]).includes(section))
+  ) {
+    notFound()
   }
 
-  return <AdminPage key={path.join('/')} path={path} />
+  if (id) {
+    if (
+      ['media', 'settings', 'audit-log', 'reports', 'login', 'reset-password'].includes(
+        section,
+      )
+    ) {
+      notFound()
+    }
+    if (!VALID_ID.test(id)) notFound()
+  }
+
+  return (
+    <Suspense
+      fallback={
+        <div className="p-12 text-center text-sm text-muted-foreground" role="status">
+          جارٍ تحميل مساحة الإدارة / Loading workspace…
+        </div>
+      }
+    >
+      <AdminPage key={path.join('/')} path={path} />
+    </Suspense>
+  )
 }

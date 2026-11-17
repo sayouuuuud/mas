@@ -9,8 +9,9 @@ import type { NextRequest, NextResponse } from 'next/server'
 import { configuration } from './environment'
 import { ApiError, unavailable } from './errors'
 import type { Actor } from './contracts'
-import { role } from './contracts'
+import { isAdminRole } from './policy'
 import { SupabaseRepository } from './supabase-repository'
+
 export function authFailure(
   error: { status?: number; name?: string },
   status: number,
@@ -25,11 +26,13 @@ export function authFailure(
     throw unavailable()
   throw new ApiError(status, code, message)
 }
+
 export type CookieChange = {
   name: string
   value: string
   options: CookieOptions
 }
+
 export function requestScope(request: NextRequest) {
   const config = configuration()
   const changes: CookieChange[] = []
@@ -48,6 +51,11 @@ export function requestScope(request: NextRequest) {
       c.value || '',
     ]),
   )
+  const secureCookie =
+    process.env.NODE_ENV === 'production' ||
+    request.nextUrl.protocol === 'https:' ||
+    request.headers.get('x-forwarded-proto') === 'https'
+
   const user = bearer
     ? createClient(config.url, config.key, {
         global: { headers: { Authorization: `Bearer ${bearer}` } },
@@ -70,7 +78,7 @@ export function requestScope(request: NextRequest) {
                   ...cookie.options,
                   path: '/',
                   httpOnly: true,
-                  secure: config.origin.startsWith('https:'),
+                  secure: secureCookie,
                   sameSite: 'lax',
                 },
               })
@@ -88,43 +96,53 @@ export function requestScope(request: NextRequest) {
       })
     : undefined
   const repository = new SupabaseRepository(user, service)
-  async function actor(): Promise<Actor> {
+
+  async function actor(): Promise<Actor & { displayName?: string }> {
     const { data, error } = await user.auth.getUser(bearer)
     if (error)
       authFailure(
         error,
         401,
         'UNAUTHENTICATED',
-        'Sign in with an active staff account.',
+        'Sign in with an active admin account.',
       )
     if (!data.user)
       throw new ApiError(
         401,
         'UNAUTHENTICATED',
-        'Sign in with an active staff account.',
+        'Sign in with an active admin account.',
       )
     const profile = await repository.rpc<{
       id: string
       active: boolean
       roles: string[]
+      displayName?: string
     }>('mas_actor', {})
     if (!profile?.active || profile.id !== data.user.id)
       throw new ApiError(
         401,
         'UNAUTHENTICATED',
-        'Sign in with an active staff account.',
+        'Sign in with an active admin account.',
       )
-    const roles = profile.roles.map((value) => role.parse(value))
+    // Never elevate non-admin accounts automatically.
+    if (!Array.isArray(profile.roles) || !isAdminRole(profile.roles))
+      throw new ApiError(
+        403,
+        'FORBIDDEN',
+        'Admin permissions are required.',
+      )
     const level = await user.auth.mfa.getAuthenticatorAssuranceLevel()
     if (level.error)
       throw new ApiError(401, 'UNAUTHENTICATED', 'Session verification failed.')
     return {
       id: data.user.id,
       active: true,
-      roles,
+      roles: ['Owner'],
       aal: level.data.currentLevel === 'aal2' ? 'aal2' : 'aal1',
+      ...(profile.displayName ? { displayName: profile.displayName } : {}),
     }
   }
+
   function apply(response: NextResponse) {
     for (const change of changes)
       response.cookies.set(change.name, change.value, change.options)
@@ -132,6 +150,8 @@ export function requestScope(request: NextRequest) {
     response.headers.set('Vary', 'Cookie, Authorization')
     return response
   }
+
   return { config, user, service, repository, actor, apply, bearer }
 }
+
 export type RequestScope = ReturnType<typeof requestScope>

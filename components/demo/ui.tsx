@@ -2,12 +2,14 @@
 
 import { PublicLink as Link } from '@/components/demo/public-link'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  FlaskConical,
   Inbox,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import {
@@ -18,36 +20,73 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react'
+import { formatApiError } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 
 export function useCopy() {
   const { lang } = useLanguage()
   return (ar: string, en: string) => (lang === 'ar' ? ar : en)
 }
+
 export function DirectionArrow({ className }: { className?: string }) {
   const { lang } = useLanguage()
   const Icon = lang === 'ar' ? ArrowLeft : ArrowRight
   return <Icon className={className || 'size-4'} aria-hidden />
 }
-export function DemoNotice({ admin = false }: { admin?: boolean }) {
+
+export function DemoNotice(_props: { admin?: boolean }) {
+  return null
+}
+
+export function LoadingState({ label }: { label?: string }) {
   const c = useCopy()
   return (
-    <div className="demo-notice">
-      <FlaskConical className="size-4 shrink-0" aria-hidden />
-      <p>
-        {admin
-          ? c(
-              'معاينة واجهات الإدارة — بيانات تجريبية. التعديلات مؤقتة، ولا توجد مصادقة أو عمليات حفظ على خادم.',
-              'Admin interface preview — sample data. Changes are temporary; authentication and server storage are not connected.',
-            )
-          : c(
-              'كتالوج تجريبي لمعاينة الواجهة — المنتجات والمواصفات للتوضيح وليست بيانات بيع معتمدة.',
-              'Demo catalog — products and specifications illustrate the interface and are not approved sales data.',
-            )}
+    <div
+      role="status"
+      aria-live="polite"
+      className="panel flex flex-col items-center justify-center gap-3 py-12 text-center"
+    >
+      <Loader2 className="size-7 animate-spin text-primary" aria-hidden />
+      <p className="text-sm text-muted-foreground">
+        {label || c('جارٍ تحميل البيانات…', 'Loading data…')}
       </p>
     </div>
   )
 }
+
+export function ErrorState({
+  error,
+  onRetry,
+  title,
+}: {
+  error: unknown
+  onRetry?: () => void
+  title?: string
+}) {
+  const { lang } = useLanguage()
+  const c = useCopy()
+  return (
+    <div role="alert" className="empty-state border-red-200 bg-red-50/40">
+      <AlertTriangle
+        className="mx-auto mb-4 size-10 text-red-700"
+        aria-hidden
+      />
+      <h2 className="text-xl font-bold text-foreground">
+        {title || c('تعذر تحميل البيانات', 'Unable to load data')}
+      </h2>
+      <p className="mx-auto my-3 max-w-lg text-sm leading-7 text-red-800">
+        {formatApiError(error, lang)}
+      </p>
+      {onRetry && (
+        <button type="button" className="btn-outline mt-2" onClick={onRetry}>
+          <RefreshCw className="size-4" />
+          {c('إعادة المحاولة', 'Retry')}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function PageIntro({
   eyebrow,
   title,
@@ -93,6 +132,7 @@ export function PageIntro({
     </section>
   )
 }
+
 export function EmptyState({
   title,
   description,
@@ -113,6 +153,7 @@ export function EmptyState({
     </div>
   )
 }
+
 export function Badge({
   children,
   tone = 'neutral',
@@ -124,6 +165,7 @@ export function Badge({
     <span className={cn('status-badge', `status-${tone}`)}>{children}</span>
   )
 }
+
 export function Field({
   label,
   children,

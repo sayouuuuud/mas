@@ -15,7 +15,7 @@ import {
 import type { Filters, Repository } from './repository'
 import { ApiError, assert, conflict, missing } from './errors'
 import {
-  has,
+  isAdminRole,
   requireActor,
   requestPermission,
   resourcePermission,
@@ -29,6 +29,7 @@ export {
 import { productInput as productSchema, requestItem } from './contracts'
 export type ProductData = z.infer<typeof productSchema>
 const permit = resourcePermission
+
 export function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input)
   if (!result.success) {
@@ -44,6 +45,7 @@ export function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   }
   return result.data
 }
+
 export function stableHash(value: unknown): string {
   const canonical = (v: unknown): unknown =>
     Array.isArray(v)
@@ -59,6 +61,7 @@ export function stableHash(value: unknown): string {
     .update(JSON.stringify(canonical(value)))
     .digest('hex')
 }
+
 export function safeProduct(row: Entity) {
   if (row.status !== 'published') throw missing()
   const allowed = [
@@ -109,20 +112,24 @@ export function safeProduct(row: Entity) {
     )
   return result
 }
+
 export class BackendService {
   constructor(
     readonly repository: Repository,
     readonly now = () => new Date(),
   ) {}
+
   async catalog(filters: Filters) {
     const result = await this.repository.list('products', filters)
     return { ...result, data: result.data.map(safeProduct) }
   }
+
   async product(id: string) {
     const row = await this.repository.get('products', id)
     if (!row) throw missing()
     return safeProduct(row)
   }
+
   async read(resource: Resource, id: string, actor: Actor) {
     resourcePermission(actor, resource, false)
     const row = await this.repository.get(resource, id, actor)
@@ -140,15 +147,12 @@ export class BackendService {
       )
     return row
   }
+
   async list(resource: Resource, filters: Filters, actor: Actor) {
     resourcePermission(actor, resource, false)
-    if (
-      ['quote_requests', 'inquiries'].includes(resource) &&
-      !has(actor, 'Sales Manager')
-    )
-      filters = { ...filters, assignedTo: actor.id }
     return this.repository.list(resource, filters, actor)
   }
+
   async save(
     resource: keyof typeof resourceSchemas | 'products',
     input: unknown,
@@ -203,17 +207,24 @@ export class BackendService {
       actor,
     })
   }
+
   async remove(resource: Resource, id: string, version: number, actor: Actor) {
     permit(actor, resource)
     assert(
       resource === 'products' || resource in resourceSchemas,
       'This resource cannot be deleted.',
     )
-    await this.read(resource, id, actor)
+    const row = await this.read(resource, id, actor)
     assert(
       Number.isInteger(version) && version > 0,
       'An expected version is required.',
     )
+    if (resource === 'products') {
+      assert(
+        row.status === 'draft',
+        'Only draft products without linked requests can be deleted; archive published products instead.',
+      )
+    }
     return this.repository.command({
       resource,
       action: 'delete',
@@ -223,6 +234,7 @@ export class BackendService {
       actor,
     })
   }
+
   async publication(
     resource: 'products' | 'categories' | 'brands' | 'sectors' | 'content',
     id: string,
@@ -253,6 +265,7 @@ export class BackendService {
       actor,
     })
   }
+
   async validateProduct(product: ProductData, actor: Actor, id?: string) {
     assert(
       product.name.ar &&
@@ -412,6 +425,7 @@ export class BackendService {
     for (const variant of product.variants.filter((v) => v.active))
       verify(variant.specifications, 'variant')
   }
+
   async submit(kind: 'request' | 'inquiry', input: unknown, key: string) {
     assert(
       /^[a-zA-Z0-9_-]{16,128}$/.test(key),
@@ -491,6 +505,7 @@ export class BackendService {
     }
     return this.repository.submit(kind, payload, key, stableHash(body))
   }
+
   async assign(
     resource: 'quote_requests' | 'inquiries',
     id: string,
@@ -499,12 +514,6 @@ export class BackendService {
     actor: Actor,
   ) {
     requireActor(actor)
-    if (!has(actor, 'Sales Manager'))
-      throw new ApiError(
-        403,
-        'FORBIDDEN',
-        'Only a sales manager can assign requests.',
-      )
     await this.read(resource, id, actor)
     if (assignedTo) {
       const target = await this.repository.get('profiles', assignedTo, actor)
@@ -512,10 +521,8 @@ export class BackendService {
         target &&
           target.active === true &&
           Array.isArray(target.roles) &&
-          target.roles.some((r) =>
-            ['Owner', 'Sales Manager', 'Sales Agent'].includes(r),
-          ),
-        'Assign an active sales employee.',
+          isAdminRole(target.roles),
+        'Assign an active admin account.',
       )
     }
     return this.repository.command({
@@ -527,6 +534,7 @@ export class BackendService {
       actor,
     })
   }
+
   async transitionRequest(
     id: string,
     version: number,
@@ -551,15 +559,6 @@ export class BackendService {
       'Invalid request status transition.',
     )
     if (
-      ['won', 'lost', 'cancelled'].includes(row.status) &&
-      !has(actor, 'Sales Manager')
-    )
-      throw new ApiError(
-        403,
-        'FORBIDDEN',
-        'Only a sales manager can reopen a closed request.',
-      )
-    if (
       ['won', 'lost', 'cancelled', 'awaiting_customer'].includes(next) ||
       ['won', 'lost', 'cancelled'].includes(row.status)
     )
@@ -568,7 +567,7 @@ export class BackendService {
         'A reason or approval reference is required.',
       )
     if (next === 'assigned')
-      assert(row.assignedTo, 'Assign a sales employee first.')
+      assert(row.assignedTo, 'Assign an admin account first.')
     if (next === 'quoted') {
       const result = await this.repository.list(
         'quotations',
@@ -577,10 +576,11 @@ export class BackendService {
       )
       assert(
         result.data.some(
-          (row) =>
-            row.status === 'sent' ||
-            row.delivery ||
-            ['accepted', 'rejected'].includes(String(row.status)),
+          (q) =>
+            q.requestId === id &&
+            (q.status === 'sent' ||
+              Boolean(q.delivery) ||
+              ['accepted', 'rejected'].includes(String(q.status))),
         ),
         'Record delivery of an issued quotation first.',
       )
@@ -594,6 +594,7 @@ export class BackendService {
       actor,
     })
   }
+
   async quotation(
     requestId: string,
     input: unknown,
@@ -649,6 +650,7 @@ export class BackendService {
       actor,
     })
   }
+
   async quotationAction(
     id: string,
     version: number,
@@ -711,6 +713,7 @@ export class BackendService {
       actor,
     })
   }
+
   async note(
     resource: 'quote_requests' | 'inquiries',
     id: string,
@@ -732,6 +735,7 @@ export class BackendService {
       actor,
     })
   }
+
   async transitionInquiry(
     id: string,
     version: number,
@@ -753,21 +757,12 @@ export class BackendService {
       'Invalid inquiry status transition.',
     )
     if (
-      ['resolved', 'spam'].includes(String(row.status)) &&
-      !has(actor, 'Sales Manager')
-    )
-      throw new ApiError(
-        403,
-        'FORBIDDEN',
-        'Only a sales manager may reopen a closed inquiry.',
-      )
-    if (
       ['resolved', 'spam'].includes(next) ||
       ['resolved', 'spam'].includes(String(row.status))
     )
       assert(reason.trim().length >= 3, 'Record a reason.')
     if (next === 'assigned')
-      assert(row.assignedTo, 'Assign a sales employee first.')
+      assert(row.assignedTo, 'Assign an admin account first.')
     return this.repository.command({
       resource: 'inquiries',
       action: 'transition',
@@ -777,6 +772,7 @@ export class BackendService {
       actor,
     })
   }
+
   async convertInquiry(
     id: string,
     version: number,

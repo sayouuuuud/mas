@@ -6,8 +6,9 @@ import type { RequestScope } from './auth'
 import type { Actor } from './contracts'
 import { mediaInput, localized, listing } from './contracts'
 import { readBody, response, limit } from './http'
-import { ApiError, assert, missing, unavailable } from './errors'
-import { has } from './policy'
+import { assert, missing, unavailable } from './errors'
+import { requireActor } from './policy'
+import { drainJobs } from './jobs'
 
 export async function mediaController(
   request: NextRequest,
@@ -15,26 +16,29 @@ export async function mediaController(
   actor: Actor,
   path: string[],
 ) {
-  if (!has(actor, 'Catalog Manager', 'Content Editor'))
-    throw new ApiError(403, 'FORBIDDEN', 'Media permissions are required.')
+  requireActor(actor)
   if (!scope.service) throw unavailable()
   const [id, action] = path
   if (request.method === 'GET' && !id) {
     const input = listing.parse(
       Object.fromEntries(request.nextUrl.searchParams),
     )
-    return response(
-      await scope.repository.list(
-        'media',
-        {
-          page: input.page,
-          pageSize: input.pageSize,
-          q: input.q,
-          status: input.status,
-        },
-        actor,
-      ),
+    const result = await scope.repository.list(
+      'media',
+      {
+        page: input.page,
+        pageSize: input.pageSize,
+        q: input.q,
+        status: input.status,
+      },
+      actor,
     )
+    return response(result.data, 200, {
+      page: input.page,
+      pageSize: input.pageSize,
+      total: result.total,
+      totalPages: Math.ceil(result.total / input.pageSize),
+    })
   }
   if (request.method === 'POST' && !id) {
     await limit(scope, request, `media:${actor.id}`, 30, 600, actor.id)
@@ -91,18 +95,32 @@ export async function mediaController(
       row.status === 'uploading',
       'This upload has already been completed.',
     )
-    // A worker checks actual bytes, dimensions and malware before anything becomes public.
-    return response(
-      await scope.repository.command({
-        resource: 'media',
-        action: 'complete_upload',
-        id,
-        version: input.version,
-        data: {},
-        actor,
-      }),
-      202,
-    )
+    const queued = await scope.repository.command({
+      resource: 'media',
+      action: 'complete_upload',
+      id,
+      version: input.version,
+      data: {},
+      actor,
+    })
+    if (
+      scope.config.scannerUrl &&
+      scope.config.scannerKey &&
+      scope.config.scannerKey.length >= 32
+    ) {
+      try {
+        await drainJobs(scope, {
+          maxBatches: 3,
+          batchSize: 3,
+          timeBudgetMs: 18000,
+        })
+        const updated = await scope.repository.get('media', id, actor)
+        if (updated) return response(updated, updated.status === 'ready' ? 200 : 202)
+      } catch {
+        // Keep the durable quarantined state when background scanning fails.
+      }
+    }
+    return response(queued, 202)
   }
   if (request.method === 'PATCH' && !action) {
     const input = z
@@ -129,16 +147,24 @@ export async function mediaController(
       .object({ version: z.number().int().positive() })
       .strict()
       .parse(await readBody(request))
-    return response(
-      await scope.repository.command({
-        resource: 'media',
-        action: 'delete',
-        id,
-        version: input.version,
-        data: {},
-        actor,
-      }),
-    )
+    const deleted = await scope.repository.command({
+      resource: 'media',
+      action: 'delete',
+      id,
+      version: input.version,
+      data: {},
+      actor,
+    })
+    try {
+      await drainJobs(scope, {
+        maxBatches: 2,
+        batchSize: 3,
+        timeBudgetMs: 8000,
+      })
+    } catch {
+      // Deletion job stays queued in mas.jobs if storage cleanup is delayed.
+    }
+    return response(deleted)
   }
   throw missing()
 }

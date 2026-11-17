@@ -1,26 +1,45 @@
 'use client'
+
 import { useState } from 'react'
-import Link from 'next/link'
-import { useDemo } from '@/components/demo/demo-provider'
-import { Badge, EmptyState, Field, useCopy } from '@/components/demo/ui'
+import { Loader2, Play } from 'lucide-react'
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  useCopy,
+} from '@/components/demo/ui'
+import { useLanguage } from '@/components/language-provider'
 import { AdminLogin, AdminShell } from './admin-shell'
 import { ProductWorkspace } from './products-workspace'
-import { Dashboard, RequestsPage } from './sales-workspace'
+import { Dashboard, InquiriesWorkspace, RequestsPage } from './sales-workspace'
 import { QuotationsWorkspace } from './quotations-workspace'
 import {
   MediaWorkspace,
   ResourceWorkspace,
   SettingsWorkspace,
 } from './resources'
+import { Pagination } from './frontend-tools'
+import {
+  api,
+  buildApiPath,
+  downloadServerExport,
+  formatApiError,
+} from '@/lib/api-client'
+import { invalidateLiveQueries, useLiveQuery } from '@/lib/live-query'
+import type { AuditLogRecord, ReportsSummary } from '@/lib/types'
 
 export function AdminPage({ path }: { path: string[] }) {
   const [section, id] = path
   if (section === 'login' || section === 'reset-password')
     return <AdminLogin reset={section === 'reset-password'} />
+
   let body
   if (!section) body = <Dashboard />
   else if (section === 'products') body = <ProductWorkspace id={id} />
   else if (section === 'quote-requests') body = <RequestsPage id={id} />
+  else if (section === 'inquiries') body = <InquiriesWorkspace id={id} />
   else if (section === 'quotations') body = <QuotationsWorkspace id={id} />
   else if (section === 'media') body = <MediaWorkspace />
   else if (section === 'settings') body = <SettingsWorkspace />
@@ -36,56 +55,121 @@ export function AdminPage({ path }: { path: string[] }) {
     )
   return <AdminShell>{body}</AdminShell>
 }
+
 function Reports() {
-  const { requests, products } = useDemo()
   const c = useCopy()
-  const [from, setFrom] = useState('2026-11-01')
-  const [to, setTo] = useState('2026-11-30')
+  const { lang } = useLanguage()
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const valid = !from || !to || from <= to
-  const filtered = valid
-    ? requests.filter((r) => (!from || r.date >= from) && (!to || r.date <= to))
-    : []
-  function download() {
-    const csv = [
-      'reference,status,date',
-      ...filtered.map((r) => `${r.id},${r.status},${r.date}`),
-    ].join('\n')
-    const url = URL.createObjectURL(
-      new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }),
-    )
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'mas-demo-requests.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-    setMessage(
-      c(
-        'تم تنزيل بيانات الطلبات التجريبية فقط.',
-        'Downloaded sample request data only.',
-      ),
-    )
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const validRange = !from || !to || from <= to
+  const queryPath = validRange
+    ? buildApiPath('/admin/reports', {
+        from: from || undefined,
+        to: to || undefined,
+      })
+    : null
+
+  const reportsQuery = useLiveQuery(queryPath, async () => {
+    if (!queryPath) throw new Error('Invalid range')
+    return (await api<ReportsSummary>(queryPath)).data
+  })
+
+  async function handleExport(
+    resource: 'quote_requests' | 'inquiries' | 'quotations' | 'products' | 'contacts',
+  ) {
+    if (busy || !validRange) return
+    setBusy(true)
+    setErrorMsg('')
+    setMessage('')
+    try {
+      await downloadServerExport(resource, {
+        from: from || undefined,
+        to: to || undefined,
+      })
+      invalidateLiveQueries('/admin/audit-log')
+      setMessage(
+        c(
+          'تم توليد وتنزيل ملف CSV من الخادم وتسجيل العملية في سجل التدقيق.',
+          'Server CSV exported and recorded in the audit log.',
+        ),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
   }
+
+  async function triggerJobs() {
+    if (busy) return
+    setBusy(true)
+    setErrorMsg('')
+    setMessage('')
+    try {
+      const res = await api<{
+        processed: Array<{ id: string; kind: string; status: string }>
+      }>('/admin/jobs', { method: 'POST', body: {} })
+      invalidateLiveQueries('/admin/quotations')
+      invalidateLiveQueries('/admin/media')
+      setMessage(
+        c(
+          `تم فحص الطابور ومعالجة ${res.data.processed.length} مهمة.`,
+          `Processed ${res.data.processed.length} queued job(s).`,
+        ),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const summary = reportsQuery.data
+  const totalRequests = summary?.requests || 0
+  const byStatus = summary?.byStatus || {}
+  const bySource = summary?.bySource || {}
+
   return (
     <>
       <div className="admin-heading">
         <div>
-          <h1>{c('تقارير المعاينة', 'Preview reports')}</h1>
+          <h1>{c('التقارير ومؤشرات التشغيل', 'Operational Reports')}</h1>
           <p>
             {c(
-              'أرقام مشتقة من البيانات التجريبية، وليست أداء أعمال فعليًا.',
-              'Metrics derived from sample data, not actual business performance.',
+              'إحصاءات حقيقية من قاعدة البيانات لطلبات عروض الأسعار والاستفسارات والعروض.',
+              'Live database metrics across quote requests, inquiries and quotations.',
             )}
           </p>
         </div>
-        <button
-          className="btn-outline"
-          disabled={!valid || !filtered.length}
-          onClick={download}
-        >
-          {c('تنزيل CSV تجريبي', 'Download sample CSV')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="btn-outline"
+            disabled={busy}
+            onClick={() => void triggerJobs()}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Play className="size-4" />
+            )}
+            {c('تشغيل طابور المهام', 'Run background jobs')}
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!validRange || busy}
+            onClick={() => void handleExport('quote_requests')}
+          >
+            {c('تصدير الطلبات CSV', 'Export requests CSV')}
+          </button>
+        </div>
       </div>
+
       <div className="panel mb-6 grid gap-5 bg-white sm:grid-cols-2">
         <Field label={c('من تاريخ', 'From date')}>
           <input
@@ -104,122 +188,261 @@ function Reports() {
           />
         </Field>
       </div>
-      {!valid && (
-        <p role="alert" className="mb-5 text-red-700">
+
+      {!validRange && (
+        <p role="alert" className="mb-5 text-sm font-medium text-red-700">
           {c(
-            'تاريخ النهاية يجب ألا يسبق البداية.',
+            'تاريخ النهاية يجب ألا يسبق تاريخ البداية.',
             'End date must not precede start date.',
           )}
         </p>
       )}
-      <p role="status" className="mb-4 text-primary">
-        {message}
-      </p>
-      <div className="grid gap-5 md:grid-cols-3">
-        {[
-          [c('الطلبات خلال الفترة', 'Requests in period'), filtered.length],
-          [
-            c('منتجات الكتالوج التجريبي', 'Sample catalog products'),
-            products.length,
-          ],
-          [
-            c('طلبات مجهّز لها عرض', 'Requests marked quoted'),
-            filtered.filter((r) => r.status === 'quoted').length,
-          ],
-        ].map(([label, value]) => (
-          <div className="panel bg-white" key={label}>
-            <h2 className="text-sm text-muted-foreground">{label}</h2>
-            <strong className="mt-5 block text-4xl">{value}</strong>
+      {message && (
+        <p role="status" className="mb-4 text-sm text-primary">
+          {message}
+        </p>
+      )}
+      {errorMsg && (
+        <p role="alert" className="mb-4 text-sm font-medium text-red-700">
+          {errorMsg}
+        </p>
+      )}
+
+      {reportsQuery.isLoading ? (
+        <LoadingState />
+      ) : reportsQuery.error ? (
+        <ErrorState
+          error={reportsQuery.error}
+          onRetry={() => void reportsQuery.refresh()}
+        />
+      ) : (
+        <>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              [c('طلبات عروض الأسعار', 'Quote requests'), summary?.requests ?? 0],
+              [c('الاستفسارات', 'Inquiries'), summary?.inquiries ?? 0],
+              [c('عروض الأسعار', 'Quotations'), summary?.quotations ?? 0],
+              [
+                c('متابعات متأخرة', 'Overdue follow-ups'),
+                summary?.overdueFollowUps ?? 0,
+              ],
+            ].map(([label, value]) => (
+              <div className="panel bg-white" key={String(label)}>
+                <h2 className="text-sm text-muted-foreground">{label}</h2>
+                <strong className="mt-5 block text-4xl">{value}</strong>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <section className="panel mt-6 bg-white">
-        <h2 className="mb-6 text-xl font-bold">
-          {c('توزيع حالات الطلبات', 'Request status breakdown')}
-        </h2>
-        {[
-          'new',
-          'assigned',
-          'in_progress',
-          'awaiting_customer',
-          'quoted',
-          'won',
-          'lost',
-          'cancelled',
-        ].map((status) => {
-          const count = filtered.filter((r) => r.status === status).length
-          return (
-            <div className="mb-5" key={status}>
-              <div className="mb-2 flex justify-between text-sm">
-                <span>{status}</span>
-                <span>{count}</span>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <section className="panel bg-white">
+              <h2 className="mb-6 text-xl font-bold">
+                {c('توزيع حالات الطلبات', 'Request status breakdown')}
+              </h2>
+              {[
+                'new',
+                'assigned',
+                'in_progress',
+                'awaiting_customer',
+                'quoted',
+                'won',
+                'lost',
+                'cancelled',
+              ].map((status) => {
+                const count = Number(byStatus[status] || 0)
+                return (
+                  <div className="mb-4" key={status}>
+                    <div className="mb-1.5 flex justify-between text-sm">
+                      <span className="font-mono">{status}</span>
+                      <span className="font-semibold">{count}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{
+                          width: `${totalRequests ? (count / totalRequests) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </section>
+
+            <section className="panel bg-white">
+              <h2 className="mb-6 text-xl font-bold">
+                {c('مصادر الطلبات وتصدير البيانات', 'Sources & CSV exports')}
+              </h2>
+              {Object.keys(bySource).length ? (
+                <ul className="mb-6 space-y-2 text-sm">
+                  {Object.entries(bySource).map(([src, cnt]) => (
+                    <li
+                      key={src}
+                      className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"
+                    >
+                      <span dir="ltr" className="font-mono">
+                        {src}
+                      </span>
+                      <strong>{cnt}</strong>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mb-6 text-sm text-muted-foreground">
+                  {c(
+                    'لا توجد مصادر مسجلة ضمن الفترة المحددة.',
+                    'No recorded sources in the selected period.',
+                  )}
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2 border-t pt-5">
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={busy}
+                  onClick={() => void handleExport('quotations')}
+                >
+                  {c('تصدير العروض CSV', 'Export quotations CSV')}
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={busy}
+                  onClick={() => void handleExport('inquiries')}
+                >
+                  {c('تصدير الاستفسارات CSV', 'Export inquiries CSV')}
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={busy}
+                  onClick={() => void handleExport('contacts')}
+                >
+                  {c('تصدير العملاء CSV', 'Export customers CSV')}
+                </button>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary"
-                  style={{
-                    width: `${filtered.length ? (count / filtered.length) * 100 : 0}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </section>
+            </section>
+          </div>
+        </>
+      )}
     </>
   )
 }
+
 function ActivityLog() {
-  const { audit } = useDemo()
   const c = useCopy()
+  const { lang } = useLanguage()
   const [q, setQ] = useState('')
-  const rows = audit.filter((e) =>
-    `${e.action} ${e.entity}`.toLowerCase().includes(q.toLowerCase()),
-  )
+  const [page, setPage] = useState(1)
+
+  const listPath = buildApiPath('/admin/audit-log', {
+    page,
+    pageSize: 20,
+    q: q.trim() || undefined,
+  })
+
+  const auditQuery = useLiveQuery(listPath, async () => {
+    const res = await api<AuditLogRecord[]>(listPath)
+    return {
+      data: res.data,
+      meta: res.meta || {
+        page,
+        pageSize: 20,
+        total: res.data.length,
+        totalPages: 1,
+      },
+    }
+  })
+
+  const rows = auditQuery.data?.data || []
+  const meta = auditQuery.data?.meta || {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+  }
+
   return (
     <>
       <div className="admin-heading">
         <div>
-          <h1>{c('سجل نشاط المعاينة', 'Preview activity log')}</h1>
+          <h1>{c('سجل التدقيق الأمني', 'Security Audit Log')}</h1>
           <p>
             {c(
-              'أحداث التعديلات المحلية لهذه الجلسة، وليست سجل تدقيق مؤمّنًا.',
-              'Local session activity, not a secured audit trail.',
+              'سجل غير قابل للتعديل أو الحذف لجميع عمليات الإدارة والتصدير.',
+              'Immutable server audit trail of all administrative commands and exports.',
             )}
           </p>
         </div>
       </div>
       <div className="panel bg-white">
-        <Field label={c('بحث بالنوع أو المعرف', 'Search action or identifier')}>
+        <Field label={c('بحث بالمورد أو العملية أو المعرف', 'Search resource, action or ID')}>
           <input
             className="control"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setPage(1)
+            }}
           />
         </Field>
         <div className="mt-5 space-y-4">
-          {rows.length ? (
+          {auditQuery.isLoading ? (
+            <LoadingState />
+          ) : auditQuery.error ? (
+            <ErrorState
+              error={auditQuery.error}
+              onRetry={() => void auditQuery.refresh()}
+            />
+          ) : rows.length ? (
             rows.map((e) => (
               <article key={e.id} className="rounded-lg border p-4">
-                <Badge>{e.action}</Badge>
-                <p className="my-2 font-mono text-sm">{e.entity}</p>
-                <time className="text-xs text-muted-foreground">
-                  {new Date(e.at).toLocaleString('ar-EG', {
-                    timeZone: 'Africa/Cairo',
-                  })}
-                </time>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge>{e.resource}</Badge>
+                  <Badge tone="green">{e.action}</Badge>
+                  {e.afterVersion != null && (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      v{e.beforeVersion ?? 0} → v{e.afterVersion}
+                    </span>
+                  )}
+                </div>
+                {e.entityId && (
+                  <p dir="ltr" className="my-2 font-mono text-xs text-foreground/80">
+                    {e.entityId}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>
+                    {e.actorId
+                      ? `${c('المنفذ', 'Actor')}: ${e.actorId.slice(0, 8)}…`
+                      : c('النظام', 'System')}
+                  </span>
+                  <time>
+                    {new Date(e.createdAt).toLocaleString(
+                      lang === 'ar' ? 'ar-EG' : 'en-EG',
+                      { timeZone: 'Africa/Cairo' },
+                    )}
+                  </time>
+                </div>
               </article>
             ))
           ) : (
             <EmptyState
-              title={c('لا توجد أحداث مطابقة', 'No matching activity')}
+              title={c('لا توجد أحداث مطابقة', 'No matching audit entries')}
               description={c(
-                'جرّب تعديل منتج أو طلب لتظهر أنشطتك هنا.',
-                'Edit a product or request to see session activity here.',
+                'ستظهر جميع التعديلات والإصدارات وعمليات التصدير هنا تلقائيًا.',
+                'Administrative changes, publications and exports appear here automatically.',
               )}
             />
           )}
         </div>
+        <Pagination
+          page={meta.page}
+          pages={Math.max(1, meta.totalPages)}
+          total={meta.total}
+          onChange={setPage}
+        />
       </div>
     </>
   )

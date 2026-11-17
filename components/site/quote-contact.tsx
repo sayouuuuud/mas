@@ -27,8 +27,8 @@ export function QuoteContact() {
               <h3 className="text-2xl font-bold">{t.quote.form.title}</h3>
               <p className="my-5 leading-8 text-muted-foreground">
                 {lang === 'ar'
-                  ? 'اختر المنتجات والكميات من الكتالوج، أو أضف احتياجك بنفسك. نموذج الطلب متاح حاليًا للمعاينة فقط.'
-                  : 'Choose products and quantities or describe your requirements. The request form is currently available as a preview only.'}
+                  ? 'اختر المنتجات والكميات من الكتالوج، أو صف احتياجات منشأتك الفنية ليقوم فريق المبيعات بإعداد عرض سعر رسمي مفصل.'
+                  : 'Select products and quantities from the catalog, or describe your facility requirements to receive a formal quotation.'}
               </p>
               <ActionLink href="/request-quote">{t.cta.quote}</ActionLink>
             </div>

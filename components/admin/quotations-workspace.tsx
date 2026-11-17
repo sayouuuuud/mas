@@ -1,783 +1,1212 @@
 'use client'
-import { useState } from 'react'
+
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Plus, Printer, Trash2, Copy, FileCheck2 } from 'lucide-react'
-import { useDemo } from '@/components/demo/demo-provider'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  CheckCircle2,
+  CopyPlus,
+  Download,
+  FileCheck2,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
+import {
+  Badge,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  useCopy,
+} from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
-import { Badge, EmptyState, Field, useCopy } from '@/components/demo/ui'
+import { Pagination } from './frontend-tools'
 import {
-  Pagination,
-  useConfirmAction,
-  useUnsavedChanges,
-} from './frontend-tools'
-import {
-  quoteTotals,
-  type PreviewQuotation,
-  type QuoteLine,
-} from '@/lib/frontend-model'
+  api,
+  BackendError,
+  buildApiPath,
+  downloadServerExport,
+  formatApiError,
+  saveQuotation,
+} from '@/lib/api-client'
+import { invalidateLiveQueries, useLiveQuery } from '@/lib/live-query'
+import type {
+  AdminQuoteRequest,
+  QuotationRecord,
+  QuotationStatus,
+} from '@/lib/types'
+
+const STATUS_META: Record<
+  QuotationStatus,
+  { ar: string; en: string; tone: 'gold' | 'green' | 'blue' | 'muted' | 'red' }
+> = {
+  draft: { ar: 'مسودة', en: 'Draft', tone: 'muted' },
+  issued: { ar: 'صادر رسميًا', en: 'Issued', tone: 'blue' },
+  sent: { ar: 'سُجّل تسليمه للعميل', en: 'Delivery logged', tone: 'gold' },
+  accepted: { ar: 'مقبول من العميل', en: 'Accepted', tone: 'green' },
+  rejected: { ar: 'مرفوض', en: 'Rejected', tone: 'red' },
+  expired: { ar: 'منتهي الصلاحية', en: 'Expired', tone: 'muted' },
+  superseded: { ar: 'مستبدل بمراجعة أحدث', en: 'Superseded', tone: 'muted' },
+}
+
+type EditableLine = {
+  key: string
+  requestItemId: string | null
+  variantId: string | null
+  descriptionAr: string
+  descriptionEn: string
+  sku: string
+  unit: string
+  quantity: number
+  unitPrice: number
+  notes: string
+}
 
 export function QuotationsWorkspace({ id }: { id?: string }) {
-  const { quotations, requests } = useDemo()
+  if (!id) return <QuotationsList />
+  return <QuotationEditor id={id} />
+}
+
+function QuotationsList() {
   const c = useCopy()
-  const router = useRouter()
-  const [q, setQ] = useState('')
+  const { lang } = useLanguage()
   const [status, setStatus] = useState('')
+  const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  if (id) return <QuotationEditor key={id} id={id} />
-  const rows = quotations.filter(
-    (qt) =>
-      (!status || qt.state === status) &&
-      `${qt.id} ${qt.requestId}`.toLowerCase().includes(q.toLowerCase()),
+  const [exporting, setExporting] = useState(false)
+
+  const listPath = buildApiPath('/admin/quotations', {
+    page,
+    pageSize: 12,
+    status: status || undefined,
+    q: q.trim() || undefined,
+  })
+
+  const listQuery = useLiveQuery(listPath, async () => {
+    const res = await api<QuotationRecord[]>(listPath)
+    return {
+      data: res.data,
+      meta: res.meta || {
+        page: 1,
+        pageSize: 12,
+        total: res.data.length,
+        totalPages: 1,
+      },
+    }
+  })
+
+  const recentRequestsQuery = useLiveQuery(
+    '/admin/quote-requests?page=1&pageSize=8',
+    async () =>
+      (await api<AdminQuoteRequest[]>('/admin/quote-requests?page=1&pageSize=8'))
+        .data,
   )
-  const pages = Math.max(1, Math.ceil(rows.length / 8))
+
+  const rows = listQuery.data?.data || []
+  const meta = listQuery.data?.meta || {
+    page: 1,
+    pageSize: 12,
+    total: 0,
+    totalPages: 1,
+  }
+
   return (
     <>
       <div className="admin-heading">
         <div>
-          <h1>{c('عروض الأسعار', 'Quotations')}</h1>
+          <h1>{c('عروض الأسعار الرسمية', 'Formal Quotations')}</h1>
           <p>
             {c(
-              'مسودات وإصدارات ومراجعات محلية. لا إرسال أو PDF رسمي.',
-              'Local drafts, issues and revisions. No external sending or official PDFs.',
+              'إعداد المسودات، الإصدار الرسمي بأرقام متسلسلة، المراجعات المجمدة، وتنزيل ملفات PDF.',
+              'Draft preparation, sequential formal issuance, frozen revisions and official PDF downloads.',
             )}
           </p>
         </div>
-        <label className="form-field">
-          <span>{c('ابدأ من طلب', 'Start from a request')}</span>
+        <button
+          type="button"
+          className="btn-outline"
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true)
+            try {
+              await downloadServerExport('quotations', {
+                status: status || undefined,
+                q: q.trim() || undefined,
+              })
+              invalidateLiveQueries('/admin/audit-log')
+            } finally {
+              setExporting(false)
+            }
+          }}
+        >
+          {exporting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          CSV
+        </button>
+      </div>
+
+      {(recentRequestsQuery.data || []).length > 0 && (
+        <section className="panel mb-6 bg-white">
+          <h2 className="mb-3 font-bold">
+            {c('بدء مسودة عرض سعر من طلب قائم', 'Start a quotation draft from a request')}
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {(recentRequestsQuery.data || []).slice(0, 6).map((r) => (
+              <Link
+                key={r.id}
+                href={`/admin/quotations/new?requestId=${r.id}`}
+                className="btn-outline text-xs"
+              >
+                <Plus className="size-3.5" />
+                <span dir="ltr" className="font-mono">
+                  {r.reference}
+                </span>{' '}
+                — {r.customerSnapshot?.company || r.customerSnapshot?.name}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="panel bg-white">
+        <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_220px]">
+          <input
+            className="control"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setPage(1)
+            }}
+            placeholder={c('بحث برقم عرض السعر…', 'Search quotation number…')}
+          />
           <select
             className="control"
-            value=""
-            onChange={(e) =>
-              e.target.value &&
-              router.push(`/admin/quotations/${e.target.value}`)
-            }
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value)
+              setPage(1)
+            }}
           >
-            <option value="">{c('اختر طلبًا…', 'Choose a request…')}</option>
-            {requests.map((r) => (
-              <option value={r.id} key={r.id}>
-                {r.id} · {r.company}
+            <option value="">{c('كل الحالات', 'All statuses')}</option>
+            {Object.entries(STATUS_META).map(([key, item]) => (
+              <option key={key} value={key}>
+                {c(item.ar, item.en)}
               </option>
             ))}
           </select>
-        </label>
-      </div>
-      <section className="panel bg-white">
-        <div className="mb-5 flex flex-wrap gap-3">
-          <input
-            className="control flex-1"
-            aria-label={c('بحث العروض', 'Search quotations')}
-            placeholder={c(
-              'بحث برقم العرض أو الطلب',
-              'Search quotation or request',
-            )}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <select
-            className="control w-auto"
-            aria-label={c('حالة العرض', 'Quotation status')}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">{c('كل الحالات', 'All statuses')}</option>
-            {[
-              'draft',
-              'issued',
-              'sent',
-              'accepted',
-              'rejected',
-              'expired',
-              'superseded',
-            ].map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
         </div>
-        {rows.length ? (
-          <div className="table-scroll" tabIndex={0}>
+
+        {listQuery.isLoading ? (
+          <LoadingState />
+        ) : listQuery.error ? (
+          <ErrorState
+            error={listQuery.error}
+            onRetry={() => void listQuery.refresh()}
+          />
+        ) : rows.length ? (
+          <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>{c('العرض', 'Quotation')}</th>
-                  <th>{c('الطلب', 'Request')}</th>
+                  <th>{c('رقم العرض', 'Quotation #')}</th>
                   <th>{c('المراجعة', 'Revision')}</th>
-                  <th>{c('الحالة', 'Status')}</th>
-                  <th>{c('الصلاحية', 'Valid until')}</th>
+                  <th>{c('الإجمالي', 'Total')}</th>
+                  <th>{c('حالة العرض', 'Status')}</th>
+                  <th>{c('حالة PDF', 'PDF status')}</th>
+                  <th>{c('تاريخ الصلاحية', 'Valid until')}</th>
                 </tr>
               </thead>
               <tbody>
-                {rows
-                  .slice(
-                    (Math.min(page, pages) - 1) * 8,
-                    Math.min(page, pages) * 8,
-                  )
-                  .map((qt) => (
-                    <tr key={qt.id}>
+                {rows.map((row) => {
+                  const st = STATUS_META[row.status] || STATUS_META.draft
+                  return (
+                    <tr key={row.id}>
                       <td>
                         <Link
-                          className="text-primary underline"
-                          href={`/admin/quotations/${qt.id}`}
+                          href={`/admin/quotations/${row.id}`}
+                          dir="ltr"
+                          className="font-mono font-semibold text-primary hover:underline"
                         >
-                          {qt.id}
+                          {row.number || c('مسودة (Draft)', 'Draft')}
                         </Link>
                       </td>
-                      <td>{qt.requestId}</td>
-                      <td>R{qt.revision}</td>
-                      <td>
-                        <Badge>{qt.state}</Badge>
+                      <td className="font-mono">R{row.revision}</td>
+                      <td dir="ltr" className="font-mono">
+                        {Number(row.total || 0).toLocaleString('en-EG')}{' '}
+                        {row.currency}
                       </td>
-                      <td>{qt.validUntil}</td>
+                      <td>
+                        <Badge tone={st.tone}>{c(st.ar, st.en)}</Badge>
+                      </td>
+                      <td>
+                        <Badge
+                          tone={
+                            row.pdfStatus === 'ready'
+                              ? 'green'
+                              : row.pdfStatus === 'failed'
+                                ? 'red'
+                                : row.pdfStatus === 'processing'
+                                  ? 'gold'
+                                  : 'muted'
+                          }
+                        >
+                          {row.pdfStatus}
+                        </Badge>
+                      </td>
+                      <td className="text-muted-foreground">
+                        {row.validUntil || '—'}
+                      </td>
                     </tr>
-                  ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
         ) : (
           <EmptyState
-            title={c('لا توجد عروض مطابقة', 'No matching quotations')}
+            title={c('لا توجد عروض أسعار مسجلة', 'No quotations yet')}
             description={c(
-              'ابدأ بمراجعة أحد الطلبات وتجهيز مسودة.',
-              'Start by selecting a request to prepare a draft.',
+              'ابدأ من أي طلب عرض سعر لإنشاء مسودة عرض رسمي وإصدارها.',
+              'Open any quote request to prepare and issue a formal quotation.',
             )}
           />
         )}
-        <Pagination
-          total={rows.length}
-          pages={pages}
-          page={Math.min(page, pages)}
-          onChange={setPage}
-        />
-      </section>
+
+        {meta.total > 0 && (
+          <Pagination
+            page={meta.page}
+            pages={Math.max(1, meta.totalPages)}
+            total={meta.total}
+            onChange={setPage}
+          />
+        )}
+      </div>
     </>
   )
 }
+
 function QuotationEditor({ id }: { id: string }) {
-  const {
-    quotations,
-    setQuotations,
-    requests,
-    setRequests,
-    products,
-    recordActivity,
-    resources,
-  } = useDemo()
-  const { lang } = useLanguage()
   const c = useCopy()
+  const { lang } = useLanguage()
   const router = useRouter()
-  const existing =
-    quotations.find((q) => q.id === id) ||
-    quotations.find((q) => q.requestId === id && q.state === 'draft') ||
-    [...quotations].reverse().find((q) => q.requestId === id)
-  const request = requests.find((r) => r.id === (existing?.requestId || id))
-  const [draft, setDraft] = useState<PreviewQuotation>(() =>
-    existing
-      ? structuredClone(existing)
-      : {
-          id: `DEMO-Q-${id.replace(/^DEMO-RFQ-/, '')}-1`,
-          requestId: id,
-          revision: 1,
-          state: 'draft',
-          locale: lang,
-          currency: 'EGP',
-          validUntil: new Date(Date.now() + 7 * 86400000)
-            .toISOString()
-            .slice(0, 10),
-          leadTime: '',
-          terms: '',
-          createdAt: new Date().toISOString(),
-          lines: (request?.items || []).map((item, i) => {
-            const p = products.find((p) =>
-              p.variants.some((v) => v.id === item.variantId),
-            )
-            const v = p?.variants.find((v) => v.id === item.variantId)
-            return {
-              id: String(i),
-              description:
-                item.snapshot?.name[lang] ||
-                p?.name[lang] ||
-                item.description ||
-                '',
-              sku: item.snapshot?.sku || v?.sku || '',
-              quantity: item.quantity,
-              unit: item.snapshot?.unit.en || v?.unit.en || item.unit || 'pack',
-              price: '',
-              discount: '0',
-              tax: '0',
-            }
-          }),
-        },
+  const searchParams = useSearchParams()
+  const isNew = id === 'new'
+  const queryRequestId = searchParams.get('requestId') || ''
+
+  const quotationQuery = useLiveQuery(
+    !isNew ? `/admin/quotations/${id}` : null,
+    async () => (await api<QuotationRecord>(`/admin/quotations/${id}`)).data,
   )
-  const [baseline, setBaseline] = useState(JSON.stringify(draft))
-  const [message, setMessage] = useState('')
+
+  const resolvedRequestId = isNew
+    ? queryRequestId
+    : quotationQuery.data?.requestId || ''
+
+  const requestQuery = useLiveQuery(
+    resolvedRequestId ? `/admin/quote-requests/${resolvedRequestId}` : null,
+    async () =>
+      (
+        await api<AdminQuoteRequest>(
+          `/admin/quote-requests/${resolvedRequestId}`,
+        )
+      ).data,
+  )
+
+  const quotation = quotationQuery.data
+  const request = requestQuery.data
+
+  const [validUntil, setValidUntil] = useState('')
+  const [paymentTerms, setPaymentTerms] = useState('')
+  const [deliveryTerms, setDeliveryTerms] = useState('')
+  const [customerNotes, setCustomerNotes] = useState('')
+  const [internalNotes, setInternalNotes] = useState('')
+  const [discount, setDiscount] = useState(0)
+  const [taxRate, setTaxRate] = useState(14)
   const [channel, setChannel] = useState('email')
-  const [reason, setReason] = useState('')
-  const { confirm, confirmation } = useConfirmAction()
-  useUnsavedChanges(
-    draft.state === 'draft' && JSON.stringify(draft) !== baseline,
-  )
-  if (!request)
+  const [decisionReason, setDecisionReason] = useState('')
+  const [lines, setLines] = useState<EditableLine[]>([])
+  const [initializedKey, setInitializedKey] = useState('')
+
+  const [busy, setBusy] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  useEffect(() => {
+    if (!isNew && quotation && initializedKey !== `q:${quotation.id}:${quotation.version}`) {
+      setValidUntil(quotation.validUntil || '')
+      setPaymentTerms(quotation.paymentTerms || '')
+      setDeliveryTerms(quotation.deliveryTerms || '')
+      setCustomerNotes(quotation.customerNotes || '')
+      setInternalNotes(quotation.internalNotes || '')
+      setDiscount(Number(quotation.discount || 0))
+      setTaxRate(Number(quotation.taxRate ?? 14))
+      setLines(
+        (quotation.items || []).map((item, idx) => ({
+          key: item.id || `line-${idx}`,
+          requestItemId: item.requestItemId || null,
+          variantId: item.variantId || null,
+          descriptionAr: item.description?.ar || '',
+          descriptionEn: item.description?.en || item.description?.ar || '',
+          sku: item.sku || '',
+          unit: item.unit || 'unit',
+          quantity: Number(item.quantity || 1),
+          unitPrice: Number(item.unitPrice || 0),
+          notes: item.notes || '',
+        })),
+      )
+      setInitializedKey(`q:${quotation.id}:${quotation.version}`)
+    } else if (isNew && request && initializedKey !== `req:${request.id}`) {
+      const defaultValid = new Date(Date.now() + 14 * 86400000)
+        .toISOString()
+        .slice(0, 10)
+      setValidUntil(defaultValid)
+      setPaymentTerms(
+        c('تحويل بنكي قبل التوريد', 'Bank transfer prior to dispatch'),
+      )
+      setDeliveryTerms(
+        c('تسليم مخازن العميل حسب الجدول المتفق عليه', 'Delivery per agreed schedule'),
+      )
+      const seedLines: EditableLine[] = (request.items || []).map(
+        (item, idx) => {
+          const arDesc =
+            item.snapshot?.productName?.ar ||
+            item.customName ||
+            `بند ${idx + 1}`
+          const enDesc =
+            item.snapshot?.productName?.en ||
+            item.customName ||
+            `Item ${idx + 1}`
+          const varAr = item.snapshot?.variantLabel?.ar
+            ? ` — ${item.snapshot.variantLabel.ar}`
+            : ''
+          const varEn = item.snapshot?.variantLabel?.en
+            ? ` — ${item.snapshot.variantLabel.en}`
+            : ''
+          return {
+            key: item.id || `seed-${idx}`,
+            requestItemId: item.id || null,
+            variantId: item.variantId || null,
+            descriptionAr: `${arDesc}${varAr}`,
+            descriptionEn: `${enDesc}${varEn}`,
+            sku: item.snapshot?.sku || '',
+            unit: item.snapshot?.unitCode || 'unit',
+            quantity: Number(item.quantity || 1),
+            unitPrice: 0,
+            notes: item.notes || '',
+          }
+        },
+      )
+      setLines(
+        seedLines.length
+          ? seedLines
+          : [
+              {
+                key: 'seed-0',
+                requestItemId: null,
+                variantId: null,
+                descriptionAr: '',
+                descriptionEn: '',
+                sku: '',
+                unit: 'unit',
+                quantity: 1,
+                unitPrice: 0,
+                notes: '',
+              },
+            ],
+      )
+      setInitializedKey(`req:${request.id}`)
+    }
+  }, [isNew, quotation, request, initializedKey, c])
+
+  const status: QuotationStatus = isNew ? 'draft' : quotation?.status || 'draft'
+  const frozen = status !== 'draft'
+  const statusBadge = STATUS_META[status] || STATUS_META.draft
+
+  const totals = useMemo(() => {
+    const subtotal = lines.reduce(
+      (sum, l) => sum + Number(l.quantity || 0) * Number(l.unitPrice || 0),
+      0,
+    )
+    const afterDiscount = Math.max(0, subtotal - Number(discount || 0))
+    const taxAmount = afterDiscount * (Number(taxRate || 0) / 100)
+    const total = afterDiscount + taxAmount
+    return { subtotal, taxAmount, total }
+  }, [lines, discount, taxRate])
+
+  if (isNew && !queryRequestId) {
     return (
       <EmptyState
-        title={c('الطلب غير موجود', 'Request not found')}
+        title={c('اختر طلب عرض سعر أولًا', 'Select a quote request first')}
         description={c(
-          'ابدأ من قائمة الطلبات في هذه المعاينة.',
-          'Choose a request from this preview.',
+          'يجب ربط عرض السعر بطلب عرض سعر قائم.',
+          'Every quotation must be linked to an existing quote request.',
         )}
-      >
-        <Link href="/admin/quote-requests" className="btn-outline">
-          {c('الطلبات', 'Requests')}
-        </Link>
-      </EmptyState>
-    )
-  const totals = quoteTotals(draft.lines)
-  const frozen = draft.state !== 'draft'
-  const expired = draft.validUntil < new Date().toISOString().slice(0, 10)
-  const money = (cents: number) =>
-    new Intl.NumberFormat(draft.locale === 'ar' ? 'ar-EG' : 'en-EG', {
-      style: 'currency',
-      currency: draft.currency,
-    }).format(cents / 100)
-  const updateLine = (id: string, patch: Partial<QuoteLine>) =>
-    setDraft((q) => ({
-      ...q,
-      lines: q.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-    }))
-  function persist(next: PreviewQuotation, action: string) {
-    setQuotations((all) =>
-      all.some((q) => q.id === next.id)
-        ? all.map((q) => (q.id === next.id ? structuredClone(next) : q))
-        : [...all, structuredClone(next)],
-    )
-    setDraft(next)
-    setBaseline(JSON.stringify(next))
-    recordActivity(action, next.id)
-    setMessage(
-      c(
-        'تم تطبيق الإجراء في المعاينة المحلية فقط.',
-        'Applied to the local preview only.',
-      ),
+        action={
+          <Link href="/admin/quote-requests" className="btn-primary">
+            {c('فتح طلبات عروض الأسعار', 'Open quote requests')}
+          </Link>
+        }
+      />
     )
   }
-  function issue() {
+
+  if ((!isNew && quotationQuery.isLoading) || requestQuery.isLoading) {
+    return <LoadingState />
+  }
+
+  if (!isNew && (quotationQuery.error || !quotation)) {
+    return (
+      <ErrorState
+        error={quotationQuery.error}
+        onRetry={() => void quotationQuery.refresh()}
+        title={c('تعذر تحميل عرض السعر', 'Unable to load quotation')}
+      />
+    )
+  }
+
+  function buildPayload() {
+    return {
+      currency: 'EGP',
+      validUntil: validUntil || null,
+      paymentTerms: paymentTerms.trim() || null,
+      deliveryTerms: deliveryTerms.trim() || null,
+      customerNotes: customerNotes.trim() || null,
+      internalNotes: internalNotes.trim() || null,
+      discount: Number(discount || 0),
+      taxRate: Number(taxRate || 0),
+      items: lines.map((l) => ({
+        requestItemId: l.requestItemId,
+        variantId: l.variantId,
+        description: {
+          ar: l.descriptionAr.trim() || l.descriptionEn.trim(),
+          en: l.descriptionEn.trim() || l.descriptionAr.trim(),
+        },
+        sku: l.sku.trim() || null,
+        unit: l.unit.trim() || 'unit',
+        quantity: Number(l.quantity),
+        unitPrice: Number(l.unitPrice),
+        notes: l.notes.trim() || null,
+      })),
+    }
+  }
+
+  async function persistDraft() {
+    if (busy || frozen) return null
+    const payload = buildPayload()
     if (
-      !totals.valid ||
-      expired ||
-      !draft.terms.trim() ||
-      !draft.leadTime.trim()
+      !payload.items.length ||
+      payload.items.some(
+        (it) =>
+          !it.description.ar ||
+          !it.description.en ||
+          it.quantity <= 0 ||
+          it.unitPrice < 0,
+      )
     ) {
-      setMessage(
+      setErrorMsg(
         c(
-          'راجع البنود والشروط ومدة التوريد والصلاحية قبل الإصدار.',
-          'Check items, terms, lead time and validity before issuing.',
+          'تأكد من إدخال وصف صالح وكمية أكبر من صفر وسعر غير سالب لجميع البنود.',
+          'Ensure every line has a description, positive quantity, and non-negative unit price.',
+        ),
+      )
+      return null
+    }
+
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      const saved = await saveQuotation(
+        resolvedRequestId,
+        payload,
+        isNew ? undefined : quotation?.id,
+        quotation?.version,
+      )
+      invalidateLiveQueries('/admin/quotations')
+      invalidateLiveQueries('/admin/quote-requests')
+      invalidateLiveQueries('/admin/audit-log')
+      if (isNew) {
+        router.replace(`/admin/quotations/${saved.id}`)
+      } else {
+        await quotationQuery.refresh()
+      }
+      setFeedback(c('تم حفظ مسودة عرض السعر.', 'Quotation draft saved.'))
+      return saved
+    } catch (err) {
+      if (err instanceof BackendError && err.status === 409 && !isNew) {
+        await quotationQuery.refresh()
+      }
+      setErrorMsg(formatApiError(err, lang))
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function issueFormalQuotation() {
+    if (busy) return
+    const saved = await persistDraft()
+    if (!saved) return
+    setBusy(true)
+    setErrorMsg('')
+    try {
+      const res = await api<{
+        id: string
+        number: string
+        status: QuotationStatus
+        pdfStatus: string
+      }>(`/admin/quotations/${saved.id}/issue`, {
+        method: 'POST',
+        body: { version: saved.version },
+      })
+      invalidateLiveQueries('/admin/quotations')
+      invalidateLiveQueries('/admin/quote-requests')
+      invalidateLiveQueries('/admin/reports')
+      invalidateLiveQueries('/admin/audit-log')
+      if (isNew) {
+        router.replace(`/admin/quotations/${saved.id}`)
+      } else {
+        await quotationQuery.refresh()
+      }
+      setFeedback(
+        c(
+          `تم الإصدار الرسمي لعرض السعر رقم ${res.data.number} وتجميد النسخة.`,
+          `Quotation formally issued as ${res.data.number} and frozen.`,
+        ),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createNewRevision() {
+    if (busy || !quotation) return
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      const res = await api<{ id: string; revision: number }>(
+        `/admin/quotations/${quotation.id}/revise`,
+        {
+          method: 'POST',
+          body: { version: quotation.version },
+        },
+      )
+      invalidateLiveQueries('/admin/quotations')
+      router.push(`/admin/quotations/${res.data.id}`)
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function downloadPdf() {
+    if (busy || !quotation) return
+    setBusy(true)
+    setErrorMsg('')
+    try {
+      const res = await api<{ url: string; expiresIn: number }>(
+        `/admin/quotations/${quotation.id}/download`,
+      )
+      window.open(res.data.url, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function retryPdfGeneration() {
+    if (busy || !quotation) return
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      await api('/admin/jobs', {
+        method: 'POST',
+        body: { quotationId: quotation.id },
+      })
+      await quotationQuery.refresh()
+      setFeedback(
+        c(
+          'تمت معالجة مهمة توليد ملف PDF وتحديث حالة الملف.',
+          'PDF generation job processed and status refreshed.',
+        ),
+      )
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function transitionStatus(
+    targetStatus: QuotationStatus,
+    opts?: { channel?: string; reason?: string },
+  ) {
+    if (busy || !quotation) return
+    if (targetStatus === 'rejected' && (!opts?.reason || opts.reason.trim().length < 3)) {
+      setErrorMsg(
+        c(
+          'أدخل سبب رفض العميل (3 أحرف على الأقل).',
+          'Enter the rejection reason (at least 3 characters).',
         ),
       )
       return
     }
-    confirm(
-      c(
-        'تثبيت نسخة تجريبية غير قابلة للتحرير؟ لا يصدر مستند رسمي.',
-        'Freeze a read-only sample revision? No official document is issued.',
-      ),
-      () => {
-        setQuotations((all) =>
-          all.map((q) =>
-            q.requestId === request!.id &&
-            q.state !== 'draft' &&
-            q.id !== draft.id
-              ? { ...q, state: 'superseded' }
-              : q,
-          ),
-        )
-        persist({ ...draft, state: 'issued' }, 'quotation.issued')
-      },
-    )
-  }
-  const transition = (state: PreviewQuotation['state']) => {
-    if (
-      ['accepted', 'rejected'].includes(state) &&
-      (!reason.trim() || expired)
-    ) {
-      setMessage(
-        c(
-          'أضف سببًا/مرجع الموافقة؛ لا تقبل عرضًا منتهيًا.',
-          'Add a response note; expired quotations cannot be accepted.',
-        ),
+    setBusy(true)
+    setErrorMsg('')
+    setFeedback('')
+    try {
+      await api(`/admin/quotations/${quotation.id}/transitions`, {
+        method: 'POST',
+        body: {
+          version: quotation.version,
+          status: targetStatus,
+          channel: opts?.channel || null,
+          reason: opts?.reason?.trim() || null,
+        },
+      })
+      setDecisionReason('')
+      invalidateLiveQueries('/admin/quotations')
+      invalidateLiveQueries('/admin/quote-requests')
+      await quotationQuery.refresh()
+      setFeedback(
+        targetStatus === 'sent'
+          ? c(
+              'تم تسجيل قناة التواصل يدويًا في السجل (بدون إرسال بريد أو واتساب آلي).',
+              'Manual delivery channel recorded in audit history (no automated email/WhatsApp sent).',
+            )
+          : c('تم تحديث حالة عرض السعر.', 'Quotation status updated.'),
       )
-      return
+    } catch (err) {
+      setErrorMsg(formatApiError(err, lang))
+    } finally {
+      setBusy(false)
     }
-    if (state === 'sent' && !channel) {
-      setMessage(
-        c('اختر قناة الإرسال المسجل.', 'Choose the recorded delivery channel.'),
-      )
-      return
-    }
-    confirm(
-      c('تسجيل هذا التغيير محليًا فقط؟', 'Record this change locally only?'),
-      () => {
-        persist(
-          {
-            ...draft,
-            state,
-            channel,
-            sentAt: state === 'sent' ? new Date().toISOString() : draft.sentAt,
-          },
-          `quotation.${state}`,
-        )
-        if (state === 'sent')
-          setRequests((all) =>
-            all.map((r) =>
-              r.id === request!.id
-                ? {
-                    ...r,
-                    status: 'quoted',
-                    events: [
-                      ...(r.events || []),
-                      {
-                        id: crypto.randomUUID(),
-                        at: new Date().toISOString(),
-                        action: 'quotation.sent',
-                        text: `${draft.id} (${channel})`,
-                      },
-                    ],
-                  }
-                : r,
-            ),
-          )
-      },
-    )
   }
+
   return (
     <>
-      {confirmation}
       <div className="admin-heading">
         <div>
-          <Link className="text-sm text-primary" href="/admin/quotations">
-            {c('كل عروض الأسعار', 'All quotations')}
+          <Link href="/admin/quotations" className="text-sm text-primary">
+            {c('العودة لعروض الأسعار', 'Back to quotations')}
           </Link>
-          <h1>{c('محرر عرض السعر', 'Quotation editor')}</h1>
-          <p>
-            {draft.id} · R{draft.revision} · {request.company}
-          </p>
-        </div>
-        <button
-          className="btn-outline"
-          disabled={!totals.valid}
-          onClick={() => window.print()}
-        >
-          <Printer className="size-4" />
-          {c('طباعة / حفظ المعاينة PDF', 'Print / save preview PDF')}
-        </button>
-      </div>
-      <p role="status" className="mb-4 text-primary">
-        {message}
-      </p>
-      <div className="panel bg-white quotation-editor">
-        <div className="mb-6 flex flex-wrap items-center gap-3">
-          <Badge tone={frozen ? 'green' : 'gold'}>{draft.state}</Badge>
-          <span className="text-sm text-muted-foreground">
-            {c(
-              'معاينة فقط — ليست فاتورة أو عرضًا ملزمًا',
-              'Preview only — not an invoice or binding offer',
-            )}
-          </span>
-          {expired && (
-            <Badge tone="gold">{c('انتهت الصلاحية', 'Expired')}</Badge>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 dir="ltr" className="font-mono">
+              {quotation?.number || c('مسودة عرض سعر جديد', 'New Quotation Draft')}
+            </h1>
+            <Badge tone={statusBadge.tone}>
+              {c(statusBadge.ar, statusBadge.en)}
+            </Badge>
+            <span className="font-mono text-sm text-muted-foreground">
+              R{quotation?.revision ?? 1}
+            </span>
+          </div>
+          {request && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {c('مرتبط بالطلب:', 'Linked to request:')}{' '}
+              <Link
+                href={`/admin/quote-requests/${request.id}`}
+                dir="ltr"
+                className="font-mono text-primary hover:underline"
+              >
+                {request.reference}
+              </Link>{' '}
+              — {request.customerSnapshot?.company || request.customerSnapshot?.name}
+            </p>
           )}
         </div>
-        <fieldset disabled={frozen} className="space-y-6">
-          <div className="grid gap-5 md:grid-cols-3">
-            <Field label={c('لغة المستند', 'Document language')}>
-              <select
-                className="control"
-                value={draft.locale}
-                onChange={(e) =>
-                  setDraft({ ...draft, locale: e.target.value as 'ar' | 'en' })
-                }
+
+        <div className="flex flex-wrap gap-2">
+          {!frozen && (
+            <>
+              <button
+                type="button"
+                className="btn-outline"
+                disabled={busy}
+                onClick={() => void persistDraft()}
               >
-                <option value="ar">العربية</option>
-                <option value="en">English</option>
-              </select>
-            </Field>
-            <Field label={c('العملة', 'Currency')}>
-              <select
-                className="control"
-                value={draft.currency}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    currency: e.target.value as PreviewQuotation['currency'],
-                  })
-                }
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                {c('حفظ المسودة', 'Save draft')}
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={busy}
+                onClick={() => void issueFormalQuotation()}
               >
-                {['EGP', 'USD', 'EUR'].map((v) => (
-                  <option key={v}>{v}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={c('صالح حتى', 'Valid until')}>
-              <input
-                className="control"
-                type="date"
-                value={draft.validUntil}
-                onChange={(e) =>
-                  setDraft({ ...draft, validUntil: e.target.value })
-                }
-              />
-            </Field>
-            <Field label={c('مهلة التوريد المتوقعة *', 'Expected lead time *')}>
-              <input
-                className="control"
-                value={draft.leadTime}
-                maxLength={200}
-                onChange={(e) =>
-                  setDraft({ ...draft, leadTime: e.target.value })
-                }
-              />
-            </Field>
-          </div>
-          <div className="table-scroll" tabIndex={0}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  {[
-                    c('البند', 'Item'),
-                    c('الكمية', 'Quantity'),
-                    c('الوحدة', 'Unit'),
-                    c('سعر الوحدة', 'Unit price'),
-                    c('خصم بالقيمة', 'Discount amount'),
-                    c('ضريبة %', 'Tax %'),
-                    c('الإجمالي', 'Total'),
-                    '',
-                  ].map((s, i) => (
-                    <th key={i}>{s}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {draft.lines.map((line, index) => (
-                  <tr key={line.id}>
-                    <td>
+                <FileCheck2 className="size-4" />
+                {c('إصدار رسمي وتجميد', 'Issue & freeze')}
+              </button>
+            </>
+          )}
+
+          {frozen && quotation && (
+            <>
+              {quotation.pdfStatus === 'ready' ? (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={busy}
+                  onClick={() => void downloadPdf()}
+                >
+                  <Download className="size-4" />
+                  {c('تنزيل ملف PDF الرسمي', 'Download Official PDF')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={busy}
+                  onClick={() => void retryPdfGeneration()}
+                >
+                  <RefreshCw className="size-4" />
+                  {quotation.pdfStatus === 'failed'
+                    ? c('إعادة محاولة توليد PDF', 'Retry PDF generation')
+                    : c('تجهيز ملف PDF الآن', 'Generate PDF now')}
+                </button>
+              )}
+
+              {status !== 'superseded' && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={busy}
+                  onClick={() => void createNewRevision()}
+                >
+                  <CopyPlus className="size-4" />
+                  {c('إنشاء مراجعة جديدة', 'New revision')}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {feedback && (
+        <p role="status" className="mb-5 flex items-center gap-2 text-sm font-medium text-primary">
+          <CheckCircle2 className="size-4 shrink-0" />
+          {feedback}
+        </p>
+      )}
+      {errorMsg && (
+        <p role="alert" className="mb-5 text-sm font-medium text-red-700">
+          {errorMsg}
+        </p>
+      )}
+
+      {frozen && quotation && quotation.pdfStatus !== 'ready' && (
+        <div className="panel mb-6 border-amber-300 bg-amber-50/70 text-sm text-amber-950">
+          <strong>
+            {quotation.pdfStatus === 'failed'
+              ? c('تعذر توليد ملف PDF الرسمي:', 'Official PDF generation failed:')
+              : c('ملف PDF قيد التجهيز:', 'Official PDF is queued:')}
+          </strong>{' '}
+          {quotation.pdfError ||
+            c(
+              'اضغط على زر التجهيز/إعادة المحاولة أعلاه لتوليد ملف PDF وحفظه في التخزين المؤمّن.',
+              'Click the generate/retry button above to build and store the signed PDF.',
+            )}
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-6">
+          <section className="panel bg-white">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold">
+                {c('بنود عرض السعر والتسعير', 'Quotation lines & pricing')}
+              </h2>
+              {!frozen && (
+                <button
+                  type="button"
+                  className="btn-outline text-xs"
+                  onClick={() =>
+                    setLines((prev) => [
+                      ...prev,
+                      {
+                        key: `line-${Date.now()}`,
+                        requestItemId: null,
+                        variantId: null,
+                        descriptionAr: '',
+                        descriptionEn: '',
+                        sku: '',
+                        unit: 'unit',
+                        quantity: 1,
+                        unitPrice: 0,
+                        notes: '',
+                      },
+                    ])
+                  }
+                >
+                  <Plus className="size-3.5" />
+                  {c('إضافة بند', 'Add line')}
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {lines.map((line, index) => (
+                <div
+                  key={line.key}
+                  className="space-y-3 rounded-xl border p-4"
+                >
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label={c('الوصف بالعربية', 'Arabic description')}>
                       <input
-                        className="control min-w-48"
-                        aria-label={c('وصف البند', 'Item description')}
-                        value={line.description}
+                        className="control"
+                        disabled={frozen}
+                        value={line.descriptionAr}
                         onChange={(e) =>
-                          updateLine(line.id, { description: e.target.value })
+                          setLines((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? { ...row, descriptionAr: e.target.value }
+                                : row,
+                            ),
+                          )
                         }
                       />
-                    </td>
-                    <td>
+                    </Field>
+                    <Field label={c('الوصف بالإنجليزية', 'English description')}>
                       <input
-                        className="control min-w-24"
-                        aria-label={c('كمية البند', 'Item quantity')}
+                        className="control"
+                        dir="ltr"
+                        disabled={frozen}
+                        value={line.descriptionEn}
+                        onChange={(e) =>
+                          setLines((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? { ...row, descriptionEn: e.target.value }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-[120px_110px_120px_1fr_auto] sm:items-end">
+                    <Field label={c('الكمية', 'Qty')}>
+                      <input
                         type="number"
                         min={0.001}
-                        max={99999}
-                        step={0.001}
-                        value={Number.isNaN(line.quantity) ? '' : line.quantity}
+                        step="any"
+                        disabled={frozen}
+                        className="control"
+                        value={line.quantity}
                         onChange={(e) =>
-                          updateLine(line.id, {
-                            quantity: e.target.valueAsNumber,
-                          })
+                          setLines((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? { ...row, quantity: Number(e.target.value) }
+                                : row,
+                            ),
+                          )
                         }
                       />
-                    </td>
-                    <td>
-                      <select
-                        className="control min-w-24"
-                        aria-label={c('وحدة البند', 'Item unit')}
+                    </Field>
+                    <Field label={c('الوحدة', 'Unit')}>
+                      <input
+                        className="control"
+                        disabled={frozen}
                         value={line.unit}
                         onChange={(e) =>
-                          updateLine(line.id, { unit: e.target.value })
+                          setLines((prev) =>
+                            prev.map((row, i) =>
+                              i === index ? { ...row, unit: e.target.value } : row,
+                            ),
+                          )
                         }
-                      >
-                        {resources.units.map((u) => (
-                          <option key={u.id} value={u.code}>
-                            {draft.locale === 'ar' ? u.nameAr : u.nameEn}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    {(['price', 'discount', 'tax'] as const).map((key) => (
-                      <td key={key}>
-                        <input
-                          className="control min-w-24"
-                          aria-label={c(
-                            key === 'price'
-                              ? 'سعر الوحدة'
-                              : key === 'discount'
-                                ? 'خصم البند'
-                                : 'نسبة الضريبة',
-                            key,
-                          )}
-                          type="number"
-                          min={0}
-                          max={key === 'tax' ? 100 : 100000000}
-                          step={key === 'price' ? '0.0001' : '0.01'}
-                          value={line[key]}
-                          onChange={(e) =>
-                            updateLine(line.id, { [key]: e.target.value })
-                          }
-                        />
-                      </td>
-                    ))}
-                    <td className="whitespace-nowrap">
-                      {money(totals.rows[index].total)}
-                    </td>
-                    <td>
+                      />
+                    </Field>
+                    <Field label="SKU">
+                      <input
+                        className="control font-mono"
+                        dir="ltr"
+                        disabled={frozen}
+                        value={line.sku}
+                        onChange={(e) =>
+                          setLines((prev) =>
+                            prev.map((row, i) =>
+                              i === index ? { ...row, sku: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                    <Field label={c('سعر الوحدة (ج.م)', 'Unit price (EGP)')}>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        disabled={frozen}
+                        className="control font-mono"
+                        dir="ltr"
+                        value={line.unitPrice}
+                        onChange={(e) =>
+                          setLines((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? { ...row, unitPrice: Number(e.target.value) }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </Field>
+                    {!frozen && lines.length > 1 && (
                       <button
                         type="button"
-                        className="icon-button"
+                        className="icon-button text-red-700"
                         onClick={() =>
-                          setDraft({
-                            ...draft,
-                            lines: draft.lines.filter((l) => l.id !== line.id),
-                          })
+                          setLines((prev) => prev.filter((_, i) => i !== index))
                         }
-                        aria-label={c('حذف البند', 'Remove item')}
+                        aria-label={c('حذف السطر', 'Remove line')}
                       >
                         <Trash2 className="size-4" />
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button
-            className="btn-outline"
-            onClick={() =>
-              setDraft({
-                ...draft,
-                lines: [
-                  ...draft.lines,
-                  {
-                    id: crypto.randomUUID(),
-                    description: '',
-                    sku: '',
-                    quantity: 1,
-                    unit: 'pack',
-                    price: '',
-                    discount: '0',
-                    tax: '0',
-                  },
-                ],
-              })
-            }
-          >
-            <Plus className="size-4" />
-            {c('إضافة بند', 'Add line')}
-          </button>
-          <Field label={c('شروط العرض *', 'Quotation terms *')}>
-            <textarea
-              className="control"
-              rows={4}
-              maxLength={3000}
-              value={draft.terms}
-              onChange={(e) => setDraft({ ...draft, terms: e.target.value })}
-            />
-          </Field>
-        </fieldset>
-        <dl className="mt-6 ms-auto max-w-md space-y-3 rounded-xl bg-muted p-5">
-          {[
-            [c('الصافي', 'Net'), totals.net],
-            [c('الضريبة', 'Tax'), totals.tax],
-            [c('الإجمالي', 'Total'), totals.total],
-          ].map(([key, value]) => (
-            <div className="flex justify-between gap-4" key={key}>
-              <dt>{key}</dt>
-              <dd className="font-bold">{money(Number(value))}</dd>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      {c('إجمالي السطر:', 'Line total:')}{' '}
+                      <strong dir="ltr" className="font-mono text-foreground">
+                        {(
+                          Number(line.quantity || 0) * Number(line.unitPrice || 0)
+                        ).toLocaleString('en-EG')}{' '}
+                        EGP
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </dl>
-        <div className="mt-6 flex flex-wrap gap-3">
-          {!frozen ? (
-            <>
-              <button
-                className="btn-outline"
-                onClick={() => persist(draft, 'quotation.draft_saved')}
-              >
-                {c('حفظ مسودة محلية', 'Save local draft')}
-              </button>
-              <button
-                className="btn-primary"
-                disabled={!totals.valid}
-                onClick={issue}
-              >
-                <FileCheck2 className="size-4" />
-                {c('إصدار تجريبي', 'Issue sample revision')}
-              </button>
-            </>
-          ) : (
-            <button
-              className="btn-outline"
-              onClick={() => {
-                const next = {
-                  ...structuredClone(draft),
-                  id: `DEMO-Q-${Date.now()}`,
-                  revision:
-                    Math.max(
-                      ...quotations
-                        .filter((q) => q.requestId === request.id)
-                        .map((q) => q.revision),
-                      draft.revision,
-                    ) + 1,
-                  state: 'draft' as const,
-                  createdAt: new Date().toISOString(),
-                  sentAt: undefined,
-                }
-                persist(next, 'quotation.revised')
-                router.push(`/admin/quotations/${next.id}`)
-              }}
-            >
-              <Copy className="size-4" />
-              {c('إنشاء مراجعة جديدة', 'Create revision')}
-            </button>
-          )}
-        </div>
-        {frozen && (
-          <div className="mt-6 grid gap-5 border-t pt-6 sm:grid-cols-2">
-            <Field
-              label={c(
-                'قناة تواصل مسجلة — لا إرسال فعلي',
-                'Recorded channel — nothing is sent',
-              )}
-            >
-              <select
-                className="control"
-                value={channel}
-                onChange={(e) => setChannel(e.target.value)}
-              >
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="phone">Phone</option>
-              </select>
-            </Field>
-            <Field
-              label={c(
-                'ملاحظة الاستجابة أو مرجع الموافقة',
-                'Response note / approval reference',
-              )}
-            >
+          </section>
+
+          <section className="panel grid gap-4 bg-white sm:grid-cols-2">
+            <Field label={c('تاريخ انتهاء الصلاحية', 'Valid until')}>
               <input
+                type="date"
+                disabled={frozen}
                 className="control"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                maxLength={500}
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
               />
             </Field>
-            <div className="flex flex-wrap gap-2 sm:col-span-2">
-              {draft.state === 'issued' && (
-                <button
-                  className="btn-primary"
-                  onClick={() => transition('sent')}
-                >
-                  {c('تسجيل تواصل تجريبي', 'Record sample delivery')}
-                </button>
-              )}
-              {draft.state === 'sent' && (
-                <>
-                  <button
-                    className="btn-outline"
-                    disabled={expired}
-                    onClick={() => transition('accepted')}
-                  >
-                    {c('تسجيل قبول', 'Record acceptance')}
-                  </button>
-                  <button
-                    className="btn-outline"
-                    onClick={() => transition('rejected')}
-                  >
-                    {c('تسجيل رفض', 'Record rejection')}
-                  </button>
-                </>
-              )}
-              {expired && ['issued', 'sent'].includes(draft.state) && (
-                <button
-                  className="btn-outline"
-                  onClick={() => transition('expired')}
-                >
-                  {c('تسجيل انتهاء الصلاحية', 'Mark expired')}
-                </button>
-              )}
+            <Field label={c('الخصم (ج.م)', 'Discount (EGP)')}>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                disabled={frozen}
+                className="control font-mono"
+                dir="ltr"
+                value={discount}
+                onChange={(e) => setDiscount(Number(e.target.value))}
+              />
+            </Field>
+            <Field label={c('نسبة الضريبة (%)', 'Tax rate (%)')}>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="any"
+                disabled={frozen}
+                className="control font-mono"
+                dir="ltr"
+                value={taxRate}
+                onChange={(e) => setTaxRate(Number(e.target.value))}
+              />
+            </Field>
+            <Field label={c('شروط الدفع', 'Payment terms')}>
+              <input
+                disabled={frozen}
+                className="control"
+                value={paymentTerms}
+                onChange={(e) => setPaymentTerms(e.target.value)}
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Field label={c('شروط التوريد والتسليم', 'Delivery terms')}>
+                <input
+                  disabled={frozen}
+                  className="control"
+                  value={deliveryTerms}
+                  onChange={(e) => setDeliveryTerms(e.target.value)}
+                />
+              </Field>
             </div>
+            <Field label={c('ملاحظات تظهر للعميل في العرض', 'Customer-visible notes')}>
+              <textarea
+                rows={3}
+                disabled={frozen}
+                className="control"
+                value={customerNotes}
+                onChange={(e) => setCustomerNotes(e.target.value)}
+              />
+            </Field>
+            <Field label={c('ملاحظات داخلية للإدارة فقط', 'Internal admin notes')}>
+              <textarea
+                rows={3}
+                disabled={frozen}
+                className="control"
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+              />
+            </Field>
+          </section>
+        </div>
+
+        <aside className="space-y-6">
+          <div className="panel space-y-3 bg-white text-sm">
+            <h2 className="text-lg font-bold">
+              {c('ملخص القيمة المالية', 'Financial summary')}
+            </h2>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">
+                {c('المجموع الفرعي', 'Subtotal')}
+              </span>
+              <span dir="ltr" className="font-mono">
+                {totals.subtotal.toLocaleString('en-EG')} EGP
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">
+                {c('الخصم', 'Discount')}
+              </span>
+              <span dir="ltr" className="font-mono">
+                -{Number(discount || 0).toLocaleString('en-EG')} EGP
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">
+                {c(`الضريبة (${taxRate}%)`, `VAT (${taxRate}%)`)}
+              </span>
+              <span dir="ltr" className="font-mono">
+                {totals.taxAmount.toLocaleString('en-EG')} EGP
+              </span>
+            </div>
+            <div className="flex justify-between border-t pt-3 text-base font-bold">
+              <span>{c('الإجمالي النهائي', 'Grand total')}</span>
+              <span dir="ltr" className="font-mono text-primary">
+                {totals.total.toLocaleString('en-EG')} EGP
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {c(
+                'تبقى الأسعار داخل عروض الأسعار الخاصة ولا تُنشر في الموقع العام.',
+                'Prices remain exclusive to private quotations and never appear publicly.',
+              )}
+            </p>
           </div>
-        )}
+
+          {status === 'issued' && (
+            <div className="panel space-y-4 bg-white">
+              <h2 className="text-lg font-bold">
+                {c(
+                  'تسجيل قناة التسليم اليدوي للعميل',
+                  'Record manual customer delivery',
+                )}
+              </h2>
+              <p className="text-xs leading-6 text-muted-foreground">
+                {c(
+                  'بعد تنزيل ملف PDF وإرساله للعميل بنفسك، سجّل القناة المستخدمة هنا للتوثيق (لا يقوم النظام بإرسال بريد أو واتساب تلقائيًا).',
+                  'After downloading and sharing the PDF with the customer, log the channel used here (no automated email or WhatsApp message is sent).',
+                )}
+              </p>
+              <Field label={c('القناة المستخدمة', 'Channel used')}>
+                <select
+                  className="control"
+                  value={channel}
+                  onChange={(e) => setChannel(e.target.value)}
+                >
+                  <option value="email">{c('بريد إلكتروني يدوي', 'Manual Email')}</option>
+                  <option value="whatsapp">{c('واتساب يدوي', 'Manual WhatsApp')}</option>
+                  <option value="phone">{c('مكالمة هاتفية', 'Phone')}</option>
+                  <option value="in_person">{c('تسليم مباشر', 'In person')}</option>
+                </select>
+              </Field>
+              <button
+                type="button"
+                className="btn-primary w-full"
+                disabled={busy}
+                onClick={() =>
+                  void transitionStatus('sent', { channel })
+                }
+              >
+                {c(
+                  'توثيق التسليم اليدوي للعميل',
+                  'Log manual delivery to customer',
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-outline w-full"
+                disabled={busy}
+                onClick={() => void transitionStatus('expired')}
+              >
+                {c('تحديد كمنتهي الصلاحية', 'Mark as expired')}
+              </button>
+            </div>
+          )}
+
+          {status === 'sent' && (
+            <div className="panel space-y-4 bg-white">
+              <h2 className="text-lg font-bold">
+                {c('قرار العميل النهائي', 'Customer decision')}
+              </h2>
+              <button
+                type="button"
+                className="btn-primary w-full"
+                disabled={busy}
+                onClick={() => void transitionStatus('accepted')}
+              >
+                {c('تسجيل قبول العميل للعرض', 'Record customer acceptance')}
+              </button>
+              <div className="space-y-2 border-t pt-3">
+                <Field label={c('سبب الرفض عند الاعتذار', 'Rejection reason')}>
+                  <input
+                    className="control"
+                    value={decisionReason}
+                    onChange={(e) => setDecisionReason(e.target.value)}
+                  />
+                </Field>
+                <button
+                  type="button"
+                  className="btn-outline w-full text-red-700"
+                  disabled={busy}
+                  onClick={() =>
+                    void transitionStatus('rejected', { reason: decisionReason })
+                  }
+                >
+                  {c('تسجيل رفض العرض', 'Record rejection')}
+                </button>
+              </div>
+              <button
+                type="button"
+                className="btn-outline w-full"
+                disabled={busy}
+                onClick={() => void transitionStatus('expired')}
+              >
+                {c('تحديد كمنتهي الصلاحية', 'Mark as expired')}
+              </button>
+            </div>
+          )}
+        </aside>
       </div>
-      <section
-        id="quotation-print"
-        className="quotation-print panel mt-8 bg-white"
-        dir={draft.locale === 'ar' ? 'rtl' : 'ltr'}
-        lang={draft.locale}
-      >
-        <div className="mb-6 flex justify-between border-b pb-6">
-          <div>
-            <h2 className="text-3xl font-bold text-primary">M.A.S</h2>
-            <p>Engineering For Trade</p>
-          </div>
-          <div className="text-end">
-            <p className="font-bold">
-              {draft.locale === 'ar' ? 'عرض سعر تجريبي' : 'Sample quotation'}
-            </p>
-            <p className="text-xs">
-              {draft.id} / R{draft.revision}
-            </p>
-            <p className="mt-2 text-xs">
-              {draft.locale === 'ar'
-                ? 'غير صالح للتعاقد'
-                : 'Not a binding offer'}
-            </p>
-          </div>
-        </div>
-        <p>
-          {request.name} · {request.company}
-        </p>
-        <p className="my-3 text-sm">
-          {draft.locale === 'ar' ? 'صالح حتى' : 'Valid until'}:{' '}
-          {draft.validUntil} · {draft.leadTime}
-        </p>
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                {[
-                  draft.locale === 'ar' ? 'البند' : 'Item',
-                  draft.locale === 'ar' ? 'الكمية' : 'Quantity',
-                  draft.locale === 'ar' ? 'القيمة' : 'Amount',
-                ].map((s) => (
-                  <th key={s}>{s}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {draft.lines.map((line, i) => (
-                <tr key={line.id}>
-                  <td>
-                    {line.description || '—'}
-                    <p className="text-xs">{line.sku}</p>
-                  </td>
-                  <td>
-                    {line.quantity} {line.unit}
-                  </td>
-                  <td>{money(totals.rows[i].total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="my-6 text-xl font-bold">
-          {draft.locale === 'ar' ? 'الإجمالي' : 'Total'}: {money(totals.total)}
-        </p>
-        <p className="whitespace-pre-wrap text-sm leading-7">
-          {draft.terms || '—'}
-        </p>
-        <p className="mt-6 border-t pt-4 text-xs">
-          {draft.locale === 'ar'
-            ? 'معاينة داخل المتصفح؛ لم يرسل مستند ولم ينشأ إصدار رسمي.'
-            : 'Browser preview; no document was sent or officially issued.'}
-        </p>
-      </section>
     </>
   )
 }

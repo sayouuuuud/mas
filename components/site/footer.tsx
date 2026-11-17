@@ -1,31 +1,38 @@
 'use client'
 
 import { ArrowUp, Mail, MapPin, Phone } from 'lucide-react'
-import { usePublicHref } from '@/components/demo/public-link'
+import { PublicLink as Link } from '@/components/demo/public-link'
 import {
   useSiteInfo,
   useContentPreview,
+  usePublicNavigation,
 } from '@/components/demo/content-preview'
-import { useDemo } from '@/components/demo/demo-provider'
 import { useLanguage } from '@/components/language-provider'
 import { Logo } from '@/components/logo'
-import { addresses, company, phones } from '@/lib/site'
 
-const sections = [
-  'about',
-  'products',
-  'partners',
-  'sectors',
-  'contact',
+const DEFAULT_FOOTER_LINKS = [
+  ['/products', 'المنتجات', 'Products'],
+  ['/brands', 'العلامات التجارية', 'Brands'],
+  ['/sectors', 'القطاعات', 'Sectors'],
+  ['/about', 'عن الشركة', 'About'],
+  ['/contact', 'تواصل معنا', 'Contact'],
 ] as const
 
 export function Footer() {
   const { company, phones, addresses } = useSiteInfo()
   const content = useContentPreview('footer')
-  const publicHref = usePublicHref()
-  const { resources } = useDemo()
+  const { data: navItems = [] } = usePublicNavigation()
   const { t, lang } = useLanguage()
   const year = new Date().getFullYear()
+
+  const footerRows = navItems
+    .filter((r) => r.area === 'footer')
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
+
+  const links: ReadonlyArray<readonly [string, string, string]> =
+    footerRows.length > 0
+      ? footerRows.map((r) => [r.path, r.name.ar, r.name.en] as const)
+      : DEFAULT_FOOTER_LINKS
 
   return (
     <footer className="bg-foreground text-background">
@@ -50,19 +57,16 @@ export function Footer() {
             {t.footer.quickLinks}
           </h2>
           <ul className="flex flex-col gap-3">
-            {resources.navigation
-              .filter((r) => r.area === 'footer' && r.status === 'published')
-              .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-              .map((row) => (
-                <li key={row.id}>
-                  <a
-                    href={publicHref(row.href)}
-                    className="text-background/75 transition-colors hover:text-background"
-                  >
-                    {lang === 'ar' ? row.nameAr : row.nameEn}
-                  </a>
-                </li>
-              ))}
+            {links.map(([href, ar, en]) => (
+              <li key={`${href}-${en}`}>
+                <Link
+                  href={href}
+                  className="text-background/75 transition-colors hover:text-background"
+                >
+                  {lang === 'ar' ? ar : en}
+                </Link>
+              </li>
+            ))}
           </ul>
         </nav>
 
@@ -109,12 +113,10 @@ export function Footer() {
       <div className="border-t border-background/15">
         <div className="site-container flex items-center justify-between gap-6 py-6 text-sm text-background/60">
           <div className="flex flex-wrap gap-4">
-            <a href={publicHref('/privacy')}>
+            <Link href="/privacy">
               {lang === 'ar' ? 'الخصوصية' : 'Privacy'}
-            </a>
-            <a href={publicHref('/terms')}>
-              {lang === 'ar' ? 'الشروط' : 'Terms'}
-            </a>
+            </Link>
+            <Link href="/terms">{lang === 'ar' ? 'الشروط' : 'Terms'}</Link>
           </div>
           <p>
             © {year} M.A.S Engineering For Trade. {t.footer.rights}
