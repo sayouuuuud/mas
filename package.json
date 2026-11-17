@@ -8,9 +8,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/frontend-model.test.cjs && node --conditions=react-server --import tsx --test tests/backend/*.test.ts",
+    "test": "node --test tests/frontend-model.test.cjs tests/live-query.test.cjs && node --conditions=react-server --import tsx --test tests/backend/*.test.ts",
     "test:db": "bash scripts/test-database.sh",
-    "bootstrap:owner": "tsx scripts/bootstrap-owner.ts"
+    "bootstrap:owner": "tsx scripts/bootstrap-owner.ts",
+    "test:browser": "node tests/browser/smoke.cjs && node --import tsx tests/browser/workspaces.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -40,6 +41,7 @@
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "playwright": "1.62.1",
     "postcss": "^8.5",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",

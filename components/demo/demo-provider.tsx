@@ -14,6 +14,9 @@ import {
   type LocalizedText,
   type ReferenceRecord,
   type UnitRecord,
+  type NavigationRecord,
+  type SettingsRecord,
+  type LocationRecord,
 } from '@/lib/types'
 
 export type CartItem = {
@@ -206,10 +209,10 @@ export function useDemo() {
 export function usePublicBootstrap() {
   return useLiveQuery('/public/bootstrap', async () => {
     const res = await api<{
-      navigation?: Array<{ [key: string]: unknown }>
-      settings?: Record<string, any> | null
-      locations?: Array<{ kind: string; [key: string]: any }>
-      categories?: Array<{ id: string; [key: string]: any }>
+      navigation?: NavigationRecord[]
+      settings?: SettingsRecord | null
+      locations?: LocationRecord[]
+      categories?: ReferenceRecord[]
     }>('/public/bootstrap')
     return res.data
   })

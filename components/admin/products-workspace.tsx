@@ -45,6 +45,7 @@ import type {
   PublishStatus,
   SectorRecord,
   SpecificationInput,
+  ProductSpec,
   UnitRecord,
 } from '@/lib/types'
 
@@ -134,7 +135,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
       })
       setSelected([])
       invalidateLiveQueries('/admin/products')
-      invalidateLiveQueries('/public/products')
+      invalidateLiveQueries('/catalog/')
       await listQuery.refresh()
       setFeedback(
         c(
@@ -356,7 +357,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
                 {rows.map((p) => {
                   const cat = p.categoryId ? catMap.get(p.categoryId) : null
                   const br = p.brandId ? brandMap.get(p.brandId) : null
-                  const badge = STATUS_BADGE[p.status] || STATUS_BADGE.draft
+                  const badge = STATUS_BADGE[p.status || 'draft'] || STATUS_BADGE.draft
                   return (
                     <tr key={p.id}>
                       <td>
@@ -439,6 +440,9 @@ export function ProductWorkspace({ id }: { id?: string }) {
 }
 
 type EditableVariant = {
+  specifications?: ProductSpec[]
+  mediaIds?: string[]
+  order?: number
   id?: string
   sku: string
   manufacturerPartNumber: string
@@ -562,13 +566,13 @@ function ProductEditor({ id }: { id: string }) {
       setDescriptionAr(product.description?.ar || '')
       setDescriptionEn(product.description?.en || '')
       setApplicationsTextAr(
-        (product.applications || []).map((a) => a.ar).join('\n'),
+        product.applications?.ar || '',
       )
       setApplicationsTextEn(
-        (product.applications || []).map((a) => a.en).join('\n'),
+        product.applications?.en || '',
       )
-      setBenefitsTextAr((product.benefits || []).map((b) => b.ar).join('\n'))
-      setBenefitsTextEn((product.benefits || []).map((b) => b.en).join('\n'))
+      setBenefitsTextAr(product.benefits?.ar || '')
+      setBenefitsTextEn(product.benefits?.en || '')
       setSourceNote(product.sourceNote || '')
       setMainMediaId(product.mainMediaId || '')
       setMediaIds(product.mediaIds || [])
@@ -578,10 +582,18 @@ function ProductEditor({ id }: { id: string }) {
       setSeoTitleEn(product.seoTitle?.en || '')
       setSeoDescAr(product.seoDescription?.ar || '')
       setSeoDescEn(product.seoDescription?.en || '')
-      setSpecifications(product.specifications || [])
+      setSpecifications((product.specifications || []).map(sp => {
+        const attribute = attributesQuery.data?.find(a => a.id === sp.attributeId)
+        return { attributeId: sp.attributeId,
+          ...(typeof sp.value === 'number' ? { valueNumber: sp.value } :
+            typeof sp.value === 'boolean' ? { valueBoolean: sp.value } :
+            Array.isArray(sp.value) ? { optionIds: sp.value } :
+            attribute?.type === 'option' ? { optionId: sp.value } : { valueText: sp.value }) }
+      }))
       setVariants(
         (product.variants || []).map((v) => ({
           id: v.id,
+          specifications: v.specifications, mediaIds: v.mediaIds, order: v.order,
           sku: v.sku || '',
           manufacturerPartNumber: v.manufacturerPartNumber || '',
           labelAr: v.label?.ar || '',
@@ -647,25 +659,6 @@ function ProductEditor({ id }: { id: string }) {
     (m) => m.status === 'quarantined',
   ).length
 
-  function pairLines(arText: string, enText: string) {
-    const arLines = arText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const enLines = enText
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const count = Math.max(arLines.length, enLines.length)
-    const pairs: Array<{ ar: string; en: string }> = []
-    for (let i = 0; i < count; i++) {
-      const arVal = arLines[i] || enLines[i]
-      const enVal = enLines[i] || arLines[i]
-      if (arVal && enVal) pairs.push({ ar: arVal, en: enVal })
-    }
-    return pairs
-  }
-
   function buildProductPayload() {
     const finalSlug = slug.trim() || toSlug(nameEn || nameAr)
     const combinedMedia = Array.from(
@@ -680,13 +673,14 @@ function ProductEditor({ id }: { id: string }) {
       family,
       categoryId: categoryId || null,
       brandId: brandId || null,
-      modelCode: modelCode.trim() || null,
+      modelCode: modelCode.trim(),
       featured,
+      status: product?.status || 'draft',
       summary: { ar: summaryAr.trim(), en: summaryEn.trim() },
       description: { ar: descriptionAr.trim(), en: descriptionEn.trim() },
-      applications: pairLines(applicationsTextAr, applicationsTextEn),
-      benefits: pairLines(benefitsTextAr, benefitsTextEn),
-      sourceNote: sourceNote.trim() || null,
+      applications: { ar: applicationsTextAr.trim(), en: applicationsTextEn.trim() },
+      benefits: { ar: benefitsTextAr.trim(), en: benefitsTextEn.trim() },
+      sourceNote: sourceNote.trim(),
       seoTitle: { ar: seoTitleAr.trim(), en: seoTitleEn.trim() },
       seoDescription: { ar: seoDescAr.trim(), en: seoDescEn.trim() },
       mainMediaId: mainMediaId || null,
@@ -700,11 +694,11 @@ function ProductEditor({ id }: { id: string }) {
           sp.valueBoolean != null ||
           Boolean(sp.optionId) ||
           Boolean(sp.optionIds?.length),
-      ),
+      ).map(sp => ({ attributeId: sp.attributeId, value: sp.valueNumber ?? sp.valueBoolean ?? sp.optionId ?? sp.optionIds ?? sp.valueText ?? '' })),
       variants: variants.map((v) => ({
         ...(v.id ? { id: v.id } : {}),
-        sku: v.sku.trim() || null,
-        manufacturerPartNumber: v.manufacturerPartNumber.trim() || null,
+        sku: v.sku.trim(),
+        manufacturerPartNumber: v.manufacturerPartNumber.trim(),
         label: {
           ar: v.labelAr.trim() || v.labelEn.trim(),
           en: v.labelEn.trim() || v.labelAr.trim(),
@@ -717,7 +711,9 @@ function ProductEditor({ id }: { id: string }) {
         quantityStep: Number(v.quantityStep || 1),
         availability: v.availability,
         active: v.active,
-        specifications: [],
+        specifications: v.specifications || [],
+        mediaIds: v.mediaIds || [],
+        order: v.order || 0,
       })),
     }
   }
@@ -756,7 +752,7 @@ function ProductEditor({ id }: { id: string }) {
         product?.version,
       )
       invalidateLiveQueries('/admin/products')
-      invalidateLiveQueries('/public/products')
+      invalidateLiveQueries('/catalog/')
       invalidateLiveQueries('/public/bootstrap')
       if (isNew) {
         router.replace(`/admin/products/${saved.id}`)
@@ -766,9 +762,6 @@ function ProductEditor({ id }: { id: string }) {
       setFeedback(c('تم حفظ بيانات المنتج بنجاح.', 'Product saved successfully.'))
       return saved
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409 && !isNew) {
-        await productQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
       return null
     } finally {
@@ -790,7 +783,7 @@ function ProductEditor({ id }: { id: string }) {
         body: { version: saved.version },
       })
       invalidateLiveQueries('/admin/products')
-      invalidateLiveQueries('/public/products')
+      invalidateLiveQueries('/catalog/')
       invalidateLiveQueries('/public/bootstrap')
       if (isNew) {
         router.replace(`/admin/products/${saved.id}`)
@@ -1449,6 +1442,11 @@ function ProductEditor({ id }: { id: string }) {
                   </Field>
                 </div>
 
+                <VariantSpecsEditor
+                  attributes={(attributesQuery.data || []).filter(a => a.scope === 'variant' && (!a.categories.length || a.categories.some(rule => rule.categoryId === categoryId)))}
+                  specifications={v.specifications || []}
+                  onChange={specs => setVariants(current => current.map((row, i) => i === idx ? { ...row, specifications: specs } : row))}
+                />
                 <div className="flex items-center justify-between pt-1">
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -1693,4 +1691,22 @@ function ProductEditor({ id }: { id: string }) {
       </div>
     </form>
   )
+}
+
+function VariantSpecsEditor({ attributes, specifications, onChange }: { attributes: AttributeRecord[]; specifications: ProductSpec[]; onChange: (specs: ProductSpec[]) => void }) {
+  const { lang } = useLanguage()
+  const c = useCopy()
+  function update(attributeId: string, value: ProductSpec['value'] | undefined) {
+    const remaining = specifications.filter(spec => spec.attributeId !== attributeId)
+    onChange(value === undefined ? remaining : [...remaining, { attributeId, value }])
+  }
+  return <div className="grid gap-4 sm:grid-cols-2">{attributes.map(attribute => {
+    const value = specifications.find(spec => spec.attributeId === attribute.id)?.value
+    return <Field key={attribute.id} label={attribute.name[lang]}>
+      {attribute.type === 'boolean' ? <select className="control" value={value === undefined ? '' : String(value)} onChange={e => update(attribute.id, e.target.value === '' ? undefined : e.target.value === 'true')}><option value="">{c('غير محدد', 'Unset')}</option><option value="true">{c('نعم', 'Yes')}</option><option value="false">{c('لا', 'No')}</option></select>
+      : attribute.type === 'option' ? <select className="control" value={typeof value === 'string' ? value : ''} onChange={e => update(attribute.id, e.target.value || undefined)}><option value="">{c('اختر قيمة', 'Select option')}</option>{attribute.options.map(option => <option key={option.id} value={option.id}>{option.label[lang]}</option>)}</select>
+      : attribute.type === 'multi_option' ? <select multiple className="control" value={Array.isArray(value) ? value : []} onChange={e => update(attribute.id, Array.from(e.target.selectedOptions, option => option.value))}>{attribute.options.map(option => <option key={option.id} value={option.id}>{option.label[lang]}</option>)}</select>
+      : <input className="control" type={attribute.type === 'number' ? 'number' : 'text'} step="any" value={typeof value === 'number' || typeof value === 'string' ? value : ''} onChange={e => update(attribute.id, e.target.value === '' ? undefined : attribute.type === 'number' ? Number(e.target.value) : e.target.value)} />}
+    </Field>
+  })}</div>
 }

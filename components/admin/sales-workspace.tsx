@@ -323,7 +323,7 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
   })
 
   const teamMap = new Map(
-    (teamQuery.data || []).map((m) => [m.userId, m.displayName]),
+    (teamQuery.data || []).map((m) => [m.id, m.displayName]),
   )
   const rows = listQuery.data?.data || []
   const meta = listQuery.data?.meta || {
@@ -613,9 +613,6 @@ export function RequestsPage({ id }: { id?: string }) {
         c('تم حفظ بيانات المتابعة بنجاح.', 'Follow-up details saved.'),
       )
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409) {
-        await detailQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
     } finally {
       setBusy(false)
@@ -638,9 +635,6 @@ export function RequestsPage({ id }: { id?: string }) {
       await refreshAfterMutation()
       setFeedback(c('تم تحديث مسؤول الطلب.', 'Assignee updated.'))
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409) {
-        await detailQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
     } finally {
       setBusy(false)
@@ -668,7 +662,7 @@ export function RequestsPage({ id }: { id?: string }) {
         body: {
           version: request.version,
           status: nextStatus,
-          reason: reason.trim() || null,
+          reason: reason.trim(),
         },
       })
       setReason('')
@@ -677,9 +671,6 @@ export function RequestsPage({ id }: { id?: string }) {
         c('تم تحديث حالة الطلب وتسجيل الحدث.', 'Status transitioned and logged.'),
       )
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409) {
-        await detailQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
     } finally {
       setBusy(false)
@@ -695,7 +686,7 @@ export function RequestsPage({ id }: { id?: string }) {
     try {
       await api(`/admin/quote-requests/${request.id}/events`, {
         method: 'POST',
-        body: { body: note.trim() },
+        body: { version: request.version, body: note.trim() },
       })
       setNote('')
       await detailQuery.refresh()
@@ -756,20 +747,20 @@ export function RequestsPage({ id }: { id?: string }) {
             </h2>
             <div className="space-y-3">
               {(request.items || []).map((item) => {
-                const snapName = item.snapshot?.productName
+                const snapName = item.snapshot?.name
                   ? lang === 'ar'
-                    ? item.snapshot.productName.ar
-                    : item.snapshot.productName.en
-                  : item.customName
-                const varLabel = item.snapshot?.variantLabel
+                    ? item.snapshot.name.ar
+                    : item.snapshot.name.en
+                  : item.snapshot?.description
+                const varLabel = item.snapshot?.label
                   ? lang === 'ar'
-                    ? item.snapshot.variantLabel.ar
-                    : item.snapshot.variantLabel.en
+                    ? item.snapshot.label.ar
+                    : item.snapshot.label.en
                   : null
-                const unitDisplay = item.snapshot?.unitName
+                const unitDisplay = item.snapshot?.unit
                   ? lang === 'ar'
-                    ? item.snapshot.unitName.ar
-                    : item.snapshot.unitName.en
+                    ? item.snapshot.unit.ar
+                    : item.snapshot.unit.en
                   : item.snapshot?.unitCode || ''
 
                 return (
@@ -837,7 +828,7 @@ export function RequestsPage({ id }: { id?: string }) {
                       </small>
                     </div>
                     <strong dir="ltr" className="font-mono text-sm">
-                      {Number(q.total || 0).toLocaleString('en-EG')} {q.currency}
+                      {(Number(q.totals?.total || 0) / 100).toLocaleString('en-EG')} {q.currency}
                     </strong>
                   </Link>
                 ))}
@@ -886,8 +877,8 @@ export function RequestsPage({ id }: { id?: string }) {
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span className="font-mono font-semibold text-foreground">
                       {ev.kind}
-                      {ev.toStatus
-                        ? ` (${ev.fromStatus || '—'} → ${ev.toStatus})`
+                      {ev.detail?.to
+                        ? ` (${ev.detail?.from || '—'} → ${ev.detail?.to})`
                         : ''}
                     </span>
                     <time>
@@ -897,7 +888,7 @@ export function RequestsPage({ id }: { id?: string }) {
                       )}
                     </time>
                   </div>
-                  {ev.body && <p className="mt-1.5 leading-7">{ev.body}</p>}
+                  {ev.detail?.body && <p className="mt-1.5 leading-7">{ev.detail?.body}</p>}
                 </li>
               ))}
             </ol>
@@ -928,8 +919,8 @@ export function RequestsPage({ id }: { id?: string }) {
             </p>
             <p className="pt-1 text-xs text-muted-foreground">
               {c('قناة التواصل المفضلة:', 'Preferred channel:')}{' '}
-              {request.preferredChannel} · {c('سياسة:', 'Policy:')}{' '}
-              {request.consentPolicyVersion}
+              {request.customerSnapshot?.preferredChannel} · {c('سياسة:', 'Policy:')}{' '}
+              {request.privacy?.policyVersion}
             </p>
           </div>
 
@@ -949,7 +940,7 @@ export function RequestsPage({ id }: { id?: string }) {
                   {(teamQuery.data || [])
                     .filter((m) => m.active)
                     .map((m) => (
-                      <option key={m.userId} value={m.userId}>
+                      <option key={m.id} value={m.id}>
                         {m.displayName}
                       </option>
                     ))}
@@ -1127,7 +1118,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
     if (convertItems.length === 0) {
       setConvertItems([
         {
-          customName: inquiry.subject || '',
+          customName: inquiry.message || '',
           quantity: 1,
           unitCode: activeUnits[0]?.code || 'unit',
           notes: '',
@@ -1267,7 +1258,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                             <span dir="ltr">{inq.customerSnapshot?.phone}</span>
                           </small>
                         </td>
-                        <td>{inq.subject}</td>
+                        <td>{inq.message}</td>
                         <td>
                           <Badge tone={st.tone}>{c(st.ar, st.en)}</Badge>
                         </td>
@@ -1332,12 +1323,12 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
     if (busy || !inquiry || inquiry.convertedRequestId) return
     const validItems = convertItems
       .map((it) => ({
-        customName: it.customName.trim(),
+        description: it.customName.trim(),
         quantity: Number(it.quantity),
         unitCode: it.unitCode,
-        notes: it.notes.trim() || null,
+        notes: it.notes.trim(),
       }))
-      .filter((it) => it.customName.length >= 2 && it.quantity > 0 && it.unitCode)
+      .filter((it) => it.description.length >= 2 && it.quantity > 0 && it.unitCode)
 
     if (!validItems.length) {
       setErrorMsg(
@@ -1353,7 +1344,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
     setErrorMsg('')
     setFeedback('')
     try {
-      const res = await api<{ requestId: string; reference: string }>(
+      const res = await api<{ convertedRequestId: string; reference: string }>(
         `/admin/inquiries/${inquiry.id}/convert`,
         {
           method: 'POST',
@@ -1366,11 +1357,8 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
       invalidateLiveQueries('/admin/inquiries')
       invalidateLiveQueries('/admin/quote-requests')
       invalidateLiveQueries('/admin/reports')
-      router.push(`/admin/quote-requests/${res.data.requestId}`)
+      router.push(`/admin/quote-requests/${res.data.convertedRequestId}`)
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409) {
-        await detailQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
     } finally {
       setBusy(false)
@@ -1409,7 +1397,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <section className="panel bg-white">
-            <h2 className="text-xl font-bold">{inquiry.subject}</h2>
+            <h2 className="text-xl font-bold">{inquiry.message}</h2>
             <p className="mt-3 whitespace-pre-line text-sm leading-8 text-foreground/90">
               {inquiry.message}
             </p>
@@ -1568,7 +1556,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                 try {
                   await api(`/admin/inquiries/${inquiry.id}/events`, {
                     method: 'POST',
-                    body: { body: note.trim() },
+                    body: { version: inquiry.version, body: note.trim() },
                   })
                   setNote('')
                   await detailQuery.refresh()
@@ -1605,8 +1593,8 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span className="font-mono font-semibold text-foreground">
                       {ev.kind}
-                      {ev.toStatus
-                        ? ` (${ev.fromStatus || '—'} → ${ev.toStatus})`
+                      {ev.detail?.to
+                        ? ` (${ev.detail?.from || '—'} → ${ev.detail?.to})`
                         : ''}
                     </span>
                     <time>
@@ -1616,7 +1604,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                       )}
                     </time>
                   </div>
-                  {ev.body && <p className="mt-1 leading-7">{ev.body}</p>}
+                  {ev.detail?.body && <p className="mt-1 leading-7">{ev.detail?.body}</p>}
                 </li>
               ))}
             </ol>
@@ -1652,7 +1640,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                 {(teamQuery.data || [])
                   .filter((m) => m.active)
                   .map((m) => (
-                    <option key={m.userId} value={m.userId}>
+                    <option key={m.id} value={m.id}>
                       {m.displayName}
                     </option>
                   ))}
@@ -1700,7 +1688,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                       body: {
                         version: inquiry.version,
                         status: nextStatus,
-                        reason: reason.trim() || null,
+                        reason: reason.trim(),
                       },
                     })
                     setReason('')

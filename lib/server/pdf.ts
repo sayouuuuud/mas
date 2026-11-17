@@ -10,12 +10,6 @@ const ARABIC_RE = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/
 const BIDI_TOKENS =
   /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]+(?:\s+[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]+)*|\s+|[^\s\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]+(?:\s+[^\s\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]+)*/g
 
-function mirrorParens(token: string): string {
-  return token.replace(/[()[\]]/g, (ch) =>
-    ch === '(' ? ')' : ch === ')' ? '(' : ch === '[' ? ']' : '[',
-  )
-}
-
 function tokenizeBidi(text: string): string[] {
   return text.match(BIDI_TOKENS) || []
 }
@@ -46,10 +40,7 @@ function drawBidiText(
   const lineRtl = options.rtl || ARABIC_RE.test(cleaned)
   const rawTokens = tokenizeBidi(cleaned)
   const tokens = lineRtl
-    ? rawTokens
-        .slice()
-        .reverse()
-        .map((tk) => (ARABIC_RE.test(tk) || /^\s+$/.test(tk) ? tk : mirrorParens(tk)))
+    ? rawTokens.slice().reverse()
     : rawTokens
   const totalWidth = tokens.reduce(
     (sum, tk) => sum + font.widthOfTextAtSize(tk, options.size),
@@ -257,7 +248,10 @@ export async function quotationPdf(
       : '',
   ].filter(Boolean)
 
-  const boxRows = Math.max(metaRows.length, customerRows.length, 2)
+  const halfW = (CONTENT_W - 24) / 2
+  const wrappedMeta = metaRows.flatMap(row => wrapParagraphs(font, row, 10, halfW - 8))
+  const wrappedCustomer = customerRows.flatMap(row => wrapParagraphs(font, row, 10, halfW - 8))
+  const boxRows = Math.max(wrappedMeta.length, wrappedCustomer.length, 2)
   const boxH = boxRows * 16 + 18
   page.drawRectangle({
     x: MARGIN_X,
@@ -269,7 +263,6 @@ export async function quotationPdf(
     borderWidth: 0.75,
   })
 
-  const halfW = (CONTENT_W - 24) / 2
   const metaBox = rtl
     ? { xLeft: PAGE_W - MARGIN_X - 10 - halfW, xRight: PAGE_W - MARGIN_X - 10 }
     : { xLeft: MARGIN_X + 10, xRight: MARGIN_X + 10 + halfW }
@@ -277,7 +270,7 @@ export async function quotationPdf(
     ? { xLeft: MARGIN_X + 10, xRight: MARGIN_X + 10 + halfW }
     : { xLeft: PAGE_W - MARGIN_X - 10 - halfW, xRight: PAGE_W - MARGIN_X - 10 }
 
-  metaRows.forEach((rowText, idx) => {
+  wrappedMeta.forEach((rowText, idx) => {
     drawBidiText(page, font, rowText, {
       ...metaBox,
       y: y - 18 - idx * 16,
@@ -285,7 +278,7 @@ export async function quotationPdf(
       rtl,
     })
   })
-  customerRows.forEach((rowText, idx) => {
+  wrappedCustomer.forEach((rowText, idx) => {
     drawBidiText(page, font, rowText, {
       ...custBox,
       y: y - 18 - idx * 16,

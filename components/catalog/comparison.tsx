@@ -12,7 +12,9 @@ import {
 } from '@/components/demo/ui'
 import { api, BackendError } from '@/lib/api-client'
 import { useLiveQuery } from '@/lib/live-query'
-import type { CatalogProductDetail, CatalogProductSpec } from '@/lib/types'
+import { formatSpecValue, type CatalogProduct, type ProductSpec } from '@/lib/types'
+import { useCatalogData } from '@/components/demo/demo-provider'
+import { usePublicAttributes } from './catalog'
 
 export function ComparisonToggle({ id }: { id: string }) {
   const { comparison, setComparison } = useDemo()
@@ -54,51 +56,21 @@ export function ComparisonTray() {
   )
 }
 
-function renderCatalogSpec(
-  spec: CatalogProductSpec | undefined,
-  lang: 'ar' | 'en',
-  fallback: string,
-) {
-  if (!spec) return fallback
-  if (spec.optionLabel)
-    return lang === 'ar' ? spec.optionLabel.ar : spec.optionLabel.en
-  if (spec.optionLabels?.length) {
-    return spec.optionLabels
-      .map((l) => (lang === 'ar' ? l.ar : l.en))
-      .join(' · ')
-  }
-  if (typeof spec.valueBoolean === 'boolean') {
-    return spec.valueBoolean
-      ? lang === 'ar'
-        ? 'نعم'
-        : 'Yes'
-      : lang === 'ar'
-        ? 'لا'
-        : 'No'
-  }
-  if (spec.valueNumber != null) {
-    return spec.unitCode
-      ? `${spec.valueNumber} ${spec.unitCode}`
-      : String(spec.valueNumber)
-  }
-  return spec.valueText || fallback
-}
-
 export function ComparisonPage() {
   const { comparison, setComparison } = useDemo()
   const { lang } = useLanguage()
   const c = useCopy()
 
   const queryKey = comparison.length
-    ? `/public/products/compare?ids=${comparison.join(',')}`
+    ? `/catalog/products/compare?ids=${comparison.join(',')}`
     : null
 
   const compareQuery = useLiveQuery(queryKey, async () => {
     const results = await Promise.all(
       comparison.map(async (slugOrId) => {
         try {
-          const res = await api<CatalogProductDetail>(
-            `/public/products/${slugOrId}`,
+          const res = await api<CatalogProduct>(
+            `/catalog/products/${slugOrId}`,
           )
           return res.data
         } catch (err) {
@@ -108,12 +80,14 @@ export function ComparisonPage() {
       }),
     )
     return results.filter(
-      (item): item is CatalogProductDetail => Boolean(item),
+      (item): item is CatalogProduct => Boolean(item),
     )
   })
 
+  const { units } = useCatalogData()
+  const attributes = usePublicAttributes().data || []
   const rows = compareQuery.data || []
-  const specMap = new Map<string, CatalogProductSpec>()
+  const specMap = new Map<string, ProductSpec>()
   for (const p of rows) {
     for (const sp of p.specifications || []) {
       if (!specMap.has(sp.attributeId)) {
@@ -183,7 +157,7 @@ export function ComparisonPage() {
                 {specEntries.map((metaSpec) => (
                   <tr key={metaSpec.attributeId}>
                     <th>
-                      {lang === 'ar' ? metaSpec.name.ar : metaSpec.name.en}
+                      {attributes.find(a => a.id === metaSpec.attributeId)?.name[lang] || metaSpec.attributeId}
                     </th>
                     {rows.map((p) => {
                       const spec = (p.specifications || []).find(
@@ -191,11 +165,7 @@ export function ComparisonPage() {
                       )
                       return (
                         <td key={p.id}>
-                          {renderCatalogSpec(
-                            spec,
-                            lang,
-                            c('غير متوفر', 'Not available'),
-                          )}
+                          {spec ? formatSpecValue(spec, attributes.find(a => a.id === spec.attributeId), units.find(u => u.id === attributes.find(a => a.id === spec.attributeId)?.unitId), lang).value : c('غير متوفر', 'Not available')}
                         </td>
                       )
                     })}

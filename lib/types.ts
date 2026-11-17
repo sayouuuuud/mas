@@ -164,7 +164,7 @@ export type CustomerSnapshot = {
 export type SalesEvent = {
   id: string
   kind: string
-  detail?: Record<string, unknown>
+  detail?: { body?: string; from?: string; to?: string; [key: string]: unknown }
   actorId?: string | null
   createdAt: string
 }
@@ -209,6 +209,7 @@ export type QuoteRequestRecord = {
   followUpAt?: string | null
   notes?: string | null
   source?: Record<string, unknown>
+  privacy?: { policyVersion: string }
   sourceInquiryId?: string
   customerSnapshot: CustomerSnapshot
   itemCount?: number
@@ -391,7 +392,7 @@ export type AuditLogRecord = {
   action: string
   beforeVersion?: number | null
   afterVersion?: number | null
-  detail?: Record<string, unknown>
+  detail?: { body?: string; from?: string; to?: string; [key: string]: unknown }
   createdAt: string
 }
 
@@ -494,3 +495,20 @@ export function formatSpecValue(
   const suffix = unit ? ` ${unit.name[lang]}` : ''
   return { label, value: `${spec.value}${suffix}` }
 }
+
+// Shared names used by the connected workspaces. These are the API records.
+export type BrandRecord = ReferenceRecord
+export type CategoryRecord = ReferenceRecord
+export type SectorRecord = ReferenceRecord
+export type MediaAssetRecord = MediaItem
+export type ProductDetailRecord = CatalogProduct & { version: number }
+export type PublishStatus = PublicationStatus
+export type AdminQuoteRequest = QuoteRequestRecord
+export type AdminInquiry = InquiryRecord
+export type AdminTeamMember = TeamMemberRecord
+export type CompanySettingsRecord = SettingsRecord
+export type ContentBlockRecord = ContentRecord
+export type CustomerContact = ContactRecord
+
+// Editor-only fields; serialized to ProductSpec before submitting.
+export type SpecificationInput = { attributeId: string; valueText?: string | null; valueNumber?: number | null; valueBoolean?: boolean | null; optionId?: string | null; optionIds?: string[] }

@@ -17,3 +17,10 @@ node_modules
 .DS_Store
 
 *.tsbuildinfo
+
+# Generated framework and CLI state
+next-env.d.ts
+supabase/.temp/
+
+# Verification artifacts
+work/

@@ -151,12 +151,12 @@ export function ResourceWorkspace({
     setErrorMsg('')
     setFeedback('')
     try {
-      await api(`/admin/${section}/${row.id || row.userId}`, {
+      await api(`/admin/${section}/${row.id || row.id}`, {
         method: 'DELETE',
         body: { version: row.version },
       })
       invalidateLiveQueries(`/admin/${section}`)
-      invalidateLiveQueries('/public/')
+      invalidateLiveQueries(key => key.startsWith('/public/') || key.startsWith('/catalog/') || key.startsWith('/content/'))
       await listQuery.refresh()
       setFeedback(c('تم حذف السجل بنجاح.', 'Record deleted.'))
     } catch (err) {
@@ -326,7 +326,7 @@ export function ResourceWorkspace({
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const rowId = section === 'team' ? row.userId : row.id
+                  const rowId = section === 'team' ? row.id : row.id
                   return (
                     <tr key={rowId}>
                       <td className="font-semibold">{displayRowTitle(row)}</td>
@@ -437,7 +437,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
   const record =
     section === 'team'
-      ? (teamListQuery.data || []).find((m) => m.userId === id)
+      ? (teamListQuery.data || []).find((m) => m.id === id)
       : detailQuery.data
 
   const [form, setForm] = useState<Record<string, any>>({})
@@ -699,8 +699,8 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           categories: attrCategoryRules.map((r, idx) => ({
             categoryId: r.categoryId,
             required: r.required,
-            min: r.min !== '' ? Number(r.min) : null,
-            max: r.max !== '' ? Number(r.max) : null,
+            ...(r.min !== '' ? { min: Number(r.min) } : {}),
+            ...(r.max !== '' ? { max: Number(r.max) } : {}),
             order: idx,
           })),
         }
@@ -712,15 +712,15 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           email: form.email.trim() || null,
           phone: form.phone.trim(),
           preferredChannel: form.preferredChannel,
-          notes: form.notes.trim() || null,
+          notes: form.notes.trim() || undefined,
           active: Boolean(form.active),
         }
       case 'organizations':
         return {
           name: form.namePlain.trim(),
-          city: form.city.trim() || null,
-          governorate: form.governorate.trim() || null,
-          notes: form.notes.trim() || null,
+          city: form.city.trim() || undefined,
+          governorate: form.governorate.trim() || undefined,
+          notes: form.notes.trim() || undefined,
         }
       case 'content':
         return {
@@ -728,8 +728,8 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
           body: { ar: form.bodyAr.trim(), en: form.bodyEn.trim() },
           ctaLabel: { ar: form.ctaLabelAr.trim(), en: form.ctaLabelEn.trim() },
-          ctaPath: form.ctaPath.trim() || null,
-          policyVersion: form.policyVersion.trim() || null,
+          ctaPath: form.ctaPath.trim() || undefined,
+          policyVersion: form.policyVersion.trim() || undefined,
           mediaIds: [],
           seoTitle: { ar: form.seoTitleAr.trim(), en: form.seoTitleEn.trim() },
           seoDescription: {
@@ -753,7 +753,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           kind: form.kind,
           name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
           address: { ar: form.addressAr.trim(), en: form.addressEn.trim() },
-          phone: form.phone.trim() || null,
+          phone: form.phone.trim() || undefined,
           mapUrl: form.mapUrl.trim() || null,
           hours: { ar: form.hoursAr.trim(), en: form.hoursEn.trim() },
           published: Boolean(form.published),
@@ -810,7 +810,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         record?.version,
       )
       invalidateLiveQueries(`/admin/${section}`)
-      invalidateLiveQueries('/public/')
+      invalidateLiveQueries(key => key.startsWith('/public/') || key.startsWith('/catalog/') || key.startsWith('/content/'))
       if (isNew) {
         router.replace(`/admin/${section}/${saved.id}`)
       } else {
@@ -819,9 +819,6 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
       setFeedback(c('تم حفظ السجل بنجاح.', 'Record saved successfully.'))
       return saved
     } catch (err) {
-      if (err instanceof BackendError && err.status === 409 && !isNew) {
-        await detailQuery.refresh()
-      }
       setErrorMsg(formatApiError(err, lang))
       return null
     } finally {
@@ -841,7 +838,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         body: { version: saved.version },
       })
       invalidateLiveQueries(`/admin/${section}`)
-      invalidateLiveQueries('/public/')
+      invalidateLiveQueries(key => key.startsWith('/public/') || key.startsWith('/catalog/') || key.startsWith('/content/'))
       if (isNew) {
         router.replace(`/admin/${section}/${saved.id}`)
       } else {
@@ -861,7 +858,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
     }
   }
 
-  const isSelfTeam = section === 'team' && !isNew && session?.userId === id
+  const isSelfTeam = section === 'team' && !isNew && session?.id === id
 
   return (
     <form onSubmit={handleSubmit}>
@@ -1760,7 +1757,7 @@ export function MediaWorkspace() {
     try {
       const kind =
         file.type === 'application/pdf'
-          ? 'document'
+          ? 'catalog'
           : 'image'
       const uploaded = await uploadAdminMedia(file, {
         name: file.name,
@@ -1953,14 +1950,14 @@ export function MediaWorkspace() {
               </h2>
               <div className="text-xs text-muted-foreground space-y-1">
                 <p dir="ltr" className="font-mono">
-                  {selected.mimeType} · {(selected.sizeBytes / 1024).toFixed(1)} KB
+                  {selected.mime} · {(selected.size / 1024).toFixed(1)} KB
                 </p>
                 <p>
                   {c('حالة الفحص:', 'Scan status:')}{' '}
                   <strong>{selected.status}</strong>
                 </p>
-                {selected.scanDetail && (
-                  <p className="text-amber-800">{selected.scanDetail}</p>
+                {selected.scanError && (
+                  <p className="text-amber-800">{selected.scanError}</p>
                 )}
               </div>
 
@@ -2180,7 +2177,7 @@ export function SettingsWorkspace() {
         name: { ar: nameAr.trim(), en: nameEn.trim() },
         email: email.trim(),
         phone: phone.trim(),
-        whatsapp: whatsapp.trim() || null,
+        whatsapp: whatsapp.trim(),
         support: { ar: supportAr.trim(), en: supportEn.trim() },
         currency: 'EGP',
         timezone: 'Africa/Cairo',
