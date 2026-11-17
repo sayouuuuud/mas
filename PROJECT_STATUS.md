@@ -41,22 +41,24 @@ Run `pnpm dev` before `pnpm test:browser`. Install the pinned Playwright Chromiu
 ## Hosted Supabase observations
 
 - All five applied migration bodies match the corresponding repository statements (comments and whitespace normalized). Repository filenames were aligned to the actual versions: `20261116213151`, `20261116213424`, `20261116213453`, `20261116213509`, `20261116213726`. No existing DDL was re-run to fix history.
-- The pending `20261117155156_production_readiness.sql` combines the previously unapplied safeguards with strict Admin/MFA enforcement at direct RPC boundaries. It neither seeds accounts nor promotes legacy roles.
-- **Application of that migration was rejected by automatic approval review** because it rewrites many security-sensitive functions and privileges. Explicit user approval was requested. It has NOT been applied. Do not bypass this hold using the SQL endpoint or consolidated script.
+- The applied `20261117161207_production_readiness.sql` combines the previously unapplied safeguards with strict Admin/MFA enforcement at direct RPC boundaries. It neither seeds accounts nor promotes legacy roles.
+- The user explicitly approved the reviewed migration after the initial automatic-review rejection. It was then applied successfully to MAS DB as version `20261117161207`. The local filename was reconciled to that returned version. Existing data was neither seeded nor deleted.
+- Post-migration checks: all application tables retain RLS; anon has zero direct table reads; anon/authenticated cannot execute `mas_command`; the retry RPC exists; `/content/attributes` now has the reserved public-list contract. No Auth users or business entities were created by the migration.
 - No application entities, Auth users or staff profiles existed at inspection. Health returned `ready: false`. All four buckets exist: private quarantine, public approved catalog files, private catalog files and private sales PDFs.
 - From the actual local app using the hosted project: public catalog/bootstrap returned 200 and empty data, `/auth/me` returned 401, and health returned 503 `NOT_READY`. No production RFQ, customer or product test data was inserted.
-- Security advisor: private tables have RLS with no direct policies/grants by design. Public/read-only and authenticated RPC SECURITY DEFINER warnings require the existing scoped grants/projection checks, not opening table access. Health advisor returned no findings. Full application functions remain on the five-migration version until approval.
+- Security advisor: private tables have RLS with no direct policies/grants by design. Public/read-only and authenticated RPC SECURITY DEFINER warnings require the existing scoped grants/projection checks, not opening table access. Health advisor returned no findings. The same intentional RPC warnings remain after the applied migration; there are no newly opened table grants.
 
 ## Hosting configuration completed
 
 - Verified Supabase URL points to the intended project; existing legacy anon/service-role variable names are supported by the app.
-- Converted the Vercel service-role variable to a hidden Secret. Added independent Production and Preview `RATE_LIMIT_SECRET` and `CRON_SECRET` values. Added the production `SITE_URL` and set Node 24 to match local verification.
+- Converted the Vercel service-role variable to a hidden Secret. Added independent Production and Preview `RATE_LIMIT_SECRET` and `CRON_SECRET` values. Added the verified primary production `SITE_URL=https://mas-xi.vercel.app` and set Node 24 to match local verification.
 - No scanner, SMTP credentials or approved business/legal content were invented. Deployment Protection was not disabled.
+- Preview deployment `dpl_94YYwtSNQea25ZX7Jvp3U1Loxkgk` built successfully from commit `ad397b76df85d490a9c8e7b5b92799d2c8610e55`; GitHub Verify application and GitGuardian checks passed. Live preview catalog/bootstrap returned 200; health correctly returned NOT_READY.
 - A successful preview build is a code milestone; it is not a production-readiness certificate. Production release and live end-to-end verification remain dependent on the items below.
 
 ## Remaining release gates
 
-1. Explicit approval and application of the reviewed database migration, followed by live RPC/grant checks and reconciliation of its returned migration version.
+1. Database migration applied and post-migration RPC/grant checks completed. Health remains NOT_READY until the real operational prerequisites below exist.
 2. The owner's real Auth account/UUID and MFA enrollment. There is no default account, fixed password, or automatic elevation of an existing user. `bootstrap:owner` requires the confirmed owner UUID.
 3. Approved SMTP, Auth Site URL and redirect configuration for `/api/v1/auth/callback`, then actual invitation/recovery/email delivery tests.
 4. Approved HTTPS malware-scanning service and key. Files remain quarantined until scanning succeeds; image-based publication is blocked without it.
