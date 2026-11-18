@@ -27,20 +27,57 @@ export function convert(value: unknown, preserveDirectKeys = false): any {
 }
 
 const VALIDATION_MESSAGES: Array<[string, string]> = [
+  [
+    'retained customer history',
+    'This customer has requests or inquiries. Deactivate the customer to preserve their history.',
+  ],
   ['company settings', 'Complete company settings before issuing a quotation.'],
-  ['draft only', 'Only draft products without linked requests can be deleted; archive published products instead.'],
-  ['dependencies', 'This record is referenced by other records and cannot be deleted.'],
-  ['published dependency', 'Unpublish or update dependent published records first.'],
-  ['active dependency', 'This unit is used by published products and cannot be deactivated or modified.'],
-  ['unpublish dependent products', 'Unpublish dependent products before changing specification rules.'],
-  ['review published products', 'Review published products before adding required specifications.'],
-  ['immutable policy version', 'This privacy policy version was already published with different content; choose a new version.'],
+  [
+    'draft only',
+    'Only draft products without linked requests can be deleted; archive published products instead.',
+  ],
+  [
+    'dependencies',
+    'This record is referenced by other records and cannot be deleted.',
+  ],
+  [
+    'published dependency',
+    'Unpublish or update dependent published records first.',
+  ],
+  [
+    'active dependency',
+    'This unit is used by published products and cannot be deactivated or modified.',
+  ],
+  [
+    'unpublish dependent products',
+    'Unpublish dependent products before changing specification rules.',
+  ],
+  [
+    'review published products',
+    'Review published products before adding required specifications.',
+  ],
+  [
+    'immutable policy version',
+    'This privacy policy version was already published with different content; choose a new version.',
+  ],
   ['policy version', 'Provide a privacy policy version before publishing.'],
-  ['self protection', 'You cannot deactivate your own account or remove your admin access.'],
+  [
+    'self protection',
+    'You cannot deactivate your own account or remove your admin access.',
+  ],
   ['last owner', 'At least one active admin account must remain.'],
-  ['delivered quotation', 'Record delivery of an issued quotation before marking the request quoted.'],
-  ['retained history', 'Sales requests, inquiries and quotations are permanent records and cannot be deleted.'],
-  ['use publication action', 'Use publish, unpublish or archive actions to change publication status.'],
+  [
+    'delivered quotation',
+    'Record delivery of an issued quotation before marking the request quoted.',
+  ],
+  [
+    'retained history',
+    'Sales requests, inquiries and quotations are permanent records and cannot be deleted.',
+  ],
+  [
+    'use publication action',
+    'Use publish, unpublish or archive actions to change publication status.',
+  ],
 ]
 
 export function databaseError(error: {

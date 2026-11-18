@@ -1,4 +1,5 @@
 'use client'
+import { useUnsavedForm } from './form-state'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -24,10 +25,12 @@ import {
   useCopy,
 } from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
+import { MediaPicker, RemoteSelect } from './entity-tools'
 import { ImportPreview } from './import-preview'
 import { Pagination } from './frontend-tools'
 import {
   api,
+  listAllRecords,
   BackendError,
   buildApiPath,
   downloadServerExport,
@@ -93,18 +96,6 @@ export function ProductWorkspace({ id }: { id?: string }) {
     }
   })
 
-  const categoriesQuery = useLiveQuery(
-    !id ? '/admin/categories?page=1&pageSize=48' : null,
-    async () =>
-      (await api<CategoryRecord[]>('/admin/categories?page=1&pageSize=48')).data,
-  )
-
-  const brandsQuery = useLiveQuery(
-    !id ? '/admin/brands?page=1&pageSize=48' : null,
-    async () =>
-      (await api<BrandRecord[]>('/admin/brands?page=1&pageSize=48')).data,
-  )
-
   if (id) return <ProductEditor id={id} />
 
   const rows = listQuery.data?.data || []
@@ -114,11 +105,6 @@ export function ProductWorkspace({ id }: { id?: string }) {
     total: 0,
     totalPages: 1,
   }
-  const catMap = new Map(
-    (categoriesQuery.data || []).map((cat) => [cat.id, cat]),
-  )
-  const brandMap = new Map((brandsQuery.data || []).map((b) => [b.id, b]))
-
   async function runBulk(operation: 'unpublish' | 'archive') {
     if (busy || !selected.length) return
     const items = rows
@@ -355,9 +341,14 @@ export function ProductWorkspace({ id }: { id?: string }) {
               </thead>
               <tbody>
                 {rows.map((p) => {
-                  const cat = p.categoryId ? catMap.get(p.categoryId) : null
-                  const br = p.brandId ? brandMap.get(p.brandId) : null
-                  const badge = STATUS_BADGE[p.status || 'draft'] || STATUS_BADGE.draft
+                  const cat = (p as any).categoryName
+                    ? { name: (p as any).categoryName }
+                    : null
+                  const br = (p as any).brandName
+                    ? { name: (p as any).brandName }
+                    : null
+                  const badge =
+                    STATUS_BADGE[p.status || 'draft'] || STATUS_BADGE.draft
                   return (
                     <tr key={p.id}>
                       <td>
@@ -394,9 +385,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
                         {br ? (lang === 'ar' ? br.name.ar : br.name.en) : '—'}
                       </td>
                       <td>
-                        <Badge tone={badge.tone}>
-                          {c(badge.ar, badge.en)}
-                        </Badge>
+                        <Badge tone={badge.tone}>{c(badge.ar, badge.en)}</Badge>
                       </td>
                       <td className="text-end">
                         <div className="flex items-center justify-end gap-3">
@@ -476,44 +465,14 @@ function ProductEditor({ id }: { id: string }) {
     async () => (await api<ProductDetailRecord>(`/admin/products/${id}`)).data,
   )
 
-  const categoriesQuery = useLiveQuery(
-    '/admin/categories?page=1&pageSize=48',
-    async () =>
-      (await api<CategoryRecord[]>('/admin/categories?page=1&pageSize=48')).data,
-  )
-  const brandsQuery = useLiveQuery(
-    '/admin/brands?page=1&pageSize=48',
-    async () =>
-      (await api<BrandRecord[]>('/admin/brands?page=1&pageSize=48')).data,
-  )
-  const sectorsQuery = useLiveQuery(
-    '/admin/sectors?page=1&pageSize=48',
-    async () =>
-      (await api<SectorRecord[]>('/admin/sectors?page=1&pageSize=48')).data,
-  )
   const unitsQuery = useLiveQuery(
     '/admin/units?page=1&pageSize=48',
-    async () =>
-      (await api<UnitRecord[]>('/admin/units?page=1&pageSize=48')).data,
+    async () => await listAllRecords<UnitRecord>('units'),
   )
   const attributesQuery = useLiveQuery(
     '/admin/attributes?page=1&pageSize=48',
-    async () =>
-      (await api<AttributeRecord[]>('/admin/attributes?page=1&pageSize=48'))
-        .data,
+    async () => await listAllRecords<AttributeRecord>('attributes'),
   )
-  const mediaQuery = useLiveQuery(
-    '/admin/media?page=1&pageSize=48',
-    async () =>
-      (await api<MediaAssetRecord[]>('/admin/media?page=1&pageSize=48')).data,
-  )
-  const relatedProductsQuery = useLiveQuery(
-    '/admin/products?page=1&pageSize=48',
-    async () =>
-      (await api<ProductDetailRecord[]>('/admin/products?page=1&pageSize=48'))
-        .data,
-  )
-
   const [tab, setTab] = useState(0)
   const [nameAr, setNameAr] = useState('')
   const [nameEn, setNameEn] = useState('')
@@ -521,6 +480,20 @@ function ProductEditor({ id }: { id: string }) {
   const [family, setFamily] = useState<ProductFamily>('oils')
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
+  useEffect(() => {
+    if (isNew) {
+      const query = new URLSearchParams(window.location.search)
+      setCategoryId(query.get('categoryId') || '')
+      setBrandId(query.get('brandId') || '')
+      const sector = query.get('sectorId')
+      if (sector) setSectorIds([sector])
+      const category = query.get('categoryId')
+      if (category)
+        api<CategoryRecord>(`/admin/categories/${category}`)
+          .then((r) => setFamily(r.data.family as ProductFamily))
+          .catch(() => {})
+    }
+  }, [isNew])
   const [modelCode, setModelCode] = useState('')
   const [featured, setFeatured] = useState(false)
   const [summaryAr, setSummaryAr] = useState('')
@@ -543,16 +516,21 @@ function ProductEditor({ id }: { id: string }) {
   const [specifications, setSpecifications] = useState<SpecificationInput[]>([])
   const [variants, setVariants] = useState<EditableVariant[]>([])
   const [initializedKey, setInitializedKey] = useState('')
+  const [baseVersion, setBaseVersion] = useState<number>()
+  const { markDirty, markSaved } = useUnsavedForm()
 
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
-  const activeUnits = (unitsQuery.data || []).filter((u) => u.active)
+  const activeUnits = (unitsQuery.data || []).filter(
+    (u) => u.active && u.usage !== 'measure',
+  )
   const product = productQuery.data
 
   useEffect(() => {
-    if (!isNew && product && initializedKey !== `${product.id}:${product.version}`) {
+    if (!isNew && product && !initializedKey) {
+      setBaseVersion(product.version)
       setNameAr(product.name.ar)
       setNameEn(product.name.en)
       setSlug(product.slug)
@@ -565,12 +543,8 @@ function ProductEditor({ id }: { id: string }) {
       setSummaryEn(product.summary?.en || '')
       setDescriptionAr(product.description?.ar || '')
       setDescriptionEn(product.description?.en || '')
-      setApplicationsTextAr(
-        product.applications?.ar || '',
-      )
-      setApplicationsTextEn(
-        product.applications?.en || '',
-      )
+      setApplicationsTextAr(product.applications?.ar || '')
+      setApplicationsTextEn(product.applications?.en || '')
       setBenefitsTextAr(product.benefits?.ar || '')
       setBenefitsTextEn(product.benefits?.en || '')
       setSourceNote(product.sourceNote || '')
@@ -582,23 +556,36 @@ function ProductEditor({ id }: { id: string }) {
       setSeoTitleEn(product.seoTitle?.en || '')
       setSeoDescAr(product.seoDescription?.ar || '')
       setSeoDescEn(product.seoDescription?.en || '')
-      setSpecifications((product.specifications || []).map(sp => {
-        const attribute = attributesQuery.data?.find(a => a.id === sp.attributeId)
-        return { attributeId: sp.attributeId,
-          ...(typeof sp.value === 'number' ? { valueNumber: sp.value } :
-            typeof sp.value === 'boolean' ? { valueBoolean: sp.value } :
-            Array.isArray(sp.value) ? { optionIds: sp.value } :
-            attribute?.type === 'option' ? { optionId: sp.value } : { valueText: sp.value }) }
-      }))
+      setSpecifications(
+        (product.specifications || []).map((sp) => {
+          const attribute = attributesQuery.data?.find(
+            (a) => a.id === sp.attributeId,
+          )
+          return {
+            attributeId: sp.attributeId,
+            ...(typeof sp.value === 'number'
+              ? { valueNumber: sp.value }
+              : typeof sp.value === 'boolean'
+                ? { valueBoolean: sp.value }
+                : Array.isArray(sp.value)
+                  ? { optionIds: sp.value }
+                  : attribute?.type === 'option'
+                    ? { optionId: sp.value }
+                    : { valueText: sp.value }),
+          }
+        }),
+      )
       setVariants(
         (product.variants || []).map((v) => ({
           id: v.id,
-          specifications: v.specifications, mediaIds: v.mediaIds, order: v.order,
+          specifications: v.specifications,
+          mediaIds: v.mediaIds,
+          order: v.order,
           sku: v.sku || '',
           manufacturerPartNumber: v.manufacturerPartNumber || '',
           labelAr: v.label?.ar || '',
           labelEn: v.label?.en || '',
-          unitId: v.unitId,
+          unitId: v.unitId || '',
           packQuantity: v.packQuantity != null ? String(v.packQuantity) : '',
           packUnitId: v.packUnitId || '',
           minQuantity: Number(v.minQuantity || 1),
@@ -651,14 +638,6 @@ function ProductEditor({ id }: { id: string }) {
     )
   }
 
-  const readyPublicMedia = (mediaQuery.data || []).filter(
-    (m) => m.visibility === 'public' && m.status === 'ready',
-  )
-  const readyImages = readyPublicMedia.filter((m) => m.kind === 'image')
-  const quarantinedCount = (mediaQuery.data || []).filter(
-    (m) => m.status === 'quarantined',
-  ).length
-
   function buildProductPayload() {
     const finalSlug = slug.trim() || toSlug(nameEn || nameAr)
     const combinedMedia = Array.from(
@@ -678,7 +657,10 @@ function ProductEditor({ id }: { id: string }) {
       status: product?.status || 'draft',
       summary: { ar: summaryAr.trim(), en: summaryEn.trim() },
       description: { ar: descriptionAr.trim(), en: descriptionEn.trim() },
-      applications: { ar: applicationsTextAr.trim(), en: applicationsTextEn.trim() },
+      applications: {
+        ar: applicationsTextAr.trim(),
+        en: applicationsTextEn.trim(),
+      },
       benefits: { ar: benefitsTextAr.trim(), en: benefitsTextEn.trim() },
       sourceNote: sourceNote.trim(),
       seoTitle: { ar: seoTitleAr.trim(), en: seoTitleEn.trim() },
@@ -687,14 +669,25 @@ function ProductEditor({ id }: { id: string }) {
       mediaIds: combinedMedia,
       sectorIds,
       relatedIds,
-      specifications: specifications.filter(
-        (sp) =>
-          (sp.valueText != null && sp.valueText.trim() !== '') ||
-          sp.valueNumber != null ||
-          sp.valueBoolean != null ||
-          Boolean(sp.optionId) ||
-          Boolean(sp.optionIds?.length),
-      ).map(sp => ({ attributeId: sp.attributeId, value: sp.valueNumber ?? sp.valueBoolean ?? sp.optionId ?? sp.optionIds ?? sp.valueText ?? '' })),
+      specifications: specifications
+        .filter(
+          (sp) =>
+            (sp.valueText != null && sp.valueText.trim() !== '') ||
+            sp.valueNumber != null ||
+            sp.valueBoolean != null ||
+            Boolean(sp.optionId) ||
+            Boolean(sp.optionIds?.length),
+        )
+        .map((sp) => ({
+          attributeId: sp.attributeId,
+          value:
+            sp.valueNumber ??
+            sp.valueBoolean ??
+            sp.optionId ??
+            sp.optionIds ??
+            sp.valueText ??
+            '',
+        })),
       variants: variants.map((v) => ({
         ...(v.id ? { id: v.id } : {}),
         sku: v.sku.trim(),
@@ -703,7 +696,7 @@ function ProductEditor({ id }: { id: string }) {
           ar: v.labelAr.trim() || v.labelEn.trim(),
           en: v.labelEn.trim() || v.labelAr.trim(),
         },
-        unitId: v.unitId,
+        unitId: v.unitId || null,
         packQuantity:
           v.packQuantity && v.packUnitId ? Number(v.packQuantity) : null,
         packUnitId: v.packQuantity && v.packUnitId ? v.packUnitId : null,
@@ -721,15 +714,6 @@ function ProductEditor({ id }: { id: string }) {
   async function handleSave(e?: FormEvent) {
     e?.preventDefault()
     if (busy) return null
-    if (!variants.length || variants.some((v) => !v.unitId)) {
-      setErrorMsg(
-        c(
-          'أضف متغير بيع واحدًا على الأقل بوحدة بيع نشطة قبل الحفظ.',
-          'Add at least one variant with an active selling unit before saving.',
-        ),
-      )
-      return null
-    }
     const payload = buildProductPayload()
     if (!payload.slug || !payload.name.ar || !payload.name.en) {
       setErrorMsg(
@@ -749,8 +733,9 @@ function ProductEditor({ id }: { id: string }) {
         '/admin/products',
         payload,
         isNew ? undefined : product?.id,
-        product?.version,
+        baseVersion,
       )
+      markSaved()
       invalidateLiveQueries('/admin/products')
       invalidateLiveQueries('/catalog/')
       invalidateLiveQueries('/public/bootstrap')
@@ -758,8 +743,11 @@ function ProductEditor({ id }: { id: string }) {
         router.replace(`/admin/products/${saved.id}`)
       } else {
         await productQuery.refresh()
+        setInitializedKey('')
       }
-      setFeedback(c('تم حفظ بيانات المنتج بنجاح.', 'Product saved successfully.'))
+      setFeedback(
+        c('تم حفظ بيانات المنتج بنجاح.', 'Product saved successfully.'),
+      )
       return saved
     } catch (err) {
       setErrorMsg(formatApiError(err, lang))
@@ -782,6 +770,7 @@ function ProductEditor({ id }: { id: string }) {
         method: 'POST',
         body: { version: saved.version },
       })
+      markSaved()
       invalidateLiveQueries('/admin/products')
       invalidateLiveQueries('/catalog/')
       invalidateLiveQueries('/public/bootstrap')
@@ -789,6 +778,7 @@ function ProductEditor({ id }: { id: string }) {
         router.replace(`/admin/products/${saved.id}`)
       } else {
         await productQuery.refresh()
+        setInitializedKey('')
       }
       setFeedback(
         action === 'publish'
@@ -820,7 +810,7 @@ function ProductEditor({ id }: { id: string }) {
   const statusMeta = STATUS_BADGE[currentStatus] || STATUS_BADGE.draft
 
   return (
-    <form onSubmit={handleSave}>
+    <form onChangeCapture={markDirty} onSubmit={handleSave}>
       <div className="admin-heading">
         <div>
           <Link href="/admin/products" className="text-sm text-primary">
@@ -890,7 +880,10 @@ function ProductEditor({ id }: { id: string }) {
       </div>
 
       {feedback && (
-        <p role="status" className="mb-5 flex items-center gap-2 text-sm font-medium text-primary">
+        <p
+          role="status"
+          className="mb-5 flex items-center gap-2 text-sm font-medium text-primary"
+        >
           <CheckCircle2 className="size-4 shrink-0" />
           {feedback}
         </p>
@@ -964,44 +957,51 @@ function ProductEditor({ id }: { id: string }) {
               <select
                 className="control"
                 value={family}
-                onChange={(e) => setFamily(e.target.value as ProductFamily)}
+                onChange={(e) => {
+                  setFamily(e.target.value as ProductFamily)
+                  setCategoryId('')
+                }}
               >
-                <option value="oils">{c('زيوت صناعية', 'Industrial Oils')}</option>
+                <option value="oils">
+                  {c('زيوت صناعية', 'Industrial Oils')}
+                </option>
                 <option value="grease">{c('شحومات', 'Greases')}</option>
                 <option value="bearings">
                   {c('رولمان بلي', 'Industrial Bearings')}
                 </option>
               </select>
             </Field>
-            <Field label={c('التصنيف (مطلوب للنشر)', 'Category (required to publish)')}>
-              <select
-                className="control"
+            <Field
+              label={c(
+                'التصنيف (مطلوب للنشر)',
+                'Category (required to publish)',
+              )}
+            >
+              <RemoteSelect
+                resource="categories"
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">{c('اختر تصنيفًا…', 'Select category…')}</option>
-                {(categoriesQuery.data || []).map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {lang === 'ar' ? cat.name.ar : cat.name.en} ({cat.status})
-                  </option>
-                ))}
-              </select>
+                onChange={(value: any) => {
+                  markDirty()
+                  setCategoryId(value)
+                }}
+                label={c('اختيار التصنيف', 'Choose category')}
+                filters={{ family }}
+              />
             </Field>
             <Field label={c('العلامة التجارية', 'Brand')}>
-              <select
-                className="control"
+              <RemoteSelect
+                resource="brands"
                 value={brandId}
-                onChange={(e) => setBrandId(e.target.value)}
-              >
-                <option value="">{c('بدون علامة محددة', 'No brand')}</option>
-                {(brandsQuery.data || []).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {lang === 'ar' ? b.name.ar : b.name.en} ({b.status})
-                  </option>
-                ))}
-              </select>
+                onChange={(value: any) => {
+                  markDirty()
+                  setBrandId(value)
+                }}
+                label={c('اختيار العلامة', 'Choose brand')}
+              />
             </Field>
-            <Field label={c('كود الموديل / المرجع الفني', 'Model / technical code')}>
+            <Field
+              label={c('كود الموديل / المرجع الفني', 'Model / technical code')}
+            >
               <input
                 className="control font-mono"
                 dir="ltr"
@@ -1015,7 +1015,10 @@ function ProductEditor({ id }: { id: string }) {
                 checked={featured}
                 onChange={(e) => setFeatured(e.target.checked)}
               />
-              {c('إظهار ضمن المنتجات المختارة في الرئيسية', 'Feature on homepage')}
+              {c(
+                'إظهار ضمن المنتجات المختارة في الرئيسية',
+                'Feature on homepage',
+              )}
             </label>
             <Field label={c('ملخص قصير بالعربية', 'Arabic summary')}>
               <textarea
@@ -1047,7 +1050,9 @@ function ProductEditor({ id }: { id: string }) {
                 onChange={(e) => setDescriptionAr(e.target.value)}
               />
             </Field>
-            <Field label={c('الوصف التفصيلي بالإنجليزية', 'English description')}>
+            <Field
+              label={c('الوصف التفصيلي بالإنجليزية', 'English description')}
+            >
               <textarea
                 rows={5}
                 dir="ltr"
@@ -1056,7 +1061,12 @@ function ProductEditor({ id }: { id: string }) {
                 onChange={(e) => setDescriptionEn(e.target.value)}
               />
             </Field>
-            <Field label={c('التطبيقات بالعربية (سطر لكل تطبيق)', 'Arabic applications (one per line)')}>
+            <Field
+              label={c(
+                'التطبيقات بالعربية (سطر لكل تطبيق)',
+                'Arabic applications (one per line)',
+              )}
+            >
               <textarea
                 rows={4}
                 className="control"
@@ -1064,7 +1074,12 @@ function ProductEditor({ id }: { id: string }) {
                 onChange={(e) => setApplicationsTextAr(e.target.value)}
               />
             </Field>
-            <Field label={c('التطبيقات بالإنجليزية (سطر لكل تطبيق)', 'English applications (one per line)')}>
+            <Field
+              label={c(
+                'التطبيقات بالإنجليزية (سطر لكل تطبيق)',
+                'English applications (one per line)',
+              )}
+            >
               <textarea
                 rows={4}
                 dir="ltr"
@@ -1073,7 +1088,12 @@ function ProductEditor({ id }: { id: string }) {
                 onChange={(e) => setApplicationsTextEn(e.target.value)}
               />
             </Field>
-            <Field label={c('المزايا بالعربية (سطر لكل ميزة)', 'Arabic benefits (one per line)')}>
+            <Field
+              label={c(
+                'المزايا بالعربية (سطر لكل ميزة)',
+                'Arabic benefits (one per line)',
+              )}
+            >
               <textarea
                 rows={4}
                 className="control"
@@ -1081,7 +1101,12 @@ function ProductEditor({ id }: { id: string }) {
                 onChange={(e) => setBenefitsTextAr(e.target.value)}
               />
             </Field>
-            <Field label={c('المزايا بالإنجليزية (سطر لكل ميزة)', 'English benefits (one per line)')}>
+            <Field
+              label={c(
+                'المزايا بالإنجليزية (سطر لكل ميزة)',
+                'English benefits (one per line)',
+              )}
+            >
               <textarea
                 rows={4}
                 dir="ltr"
@@ -1091,7 +1116,12 @@ function ProductEditor({ id }: { id: string }) {
               />
             </Field>
             <div className="md:col-span-2">
-              <Field label={c('ملاحظة مصدر المواصفات الداخلية', 'Internal specification source note')}>
+              <Field
+                label={c(
+                  'ملاحظة مصدر المواصفات الداخلية',
+                  'Internal specification source note',
+                )}
+              >
                 <input
                   className="control"
                   value={sourceNote}
@@ -1112,7 +1142,10 @@ function ProductEditor({ id }: { id: string }) {
             </p>
             {applicableProductAttributes.length === 0 ? (
               <EmptyState
-                title={c('لا توجد مواصفات معرّفة بعد', 'No product attributes defined')}
+                title={c(
+                  'لا توجد مواصفات معرّفة بعد',
+                  'No product attributes defined',
+                )}
                 description={c(
                   'يمكنك تعريف مواصفات مثل اللزوجة أو درجة NLGI أو القطر الداخلي من قسم المواصفات الفنية.',
                   'Define attributes such as ISO VG, NLGI grade or bore diameter in the Attributes section.',
@@ -1225,10 +1258,7 @@ function ProductEditor({ id }: { id: string }) {
                                     checked={checked}
                                     onChange={(e) => {
                                       const nextIds = e.target.checked
-                                        ? [
-                                            ...(current?.optionIds || []),
-                                            optId,
-                                          ]
+                                        ? [...(current?.optionIds || []), optId]
                                         : (current?.optionIds || []).filter(
                                             (x) => x !== optId,
                                           )
@@ -1266,14 +1296,20 @@ function ProductEditor({ id }: { id: string }) {
                   'يجب إنشاء وحدة بيع نشطة أولًا من قسم وحدات البيع والقياس قبل حفظ المتغيرات.',
                   'Create at least one active selling unit in Units before saving variants.',
                 )}{' '}
-                <Link href="/admin/units/new" className="font-semibold underline">
+                <Link
+                  href="/admin/units/new"
+                  className="font-semibold underline"
+                >
                   {c('إضافة وحدة الآن', 'Create unit now')}
                 </Link>
               </div>
             )}
 
             {variants.map((v, idx) => (
-              <div key={v.id || idx} className="space-y-4 rounded-xl border p-4">
+              <div
+                key={v.id || idx}
+                className="space-y-4 rounded-xl border p-4"
+              >
                 <div className="grid gap-3 md:grid-cols-4">
                   <Field label={c('وصف العبوة بالعربية', 'Arabic label')}>
                     <input
@@ -1283,7 +1319,9 @@ function ProductEditor({ id }: { id: string }) {
                       onChange={(e) =>
                         setVariants((prev) =>
                           prev.map((row, i) =>
-                            i === idx ? { ...row, labelAr: e.target.value } : row,
+                            i === idx
+                              ? { ...row, labelAr: e.target.value }
+                              : row,
                           ),
                         )
                       }
@@ -1298,13 +1336,20 @@ function ProductEditor({ id }: { id: string }) {
                       onChange={(e) =>
                         setVariants((prev) =>
                           prev.map((row, i) =>
-                            i === idx ? { ...row, labelEn: e.target.value } : row,
+                            i === idx
+                              ? { ...row, labelEn: e.target.value }
+                              : row,
                           ),
                         )
                       }
                     />
                   </Field>
-                  <Field label="SKU">
+                  <Field
+                    label={c(
+                      'الرمز الداخلي (يتولد تلقائيًا لو فارغ)',
+                      'Internal SKU (generated when blank)',
+                    )}
+                  >
                     <input
                       className="control font-mono"
                       dir="ltr"
@@ -1319,24 +1364,19 @@ function ProductEditor({ id }: { id: string }) {
                     />
                   </Field>
                   <Field label={c('وحدة البيع', 'Selling unit')}>
-                    <select
-                      className="control"
+                    <RemoteSelect
+                      resource="units"
+                      filters={{ usage: 'sale' }}
                       value={v.unitId}
-                      onChange={(e) =>
+                      onChange={(unitId: string) =>
                         setVariants((prev) =>
                           prev.map((row, i) =>
-                            i === idx ? { ...row, unitId: e.target.value } : row,
+                            i === idx ? { ...row, unitId } : row,
                           ),
                         )
                       }
-                    >
-                      <option value="">{c('اختر وحدة…', 'Select unit…')}</option>
-                      {activeUnits.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {lang === 'ar' ? u.name.ar : u.name.en} ({u.code})
-                        </option>
-                      ))}
-                    </select>
+                      label={c('وحدة البيع', 'Selling unit')}
+                    />
                   </Field>
                 </div>
 
@@ -1377,7 +1417,9 @@ function ProductEditor({ id }: { id: string }) {
                       }
                     />
                   </Field>
-                  <Field label={c('حجم العبوة الداخلي', 'Pack size (optional)')}>
+                  <Field
+                    label={c('حجم العبوة الداخلي', 'Pack size (optional)')}
+                  >
                     <input
                       type="number"
                       min={0}
@@ -1431,7 +1473,9 @@ function ProductEditor({ id }: { id: string }) {
                         )
                       }
                     >
-                      <option value="available">{c('متوفر', 'Available')}</option>
+                      <option value="available">
+                        {c('متوفر', 'Available')}
+                      </option>
                       <option value="on_request">
                         {c('حسب الطلب', 'On request')}
                       </option>
@@ -1443,9 +1487,22 @@ function ProductEditor({ id }: { id: string }) {
                 </div>
 
                 <VariantSpecsEditor
-                  attributes={(attributesQuery.data || []).filter(a => a.scope === 'variant' && (!a.categories.length || a.categories.some(rule => rule.categoryId === categoryId)))}
+                  attributes={(attributesQuery.data || []).filter(
+                    (a) =>
+                      a.scope === 'variant' &&
+                      (!a.categories.length ||
+                        a.categories.some(
+                          (rule) => rule.categoryId === categoryId,
+                        )),
+                  )}
                   specifications={v.specifications || []}
-                  onChange={specs => setVariants(current => current.map((row, i) => i === idx ? { ...row, specifications: specs } : row))}
+                  onChange={(specs) =>
+                    setVariants((current) =>
+                      current.map((row, i) =>
+                        i === idx ? { ...row, specifications: specs } : row,
+                      ),
+                    )
+                  }
                 />
                 <div className="flex items-center justify-between pt-1">
                   <label className="flex items-center gap-2 text-sm">
@@ -1509,149 +1566,53 @@ function ProductEditor({ id }: { id: string }) {
 
         {tab === 4 && (
           <div className="space-y-5">
-            {quarantinedCount > 0 && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                {c(
-                  `يوجد ${quarantinedCount} ملف في الحجر الأمني (quarantined) بانتظار المعالجة؛ الوسائط الجاهزة (ready) فقط متاحة للربط والنشر العام.`,
-                  `${quarantinedCount} media file(s) are currently quarantined pending file processing; only ready public files can be attached for publication.`,
-                )}
-              </div>
-            )}
-
-            <Field
+            <MediaPicker
+              value={mainMediaId}
+              onChange={(value: any) => {
+                markDirty()
+                setMainMediaId(value)
+              }}
+              label={c('الصورة الرئيسية للمنتج', 'Main product image')}
+              alt={{ ar: nameAr, en: nameEn }}
+            />
+            <MediaPicker
+              value={mediaIds}
+              onChange={(value: any) => {
+                markDirty()
+                setMediaIds(value)
+              }}
+              multiple
+              kind="all"
               label={c(
-                'الصورة الرئيسية للمنتج (مطلوبة للنشر وبنص بديل عربي وإنجليزي)',
-                'Main product image (required to publish; must have bilingual alt text)',
+                'معرض الصور والملفات الفنية',
+                'Gallery and technical documents',
               )}
-            >
-              <select
-                className="control"
-                value={mainMediaId}
-                onChange={(e) => setMainMediaId(e.target.value)}
-              >
-                <option value="">
-                  {c('اختر صورة جاهزة من مكتبة الوسائط…', 'Select a ready image…')}
-                </option>
-                {readyImages.map((img) => (
-                  <option key={img.id} value={img.id}>
-                    {img.name} ({img.alt?.ar && img.alt?.en ? 'Alt OK' : 'Missing alt!'})
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <div>
-              <strong className="mb-2 block text-sm">
-                {c(
-                  'صور إضافية ونشرات فنية عامة (TDS / SDS / كتالوج PDF)',
-                  'Additional gallery images & public technical documents (TDS / SDS / PDF)',
-                )}
-              </strong>
-              {readyPublicMedia.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {c(
-                    'لا توجد وسائط عامة بحالة ready بعد.',
-                    'No ready public media assets available yet.',
-                  )}{' '}
-                  <Link href="/admin/media" className="text-primary underline">
-                    {c('فتح مكتبة الوسائط', 'Open Media Library')}
-                  </Link>
-                </p>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {readyPublicMedia.map((asset) => {
-                    const checked = mediaIds.includes(asset.id)
-                    return (
-                      <label
-                        key={asset.id}
-                        className="flex items-center gap-3 rounded-xl border p-3 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) =>
-                            setMediaIds((prev) =>
-                              e.target.checked
-                                ? [...prev, asset.id]
-                                : prev.filter((x) => x !== asset.id),
-                            )
-                          }
-                        />
-                        <span className="truncate font-medium">{asset.name}</span>
-                        <Badge tone="muted">{asset.kind}</Badge>
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+              alt={{ ar: nameAr, en: nameEn }}
+            />
           </div>
         )}
 
         {tab === 5 && (
           <div className="space-y-6">
-            <div>
-              <strong className="mb-2 block text-sm">
-                {c('القطاعات الصناعية المرتبطة', 'Applicable industrial sectors')}
-              </strong>
-              <div className="flex flex-wrap gap-2">
-                {(sectorsQuery.data || []).map((sec) => {
-                  const checked = sectorIds.includes(sec.id)
-                  return (
-                    <label
-                      key={sec.id}
-                      className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) =>
-                          setSectorIds((prev) =>
-                            e.target.checked
-                              ? [...prev, sec.id]
-                              : prev.filter((x) => x !== sec.id),
-                          )
-                        }
-                      />
-                      {lang === 'ar' ? sec.name.ar : sec.name.en}
-                    </label>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div>
-              <strong className="mb-2 block text-sm">
-                {c('منتجات ذات صلة', 'Related products')}
-              </strong>
-              <div className="flex flex-wrap gap-2">
-                {(relatedProductsQuery.data || [])
-                  .filter((rp) => rp.id !== product?.id)
-                  .map((rp) => {
-                    const checked = relatedIds.includes(rp.id)
-                    return (
-                      <label
-                        key={rp.id}
-                        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) =>
-                            setRelatedIds((prev) =>
-                              e.target.checked
-                                ? [...prev, rp.id]
-                                : prev.filter((x) => x !== rp.id),
-                            )
-                          }
-                        />
-                        {lang === 'ar' ? rp.name.ar : rp.name.en}
-                      </label>
-                    )
-                  })}
-              </div>
-            </div>
-
+            <RemoteSelect
+              resource="sectors"
+              value={sectorIds}
+              onChange={(value: any) => {
+                markDirty()
+                setSectorIds(value)
+              }}
+              multiple
+              label={c('القطاعات المرتبطة', 'Applicable sectors')}
+            />
+            <RemoteSelect
+              resource="products"
+              value={relatedIds}
+              onChange={(ids: string[]) =>
+                setRelatedIds(ids.filter((value) => value !== id))
+              }
+              multiple
+              label={c('منتجات ذات صلة', 'Related products')}
+            />
             <div className="grid gap-5 border-t pt-5 md:grid-cols-2">
               <Field label={c('عنوان SEO بالعربية', 'Arabic SEO title')}>
                 <input
@@ -1676,7 +1637,9 @@ function ProductEditor({ id }: { id: string }) {
                   onChange={(e) => setSeoDescAr(e.target.value)}
                 />
               </Field>
-              <Field label={c('وصف SEO بالإنجليزية', 'English SEO description')}>
+              <Field
+                label={c('وصف SEO بالإنجليزية', 'English SEO description')}
+              >
                 <textarea
                   rows={2}
                   dir="ltr"
@@ -1693,20 +1656,114 @@ function ProductEditor({ id }: { id: string }) {
   )
 }
 
-function VariantSpecsEditor({ attributes, specifications, onChange }: { attributes: AttributeRecord[]; specifications: ProductSpec[]; onChange: (specs: ProductSpec[]) => void }) {
+function VariantSpecsEditor({
+  attributes,
+  specifications,
+  onChange,
+}: {
+  attributes: AttributeRecord[]
+  specifications: ProductSpec[]
+  onChange: (specs: ProductSpec[]) => void
+}) {
   const { lang } = useLanguage()
   const c = useCopy()
-  function update(attributeId: string, value: ProductSpec['value'] | undefined) {
-    const remaining = specifications.filter(spec => spec.attributeId !== attributeId)
-    onChange(value === undefined ? remaining : [...remaining, { attributeId, value }])
+  function update(
+    attributeId: string,
+    value: ProductSpec['value'] | undefined,
+  ) {
+    const remaining = specifications.filter(
+      (spec) => spec.attributeId !== attributeId,
+    )
+    onChange(
+      value === undefined ? remaining : [...remaining, { attributeId, value }],
+    )
   }
-  return <div className="grid gap-4 sm:grid-cols-2">{attributes.map(attribute => {
-    const value = specifications.find(spec => spec.attributeId === attribute.id)?.value
-    return <Field key={attribute.id} label={attribute.name[lang]}>
-      {attribute.type === 'boolean' ? <select className="control" value={value === undefined ? '' : String(value)} onChange={e => update(attribute.id, e.target.value === '' ? undefined : e.target.value === 'true')}><option value="">{c('غير محدد', 'Unset')}</option><option value="true">{c('نعم', 'Yes')}</option><option value="false">{c('لا', 'No')}</option></select>
-      : attribute.type === 'option' ? <select className="control" value={typeof value === 'string' ? value : ''} onChange={e => update(attribute.id, e.target.value || undefined)}><option value="">{c('اختر قيمة', 'Select option')}</option>{attribute.options.map(option => <option key={option.id} value={option.id}>{option.label[lang]}</option>)}</select>
-      : attribute.type === 'multi_option' ? <select multiple className="control" value={Array.isArray(value) ? value : []} onChange={e => update(attribute.id, Array.from(e.target.selectedOptions, option => option.value))}>{attribute.options.map(option => <option key={option.id} value={option.id}>{option.label[lang]}</option>)}</select>
-      : <input className="control" type={attribute.type === 'number' ? 'number' : 'text'} step="any" value={typeof value === 'number' || typeof value === 'string' ? value : ''} onChange={e => update(attribute.id, e.target.value === '' ? undefined : attribute.type === 'number' ? Number(e.target.value) : e.target.value)} />}
-    </Field>
-  })}</div>
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {attributes.map((attribute) => {
+        const value = specifications.find(
+          (spec) => spec.attributeId === attribute.id,
+        )?.value
+        return (
+          <Field key={attribute.id} label={attribute.name[lang]}>
+            {attribute.type === 'boolean' ? (
+              <select
+                className="control"
+                value={value === undefined ? '' : String(value)}
+                onChange={(e) =>
+                  update(
+                    attribute.id,
+                    e.target.value === ''
+                      ? undefined
+                      : e.target.value === 'true',
+                  )
+                }
+              >
+                <option value="">{c('غير محدد', 'Unset')}</option>
+                <option value="true">{c('نعم', 'Yes')}</option>
+                <option value="false">{c('لا', 'No')}</option>
+              </select>
+            ) : attribute.type === 'option' ? (
+              <select
+                className="control"
+                value={typeof value === 'string' ? value : ''}
+                onChange={(e) =>
+                  update(attribute.id, e.target.value || undefined)
+                }
+              >
+                <option value="">{c('اختر قيمة', 'Select option')}</option>
+                {attribute.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label[lang]}
+                  </option>
+                ))}
+              </select>
+            ) : attribute.type === 'multi_option' ? (
+              <select
+                multiple
+                className="control"
+                value={Array.isArray(value) ? value : []}
+                onChange={(e) =>
+                  update(
+                    attribute.id,
+                    Array.from(
+                      e.target.selectedOptions,
+                      (option) => option.value,
+                    ),
+                  )
+                }
+              >
+                {attribute.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label[lang]}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="control"
+                type={attribute.type === 'number' ? 'number' : 'text'}
+                step="any"
+                value={
+                  typeof value === 'number' || typeof value === 'string'
+                    ? value
+                    : ''
+                }
+                onChange={(e) =>
+                  update(
+                    attribute.id,
+                    e.target.value === ''
+                      ? undefined
+                      : attribute.type === 'number'
+                        ? Number(e.target.value)
+                        : e.target.value,
+                  )
+                }
+              />
+            )}
+          </Field>
+        )
+      })}
+    </div>
+  )
 }

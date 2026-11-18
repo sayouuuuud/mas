@@ -1,4 +1,7 @@
 'use client'
+import { useUnsavedForm } from './form-state'
+import { ContentLayoutEditor } from './layout-editor'
+import { MediaPicker, RemoteSelect, RelationsPanel } from './entity-tools'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -32,6 +35,7 @@ import { useAdminSession } from './admin-shell'
 import { Pagination } from './frontend-tools'
 import {
   api,
+  listAllRecords,
   BackendError,
   buildApiPath,
   downloadServerExport,
@@ -72,7 +76,11 @@ const SECTION_META: Record<
     exportResource: 'contacts',
   },
   organizations: { ar: 'المؤسسات والشركات', en: 'Organizations' },
-  content: { ar: 'محتوى الموقع والسياسات', en: 'Site Content & Policies', publishable: true },
+  content: {
+    ar: 'محتوى الموقع والسياسات',
+    en: 'Site Content & Policies',
+    publishable: true,
+  },
   navigation: { ar: 'قوائم التنقل', en: 'Navigation Menus' },
   locations: { ar: 'الفروع والمخازن', en: 'Locations & Branches' },
   team: { ar: 'حسابات الأدمن', en: 'Administrator Accounts' },
@@ -156,7 +164,12 @@ export function ResourceWorkspace({
         body: { version: row.version },
       })
       invalidateLiveQueries(`/admin/${section}`)
-      invalidateLiveQueries(key => key.startsWith('/public/') || key.startsWith('/catalog/') || key.startsWith('/content/'))
+      invalidateLiveQueries(
+        (key) =>
+          key.startsWith('/public/') ||
+          key.startsWith('/catalog/') ||
+          key.startsWith('/content/'),
+      )
       await listQuery.refresh()
       setFeedback(c('تم حذف السجل بنجاح.', 'Record deleted.'))
     } catch (err) {
@@ -175,13 +188,15 @@ export function ResourceWorkspace({
   }
 
   function displayRowSub(row: any) {
-    if (section === 'team') return c('الدور الوحيد: الأدمن', 'Single role: Admin')
+    if (section === 'team')
+      return c('الدور الوحيد: الأدمن', 'Single role: Admin')
     if (section === 'customers')
       return [row.phone, row.email].filter(Boolean).join(' · ')
     if (section === 'organizations')
       return [row.city, row.governorate].filter(Boolean).join(' — ')
     if (section === 'units') return `${row.code} · precision: ${row.precision}`
-    if (section === 'attributes') return `${row.code} · ${row.type} (${row.scope})`
+    if (section === 'attributes')
+      return `${row.code} · ${row.type} (${row.scope})`
     if (section === 'navigation') return `${row.area} · ${row.path}`
     if (section === 'locations') return `${row.kind} · ${row.phone || ''}`
     if (section === 'content')
@@ -330,7 +345,10 @@ export function ResourceWorkspace({
                   return (
                     <tr key={rowId}>
                       <td className="font-semibold">{displayRowTitle(row)}</td>
-                      <td dir="ltr" className="font-mono text-xs text-muted-foreground">
+                      <td
+                        dir="ltr"
+                        className="font-mono text-xs text-muted-foreground"
+                      >
                         {displayRowSub(row)}
                       </td>
                       <td>{displayRowBadge(row)}</td>
@@ -398,41 +416,12 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
     ['categories', 'attributes'].includes(section)
       ? '/admin/categories?page=1&pageSize=48'
       : null,
-    async () =>
-      (await api<CategoryRecord[]>('/admin/categories?page=1&pageSize=48')).data,
+    async () => await listAllRecords<CategoryRecord>('categories'),
   )
 
   const unitsQuery = useLiveQuery(
     section === 'attributes' ? '/admin/units?page=1&pageSize=48' : null,
-    async () =>
-      (await api<UnitRecord[]>('/admin/units?page=1&pageSize=48')).data,
-  )
-
-  const mediaQuery = useLiveQuery(
-    ['categories', 'brands', 'sectors', 'content'].includes(section)
-      ? '/admin/media?page=1&pageSize=48'
-      : null,
-    async () =>
-      (await api<MediaAssetRecord[]>('/admin/media?page=1&pageSize=48')).data,
-  )
-
-  const orgsQuery = useLiveQuery(
-    section === 'customers' ? '/admin/organizations?page=1&pageSize=48' : null,
-    async () =>
-      (await api<OrganizationRecord[]>('/admin/organizations?page=1&pageSize=48'))
-        .data,
-  )
-
-  const customerRequestsQuery = useLiveQuery(
-    section === 'customers' && !isNew
-      ? '/admin/quote-requests?page=1&pageSize=48'
-      : null,
-    async () =>
-      (
-        await api<AdminQuoteRequest[]>(
-          '/admin/quote-requests?page=1&pageSize=48',
-        )
-      ).data,
+    async () => await listAllRecords<UnitRecord>('units'),
   )
 
   const record =
@@ -441,11 +430,15 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
       : detailQuery.data
 
   const [form, setForm] = useState<Record<string, any>>({})
-  const [attrOptionsText, setAttrOptionsText] = useState('')
+  const [attrOptions, setAttrOptions] = useState<
+    Array<{ id?: string; code: string; label: { ar: string; en: string } }>
+  >([])
   const [attrCategoryRules, setAttrCategoryRules] = useState<
     Array<{ categoryId: string; required: boolean; min: string; max: string }>
   >([])
   const [initializedKey, setInitializedKey] = useState('')
+  const [baseVersion, setBaseVersion] = useState<number>()
+  const { markDirty, markSaved } = useUnsavedForm()
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -502,19 +495,29 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         seoDescAr: '',
         seoDescEn: '',
       })
-      setAttrOptionsText('')
+      setAttrOptions([])
       setAttrCategoryRules([])
       setInitializedKey(`new:${section}`)
-    } else if (
-      !isNew &&
-      record &&
-      initializedKey !== `${section}:${id}:${record.version}`
-    ) {
+    } else if (!isNew && record && !initializedKey) {
+      setBaseVersion(record.version)
       setForm({
         nameAr: record.name?.ar || '',
         nameEn: record.name?.en || '',
         slug: record.slug || '',
         key: record.key || '',
+        mediaIds: (record.mediaIds || []).filter(
+          (mediaId: string) =>
+            ![
+              record.layout?.imageMediaId,
+              ...(record.layout?.cards || []).map(
+                (card: any) => card.imageMediaId,
+              ),
+            ].includes(mediaId),
+        ),
+        layout: record.layout || { cards: [], points: [] },
+        featured: !!record.featured,
+        group: record.group || 'other',
+        usage: record.usage || 'both',
         code: record.code || '',
         family: record.family || 'oils',
         parentId: record.parentId || '',
@@ -562,11 +565,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
       })
       if (section === 'attributes') {
         const attr = record as AttributeRecord
-        setAttrOptionsText(
-          (attr.options || [])
-            .map((o) => `${o.code}|${o.label.ar}|${o.label.en}`)
-            .join('\n'),
-        )
+        setAttrOptions(attr.options || [])
         setAttrCategoryRules(
           (attr.categories || []).map((r) => ({
             categoryId: r.categoryId,
@@ -595,11 +594,6 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
       />
     )
   }
-
-  const readyImages = (mediaQuery.data || []).filter(
-    (m) =>
-      m.visibility === 'public' && m.status === 'ready' && m.kind === 'image',
-  )
 
   function buildPayload() {
     switch (section) {
@@ -631,6 +625,8 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
             en: form.descriptionEn.trim(),
           },
           website: form.website.trim() || null,
+          group: form.group || 'other',
+          featured: !!form.featured,
           logoMediaId: form.logoMediaId || null,
           imageMediaId: form.imageMediaId || null,
           order: Number(form.order || 0),
@@ -661,32 +657,14 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
       case 'units':
         return {
           code: form.code.trim(),
+          usage: form.usage || 'both',
           name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
           precision: Number(form.precision || 0),
           active: Boolean(form.active),
         }
       case 'attributes': {
         const parsedOptions = ['option', 'multi_option'].includes(form.type)
-          ? attrOptionsText
-              .split('\n')
-              .map((line) => line.trim())
-              .filter(Boolean)
-              .map((line) => {
-                const [codePart, arPart, enPart] = line
-                  .split('|')
-                  .map((s) => s.trim())
-                const existing = (record?.options || []).find(
-                  (o: any) => o.code === codePart,
-                )
-                return {
-                  ...(existing?.id ? { id: existing.id } : {}),
-                  code: codePart,
-                  label: {
-                    ar: arPart || codePart,
-                    en: enPart || arPart || codePart,
-                  },
-                }
-              })
+          ? attrOptions
           : []
         return {
           code: form.code.trim().toLowerCase(),
@@ -730,7 +708,18 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           ctaLabel: { ar: form.ctaLabelAr.trim(), en: form.ctaLabelEn.trim() },
           ctaPath: form.ctaPath.trim() || undefined,
           policyVersion: form.policyVersion.trim() || undefined,
-          mediaIds: [],
+          mediaIds: Array.from(
+            new Set(
+              [
+                ...(form.mediaIds || []),
+                form.layout?.imageMediaId,
+                ...(form.layout?.cards || []).map(
+                  (card: any) => card.imageMediaId,
+                ),
+              ].filter(Boolean),
+            ),
+          ),
+          layout: form.layout || { cards: [], points: [] },
           seoTitle: { ar: form.seoTitleAr.trim(), en: form.seoTitleEn.trim() },
           seoDescription: {
             ar: form.seoDescAr.trim(),
@@ -807,14 +796,21 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         `/admin/${section}`,
         payload,
         isNew ? undefined : id,
-        record?.version,
+        baseVersion,
       )
+      markSaved()
       invalidateLiveQueries(`/admin/${section}`)
-      invalidateLiveQueries(key => key.startsWith('/public/') || key.startsWith('/catalog/') || key.startsWith('/content/'))
+      invalidateLiveQueries(
+        (key) =>
+          key.startsWith('/public/') ||
+          key.startsWith('/catalog/') ||
+          key.startsWith('/content/'),
+      )
       if (isNew) {
         router.replace(`/admin/${section}/${saved.id}`)
       } else {
         await detailQuery.refresh()
+        setInitializedKey('')
       }
       setFeedback(c('تم حفظ السجل بنجاح.', 'Record saved successfully.'))
       return saved
@@ -837,12 +833,19 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         method: 'POST',
         body: { version: saved.version },
       })
+      markSaved()
       invalidateLiveQueries(`/admin/${section}`)
-      invalidateLiveQueries(key => key.startsWith('/public/') || key.startsWith('/catalog/') || key.startsWith('/content/'))
+      invalidateLiveQueries(
+        (key) =>
+          key.startsWith('/public/') ||
+          key.startsWith('/catalog/') ||
+          key.startsWith('/content/'),
+      )
       if (isNew) {
         router.replace(`/admin/${section}/${saved.id}`)
       } else {
         await detailQuery.refresh()
+        setInitializedKey('')
       }
       setFeedback(
         action === 'publish'
@@ -861,7 +864,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
   const isSelfTeam = section === 'team' && !isNew && session?.id === id
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onChangeCapture={markDirty} onSubmit={handleSubmit}>
       <div className="admin-heading">
         <div>
           <Link href={`/admin/${section}`} className="text-sm text-primary">
@@ -921,7 +924,10 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
       </div>
 
       {feedback && (
-        <p role="status" className="mb-5 flex items-center gap-2 text-sm font-medium text-primary">
+        <p
+          role="status"
+          className="mb-5 flex items-center gap-2 text-sm font-medium text-primary"
+        >
           <CheckCircle2 className="size-4 shrink-0" />
           {feedback}
         </p>
@@ -936,7 +942,9 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         {section === 'team' ? (
           <>
             {isNew && (
-              <Field label={c('البريد الإلكتروني للأدمن', 'Admin email address')}>
+              <Field
+                label={c('البريد الإلكتروني للأدمن', 'Admin email address')}
+              >
                 <input
                   type="email"
                   required
@@ -961,7 +969,10 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
               <input
                 className="control bg-muted/50"
                 disabled
-                value={c('الأدمن (كامل الصلاحيات مع MFA)', 'Admin (Full access + MFA)')}
+                value={c(
+                  'الأدمن (كامل الصلاحيات مع MFA)',
+                  'Admin (Full access + MFA)',
+                )}
               />
             </Field>
             {!isNew && (
@@ -996,20 +1007,14 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
               />
             </Field>
             <Field label={c('المؤسسة / الشركة', 'Organization')}>
-              <select
-                className="control"
+              <RemoteSelect
+                resource="organizations"
                 value={form.organizationId || ''}
-                onChange={(e) =>
-                  setForm({ ...form, organizationId: e.target.value })
+                onChange={(organizationId: string) =>
+                  setForm({ ...form, organizationId })
                 }
-              >
-                <option value="">{c('بدون مؤسسة', 'Unlinked')}</option>
-                {(orgsQuery.data || []).map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                  </option>
-                ))}
-              </select>
+                label={c('المؤسسة', 'Organization')}
+              />
             </Field>
             <Field label={c('الهاتف', 'Phone')}>
               <input
@@ -1060,31 +1065,12 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                 />
               </Field>
             </div>
-            {!isNew && (
-              <div className="md:col-span-2 border-t pt-4">
-                <strong className="mb-2 block text-sm">
-                  {c('طلبات عروض الأسعار المرتبطة بهذا العميل', 'Quote requests linked to this customer')}
-                </strong>
-                <div className="flex flex-wrap gap-2">
-                  {(customerRequestsQuery.data || [])
-                    .filter((r) => r.contactId === id)
-                    .map((r) => (
-                      <Link
-                        key={r.id}
-                        href={`/admin/quote-requests/${r.id}`}
-                        dir="ltr"
-                        className="btn-outline font-mono text-xs"
-                      >
-                        {r.reference} ({r.status})
-                      </Link>
-                    ))}
-                </div>
-              </div>
-            )}
           </>
         ) : section === 'organizations' ? (
           <>
-            <Field label={c('اسم الشركة / المؤسسة', 'Company / Organization name')}>
+            <Field
+              label={c('اسم الشركة / المؤسسة', 'Company / Organization name')}
+            >
               <input
                 required
                 className="control"
@@ -1142,8 +1128,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                   setForm((prev) => ({
                     ...prev,
                     nameEn: val,
-                    slug:
-                      isNew && !prev.slug ? toSlug(val) : prev.slug,
+                    slug: isNew && !prev.slug ? toSlug(val) : prev.slug,
                   }))
                 }}
               />
@@ -1189,29 +1174,54 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                         </option>
                       </select>
                     </Field>
-                    <Field label={c('التصنيف الأب (اختياري)', 'Parent category')}>
-                      <select
-                        className="control"
+                    <Field
+                      label={c('التصنيف الأب (اختياري)', 'Parent category')}
+                    >
+                      <RemoteSelect
+                        resource="categories"
                         value={form.parentId || ''}
-                        onChange={(e) =>
-                          setForm({ ...form, parentId: e.target.value })
-                        }
-                      >
-                        <option value="">{c('تصنيف رئيسي', 'Top-level')}</option>
-                        {(categoriesQuery.data || [])
-                          .filter((cat) => cat.id !== id)
-                          .map((cat) => (
-                            <option key={cat.id} value={cat.id}>
-                              {lang === 'ar' ? cat.name.ar : cat.name.en}
-                            </option>
-                          ))}
-                      </select>
+                        onChange={(parentId: string) => {
+                          markDirty()
+                          setForm({ ...form, parentId })
+                        }}
+                        label={c('التصنيف الأب', 'Parent category')}
+                        filters={{ family: form.family || 'oils' }}
+                      />
                     </Field>
                   </>
                 )}
                 {section === 'brands' && (
                   <>
-                    <Field label={c('الموقع الرسمي للعلامة', 'Official website')}>
+                    <Field label={c('مجموعة العلامة', 'Brand group')}>
+                      <select
+                        className="control"
+                        value={form.group || 'other'}
+                        onChange={(e) =>
+                          setForm({ ...form, group: e.target.value })
+                        }
+                      >
+                        <option value="oils">
+                          {c('الزيوت والشحوم', 'Lubricants')}
+                        </option>
+                        <option value="bearings">
+                          {c('الرولمان بلي', 'Bearings')}
+                        </option>
+                        <option value="other">{c('أخرى', 'Other')}</option>
+                      </select>
+                    </Field>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={!!form.featured}
+                        onChange={(e) =>
+                          setForm({ ...form, featured: e.target.checked })
+                        }
+                      />{' '}
+                      {c('مميزة على الرئيسية', 'Featured on homepage')}
+                    </label>
+                    <Field
+                      label={c('الموقع الرسمي للعلامة', 'Official website')}
+                    >
                       <input
                         type="url"
                         dir="ltr"
@@ -1223,39 +1233,27 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                         }
                       />
                     </Field>
-                    <Field label={c('شعار العلامة (Media)', 'Brand logo')}>
-                      <select
-                        className="control"
+                    <Field label={c('شعار العلامة', 'Brand logo')}>
+                      <MediaPicker
                         value={form.logoMediaId || ''}
-                        onChange={(e) =>
-                          setForm({ ...form, logoMediaId: e.target.value })
+                        onChange={(logoMediaId: string) =>
+                          setForm({ ...form, logoMediaId })
                         }
-                      >
-                        <option value="">{c('بدون شعار', 'None')}</option>
-                        {readyImages.map((img) => (
-                          <option key={img.id} value={img.id}>
-                            {img.name}
-                          </option>
-                        ))}
-                      </select>
+                        label={c('شعار العلامة', 'Brand logo')}
+                        alt={{ ar: form.nameAr, en: form.nameEn }}
+                      />
                     </Field>
                   </>
                 )}
-                <Field label={c('صورة الغلاف (Media)', 'Cover image')}>
-                  <select
-                    className="control"
+                <Field label={c('صورة الغلاف', 'Cover image')}>
+                  <MediaPicker
                     value={form.imageMediaId || ''}
-                    onChange={(e) =>
-                      setForm({ ...form, imageMediaId: e.target.value })
+                    onChange={(imageMediaId: string) =>
+                      setForm({ ...form, imageMediaId })
                     }
-                  >
-                    <option value="">{c('بدون صورة', 'None')}</option>
-                    {readyImages.map((img) => (
-                      <option key={img.id} value={img.id}>
-                        {img.name}
-                      </option>
-                    ))}
-                  </select>
+                    label={c('الصورة', 'Image')}
+                    alt={{ ar: form.nameAr, en: form.nameEn }}
+                  />
                 </Field>
                 <Field label={c('الوصف بالعربية', 'Arabic description')}>
                   <textarea
@@ -1283,7 +1281,71 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
             {section === 'units' && (
               <>
-                <Field label={c('الرمز الفني للوحدة (مثل L أو kg أو drum)', 'Unit code (e.g. L, kg, drum, pc)')}>
+                <Field label={c('اختيار وحدة شائعة', 'Common unit preset')}>
+                  <select
+                    className="control"
+                    defaultValue=""
+                    onChange={(e) => {
+                      const presets: Record<string, any> = {
+                        piece: ['قطعة', 'Piece', 'sale', 0],
+                        can: ['عبوة', 'Can', 'sale', 0],
+                        drum: ['برميل', 'Drum', 'sale', 0],
+                        l: ['لتر', 'Litre', 'both', 3],
+                        kg: ['كيلوجرام', 'Kilogram', 'both', 3],
+                        mm: ['ملليمتر', 'Millimetre', 'measure', 3],
+                      }
+                      const v = presets[e.target.value]
+                      if (v)
+                        setForm({
+                          ...form,
+                          code: e.target.value,
+                          nameAr: v[0],
+                          nameEn: v[1],
+                          usage: v[2],
+                          precision: v[3],
+                          active: true,
+                        })
+                    }}
+                  >
+                    <option value="">{c('إدخال يدوي…', 'Custom…')}</option>
+                    <option value="piece">{c('قطعة', 'Piece')}</option>
+                    <option value="can">{c('عبوة', 'Can')}</option>
+                    <option value="drum">{c('برميل', 'Drum')}</option>
+                    <option value="l">{c('لتر', 'Litre')}</option>
+                    <option value="kg">{c('كجم', 'Kilogram')}</option>
+                    <option value="mm">
+                      {c('ملليمتر (قياس فني)', 'Millimetre (measurement)')}
+                    </option>
+                  </select>
+                </Field>
+                <Field label={c('استخدام الوحدة', 'Unit use')}>
+                  <select
+                    className="control"
+                    value={form.usage || 'both'}
+                    onChange={(e) =>
+                      setForm({ ...form, usage: e.target.value })
+                    }
+                  >
+                    <option value="sale">
+                      {c(
+                        'تعبئة وبيع (عبوة، برميل، قطعة)',
+                        'Selling / packaging',
+                      )}
+                    </option>
+                    <option value="measure">
+                      {c('قياس فني فقط (مم)', 'Technical measurement only')}
+                    </option>
+                    <option value="both">
+                      {c('بيع وقياس (لتر، كجم)', 'Selling and measurement')}
+                    </option>
+                  </select>
+                </Field>
+                <Field
+                  label={c(
+                    'الرمز الفني للوحدة (مثل L أو kg أو drum)',
+                    'Unit code (e.g. L, kg, drum, pc)',
+                  )}
+                >
                   <input
                     required
                     dir="ltr"
@@ -1292,7 +1354,12 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
                   />
                 </Field>
-                <Field label={c('عدد الخانات العشرية المسموحة (0..3)', 'Decimal precision (0..3)')}>
+                <Field
+                  label={c(
+                    'عدد الخانات العشرية المسموحة (0..3)',
+                    'Decimal precision (0..3)',
+                  )}
+                >
                   <input
                     type="number"
                     min={0}
@@ -1319,7 +1386,93 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
             {section === 'attributes' && (
               <>
-                <Field label={c('الرمز البرمجي (حروف صغيرة وأرقام و _)', 'Attribute code (lowercase_snake_case)')}>
+                {isNew && (
+                  <div className="md:col-span-2">
+                    <Field
+                      label={c(
+                        'بدء من قالب مواصفة',
+                        'Start from a specification template',
+                      )}
+                    >
+                      <select
+                        className="control"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const templates: Record<string, any> = {
+                            iso_vg: [
+                              'درجة اللزوجة ISO VG',
+                              'ISO VG viscosity grade',
+                              'number',
+                              'product',
+                            ],
+                            sae: ['درجة SAE', 'SAE grade', 'text', 'product'],
+                            nlgi: [
+                              'درجة قوام NLGI',
+                              'NLGI consistency grade',
+                              'text',
+                              'product',
+                            ],
+                            bore_diameter: [
+                              'القطر الداخلي',
+                              'Bore diameter',
+                              'number',
+                              'variant',
+                            ],
+                            outer_diameter: [
+                              'القطر الخارجي',
+                              'Outer diameter',
+                              'number',
+                              'variant',
+                            ],
+                            width: ['العرض', 'Width', 'number', 'variant'],
+                          }
+                          const v = templates[e.target.value]
+                          if (v) {
+                            setForm({
+                              ...form,
+                              code: e.target.value,
+                              nameAr: v[0],
+                              nameEn: v[1],
+                              type: v[2],
+                              scope: v[3],
+                              filterable: true,
+                            })
+                            setAttrOptions([])
+                          }
+                        }}
+                      >
+                        <option value="">
+                          {c('خاصية مخصصة…', 'Custom specification…')}
+                        </option>
+                        <option value="iso_vg">ISO VG</option>
+                        <option value="sae">SAE</option>
+                        <option value="nlgi">NLGI</option>
+                        <option value="bore_diameter">
+                          {c(
+                            'قطر داخلي لرولمان البلي',
+                            'Bearing bore diameter',
+                          )}
+                        </option>
+                        <option value="outer_diameter">
+                          {c(
+                            'قطر خارجي لرولمان البلي',
+                            'Bearing outer diameter',
+                          )}
+                        </option>
+                        <option value="width">
+                          {c('عرض رولمان البلي', 'Bearing width')}
+                        </option>
+                      </select>
+                    </Field>
+                  </div>
+                )}
+
+                <Field
+                  label={c(
+                    'الرمز البرمجي (حروف صغيرة وأرقام و _)',
+                    'Attribute code (lowercase_snake_case)',
+                  )}
+                >
                   <input
                     required
                     dir="ltr"
@@ -1369,7 +1522,12 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                     </option>
                   </select>
                 </Field>
-                <Field label={c('وحدة القياس المرتبطة (اختياري)', 'Measurement unit')}>
+                <Field
+                  label={c(
+                    'وحدة القياس المرتبطة (اختياري)',
+                    'Measurement unit',
+                  )}
+                >
                   <select
                     className="control"
                     value={form.unitId || ''}
@@ -1397,22 +1555,80 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                 </label>
 
                 {['option', 'multi_option'].includes(form.type) && (
-                  <div className="md:col-span-2">
-                    <Field
-                      label={c(
-                        'خيارات القائمة (سطر لكل خيار بالصيغة: code|العربية|English)',
-                        'Options (one per line: code|Arabic|English)',
-                      )}
+                  <div className="md:col-span-2 space-y-3">
+                    <h3 className="font-semibold">
+                      {c('القيم المتاحة', 'Available options')}
+                    </h3>
+                    {attrOptions.map((option, i) => (
+                      <div
+                        key={option.id || i}
+                        className="grid gap-2 rounded border p-3 sm:grid-cols-4"
+                      >
+                        <label className="text-sm">
+                          {c('الرمز', 'Code')}
+                          <input
+                            className="control"
+                            dir="ltr"
+                            value={option.code}
+                            onChange={(e) =>
+                              setAttrOptions((prev) =>
+                                prev.map((o, n) =>
+                                  n === i ? { ...o, code: e.target.value } : o,
+                                ),
+                              )
+                            }
+                          />
+                        </label>
+                        {(['ar', 'en'] as const).map((l) => (
+                          <label className="text-sm" key={l}>
+                            {l === 'ar' ? 'العربية' : 'English'}
+                            <input
+                              className="control"
+                              dir={l === 'ar' ? 'rtl' : 'ltr'}
+                              value={option.label[l]}
+                              onChange={(e) =>
+                                setAttrOptions((prev) =>
+                                  prev.map((o, n) =>
+                                    n === i
+                                      ? {
+                                          ...o,
+                                          label: {
+                                            ...o.label,
+                                            [l]: e.target.value,
+                                          },
+                                        }
+                                      : o,
+                                  ),
+                                )
+                              }
+                            />
+                          </label>
+                        ))}
+                        <button
+                          type="button"
+                          className="text-red-700"
+                          onClick={() =>
+                            setAttrOptions((prev) =>
+                              prev.filter((_, n) => n !== i),
+                            )
+                          }
+                        >
+                          {c('حذف القيمة', 'Delete option')}
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() =>
+                        setAttrOptions((prev) => [
+                          ...prev,
+                          { code: '', label: { ar: '', en: '' } },
+                        ])
+                      }
                     >
-                      <textarea
-                        rows={4}
-                        dir="ltr"
-                        className="control font-mono text-xs"
-                        placeholder={'nlgi-2|درجة NLGI 2|NLGI Grade 2'}
-                        value={attrOptionsText}
-                        onChange={(e) => setAttrOptionsText(e.target.value)}
-                      />
-                    </Field>
+                      {c('إضافة قيمة', 'Add option')}
+                    </button>
                   </div>
                 )}
 
@@ -1532,6 +1748,15 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
             {section === 'content' && (
               <>
+                <div className="md:col-span-2">
+                  <ContentLayoutEditor
+                    value={form.layout || { cards: [], points: [] }}
+                    onChange={(layout: any) => {
+                      markDirty()
+                      setForm({ ...form, layout })
+                    }}
+                  />
+                </div>
                 <Field
                   label={c(
                     'مفتاح الكتلة (مثل privacy أو terms أو about أو home-hero)',
@@ -1597,11 +1822,18 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                     value={form.area || 'header'}
                     onChange={(e) => setForm({ ...form, area: e.target.value })}
                   >
-                    <option value="header">{c('الشريط العلوي', 'Header')}</option>
+                    <option value="header">
+                      {c('الشريط العلوي', 'Header')}
+                    </option>
                     <option value="footer">{c('التذييل', 'Footer')}</option>
                   </select>
                 </Field>
-                <Field label={c('المسار الداخلي (يبدأ بـ /)', 'Path (starts with /)')}>
+                <Field
+                  label={c(
+                    'المسار الداخلي (يبدأ بـ /)',
+                    'Path (starts with /)',
+                  )}
+                >
                   <input
                     required
                     dir="ltr"
@@ -1642,7 +1874,9 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                     value={form.kind || 'hq'}
                     onChange={(e) => setForm({ ...form, kind: e.target.value })}
                   >
-                    <option value="hq">{c('المقر الرئيسي', 'Headquarters')}</option>
+                    <option value="hq">
+                      {c('المقر الرئيسي', 'Headquarters')}
+                    </option>
                     <option value="branch">{c('فرع', 'Branch')}</option>
                     <option value="warehouse">{c('مخزن', 'Warehouse')}</option>
                   </select>
@@ -1712,6 +1946,14 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           </>
         )}
       </div>
+      {!isNew &&
+        [
+          'customers',
+          'organizations',
+          'categories',
+          'brands',
+          'sectors',
+        ].includes(section) && <RelationsPanel resource={section} id={id} />}
     </form>
   )
 }
@@ -1723,9 +1965,9 @@ export function MediaWorkspace() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [selectedId, setSelectedId] = useState<string>('')
-  const [uploadVisibility, setUploadVisibility] = useState<'public' | 'private'>(
-    'public',
-  )
+  const [uploadVisibility, setUploadVisibility] = useState<
+    'public' | 'private'
+  >('public')
   const [uploadAltAr, setUploadAltAr] = useState('')
   const [uploadAltEn, setUploadAltEn] = useState('')
   const [editName, setEditName] = useState('')
@@ -1735,11 +1977,17 @@ export function MediaWorkspace() {
   const [feedback, setFeedback] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
-  const mediaQuery = useLiveQuery('/admin/media?page=1&pageSize=48', async () => {
-    return (await api<MediaAssetRecord[]>('/admin/media?page=1&pageSize=48')).data
+  const [q, setQ] = useState('')
+  const [page, setPage] = useState(1)
+  const mediaPath = buildApiPath('/admin/media', {
+    page,
+    pageSize: 12,
+    q: q || undefined,
   })
-
-  const files = mediaQuery.data || []
+  const mediaQuery = useLiveQuery(mediaPath, () =>
+    api<MediaAssetRecord[]>(mediaPath),
+  )
+  const files = mediaQuery.data?.data || []
   const selected = files.find((f) => f.id === selectedId) || files[0] || null
 
   useEffect(() => {
@@ -1755,10 +2003,7 @@ export function MediaWorkspace() {
     setErrorMsg('')
     setFeedback('')
     try {
-      const kind =
-        file.type === 'application/pdf'
-          ? 'catalog'
-          : 'image'
+      const kind = file.type === 'application/pdf' ? 'catalog' : 'image'
       const uploaded = await uploadAdminMedia(file, {
         name: file.name,
         alt: {
@@ -1790,7 +2035,9 @@ export function MediaWorkspace() {
     <>
       <div className="admin-heading">
         <div>
-          <h1>{c('مكتبة الوسائط والنشرات الفنية', 'Media & Technical Documents')}</h1>
+          <h1>
+            {c('مكتبة الوسائط والنشرات الفنية', 'Media & Technical Documents')}
+          </h1>
           <p>
             {c(
               'رفع الصور وملفات TDS/SDS مع الحجر الأمني الإلزامي وفحص النصوص البديلة قبل النشر العام.',
@@ -1802,11 +2049,14 @@ export function MediaWorkspace() {
           <input
             ref={fileRef}
             type="file"
+            multiple
             accept="image/jpeg,image/png,image/webp,application/pdf"
             className="sr-only"
             onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) void handleFileSelect(f)
+              const files = Array.from(e.target.files || [])
+              void (async () => {
+                for (const file of files) await handleFileSelect(file)
+              })()
               e.target.value = ''
             }}
           />
@@ -1850,28 +2100,40 @@ export function MediaWorkspace() {
       )}
 
       <div className="panel mb-6 grid gap-4 bg-white md:grid-cols-3">
-        <Field label={c('مستوى ظهور الملف الجديد', 'Visibility for next upload')}>
+        <Field
+          label={c('مستوى ظهور الملف الجديد', 'Visibility for next upload')}
+        >
           <select
             className="control"
             value={uploadVisibility}
             onChange={(e) => setUploadVisibility(e.target.value as any)}
           >
             <option value="public">
-              {c('عام (للكتالوج بعد المعالجة)', 'Public (catalog after processing)')}
+              {c(
+                'عام (للكتالوج بعد المعالجة)',
+                'Public (catalog after processing)',
+              )}
             </option>
             <option value="private">
               {c('خاص (للإدارة فقط)', 'Private (admin only)')}
             </option>
           </select>
         </Field>
-        <Field label={c('النص البديل بالعربية قبل الرفع', 'Default Arabic alt text')}>
+        <Field
+          label={c('النص البديل بالعربية قبل الرفع', 'Default Arabic alt text')}
+        >
           <input
             className="control"
             value={uploadAltAr}
             onChange={(e) => setUploadAltAr(e.target.value)}
           />
         </Field>
-        <Field label={c('النص البديل بالإنجليزية قبل الرفع', 'Default English alt text')}>
+        <Field
+          label={c(
+            'النص البديل بالإنجليزية قبل الرفع',
+            'Default English alt text',
+          )}
+        >
           <input
             className="control"
             dir="ltr"
@@ -1892,6 +2154,26 @@ export function MediaWorkspace() {
         </p>
       )}
 
+      <div className="mb-4">
+        <input
+          aria-label={c('بحث في مكتبة الوسائط', 'Search media library')}
+          placeholder={c('بحث بالاسم أو النوع…', 'Search by name or type…')}
+          className="control"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setPage(1)
+          }}
+        />
+      </div>
+      {mediaQuery.data && (
+        <Pagination
+          page={page}
+          pages={Math.max(1, mediaQuery.data.meta?.totalPages || 1)}
+          total={mediaQuery.data.meta?.total || 0}
+          onChange={setPage}
+        />
+      )}
       {mediaQuery.isLoading ? (
         <LoadingState />
       ) : mediaQuery.error ? (
@@ -1922,8 +2204,12 @@ export function MediaWorkspace() {
                   }`}
                 >
                   <div className="mb-3 flex aspect-video items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
-                    {f.kind === 'image' ? (
-                      <ImageIcon className="size-8" />
+                    {f.kind === 'image' && f.url ? (
+                      <img
+                        src={f.url}
+                        alt={f.alt?.[lang] || f.name}
+                        className="h-full w-full object-contain"
+                      />
                     ) : (
                       <FileText className="size-8" />
                     )}
@@ -1961,6 +2247,20 @@ export function MediaWorkspace() {
                   {c('حالة الفحص:', 'File status:')}{' '}
                   <strong>{selected.status}</strong>
                 </p>
+                {(selected as any).usedBy?.length > 0 && (
+                  <div>
+                    <strong>{c('مستخدم في', 'Used by')}</strong>
+                    {(selected as any).usedBy.map((item: any) => (
+                      <Link
+                        key={item.id}
+                        className="block text-primary underline"
+                        href={`/admin/${item.resource}/${item.id}`}
+                      >
+                        {item.name?.[lang] || item.name || item.resource}
+                      </Link>
+                    ))}
+                  </div>
+                )}
                 {selected.scanError && (
                   <p className="text-amber-800">{selected.scanError}</p>
                 )}
@@ -1973,14 +2273,21 @@ export function MediaWorkspace() {
                   onChange={(e) => setEditName(e.target.value)}
                 />
               </Field>
-              <Field label={c('النص البديل بالعربية (Alt AR)', 'Arabic alt text')}>
+              <Field
+                label={c('النص البديل بالعربية (Alt AR)', 'Arabic alt text')}
+              >
                 <input
                   className="control"
                   value={editAltAr}
                   onChange={(e) => setEditAltAr(e.target.value)}
                 />
               </Field>
-              <Field label={c('النص البديل بالإنجليزية (Alt EN)', 'English alt text')}>
+              <Field
+                label={c(
+                  'النص البديل بالإنجليزية (Alt EN)',
+                  'English alt text',
+                )}
+              >
                 <input
                   className="control"
                   dir="ltr"
@@ -2008,7 +2315,9 @@ export function MediaWorkspace() {
                     })
                     invalidateLiveQueries('/admin/media')
                     await mediaQuery.refresh()
-                    setFeedback(c('تم تحديث بيانات الملف.', 'Asset metadata saved.'))
+                    setFeedback(
+                      c('تم تحديث بيانات الملف.', 'Asset metadata saved.'),
+                    )
                   } catch (err) {
                     setErrorMsg(formatApiError(err, lang))
                   } finally {
@@ -2084,7 +2393,10 @@ export function MediaWorkspace() {
                 onClick={async () => {
                   if (
                     !window.confirm(
-                      c('حذف هذا الملف نهائيًا؟', 'Delete this file permanently?'),
+                      c(
+                        'حذف هذا الملف نهائيًا؟',
+                        'Delete this file permanently?',
+                      ),
                     )
                   ) {
                     return
@@ -2136,6 +2448,10 @@ export function SettingsWorkspace() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [whatsapp, setWhatsapp] = useState('')
+  const [logoMediaId, setLogoMediaId] = useState('')
+  const [officePhone, setOfficePhone] = useState('')
+  const [fax, setFax] = useState('')
+  const [currency, setCurrency] = useState('EGP')
   const [supportAr, setSupportAr] = useState('')
   const [supportEn, setSupportEn] = useState('')
   const [responseTargetAr, setResponseTargetAr] = useState('')
@@ -2150,6 +2466,10 @@ export function SettingsWorkspace() {
     if (current && initializedKey !== `${current.id}:${current.version}`) {
       setNameAr(current.name?.ar || '')
       setNameEn(current.name?.en || '')
+      setLogoMediaId(current.logoMediaId || '')
+      setOfficePhone(current.officePhone || '')
+      setFax(current.fax || '')
+      setCurrency(current.currency || 'EGP')
       setEmail(current.email || '')
       setPhone(current.phone || '')
       setWhatsapp(current.whatsapp || '')
@@ -2184,7 +2504,10 @@ export function SettingsWorkspace() {
         phone: phone.trim(),
         whatsapp: whatsapp.trim(),
         support: { ar: supportAr.trim(), en: supportEn.trim() },
-        currency: 'EGP',
+        logoMediaId: logoMediaId || null,
+        officePhone: officePhone || null,
+        fax: fax || null,
+        currency,
         timezone: 'Africa/Cairo',
         responseTarget: {
           ar: responseTargetAr.trim(),
@@ -2241,7 +2564,10 @@ export function SettingsWorkspace() {
       </div>
 
       {feedback && (
-        <p role="status" className="mb-5 flex items-center gap-2 text-sm font-medium text-primary">
+        <p
+          role="status"
+          className="mb-5 flex items-center gap-2 text-sm font-medium text-primary"
+        >
           <CheckCircle2 className="size-4 shrink-0" />
           {feedback}
         </p>
@@ -2253,6 +2579,42 @@ export function SettingsWorkspace() {
       )}
 
       <div className="panel grid gap-5 bg-white md:grid-cols-2">
+        {' '}
+        <div className="md:col-span-2">
+          <MediaPicker
+            value={logoMediaId}
+            onChange={setLogoMediaId}
+            label={c('شعار الشركة', 'Company logo')}
+            alt={{ ar: nameAr, en: nameEn }}
+          />
+        </div>
+        <Field label={c('الهاتف الأرضي', 'Office phone')}>
+          <input
+            className="control"
+            dir="ltr"
+            value={officePhone}
+            onChange={(e) => setOfficePhone(e.target.value)}
+          />
+        </Field>
+        <Field label={c('الفاكس', 'Fax')}>
+          <input
+            className="control"
+            dir="ltr"
+            value={fax}
+            onChange={(e) => setFax(e.target.value)}
+          />
+        </Field>
+        <Field label={c('العملة الافتراضية', 'Default currency')}>
+          <select
+            className="control"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+          >
+            <option>EGP</option>
+            <option>USD</option>
+            <option>EUR</option>
+          </select>
+        </Field>
         <Field label={c('اسم الشركة بالعربية', 'Company name (Arabic)')}>
           <input
             required
@@ -2289,7 +2651,12 @@ export function SettingsWorkspace() {
             onChange={(e) => setPhone(e.target.value)}
           />
         </Field>
-        <Field label={c('رقم واتساب الأعمال (اختياري)', 'WhatsApp number (optional)')}>
+        <Field
+          label={c(
+            'رقم واتساب الأعمال (اختياري)',
+            'WhatsApp number (optional)',
+          )}
+        >
           <input
             dir="ltr"
             className="control"
@@ -2320,7 +2687,9 @@ export function SettingsWorkspace() {
             onChange={(e) => setSupportEn(e.target.value)}
           />
         </Field>
-        <Field label={c('مستهدف سرعة الرد بالعربية', 'Response target (Arabic)')}>
+        <Field
+          label={c('مستهدف سرعة الرد بالعربية', 'Response target (Arabic)')}
+        >
           <input
             className="control"
             placeholder="خلال يوم عمل واحد"
@@ -2328,7 +2697,9 @@ export function SettingsWorkspace() {
             onChange={(e) => setResponseTargetAr(e.target.value)}
           />
         </Field>
-        <Field label={c('مستهدف سرعة الرد بالإنجليزية', 'Response target (English)')}>
+        <Field
+          label={c('مستهدف سرعة الرد بالإنجليزية', 'Response target (English)')}
+        >
           <input
             dir="ltr"
             className="control"

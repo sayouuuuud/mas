@@ -5,6 +5,12 @@ export type Filters = {
   pageSize: number
   q?: string
   status?: string
+  contactId?: string
+  organizationId?: string
+  visibility?: string
+  usage?: string
+  kind?: string
+  family?: string
   assignedTo?: string
   from?: string
   to?: string

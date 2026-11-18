@@ -39,6 +39,7 @@ export type UnitRecord = {
   name: LocalizedText
   code: string
   precision: number
+  usage?: 'sale' | 'measure' | 'both'
   active?: boolean
 }
 
@@ -79,7 +80,7 @@ export type ProductVariant = {
   label: LocalizedText
   sku: string
   manufacturerPartNumber?: string
-  unitId: string
+  unitId: string | null
   minQuantity: number
   quantityStep: number
   packQuantity?: number | null
@@ -102,8 +103,8 @@ export type CatalogProduct = {
   applications?: LocalizedText
   benefits?: LocalizedText
   family: ProductFamily
-  categoryId: string
-  brandId: string
+  categoryId: string | null
+  brandId: string | null
   status?: PublicationStatus
   featured?: boolean
   modelCode?: string
@@ -129,6 +130,9 @@ export type ReferenceRecord = {
   description?: LocalizedText
   status?: PublicationStatus
   order?: number
+  productCount?: number
+  featured?: boolean
+  group?: 'oils' | 'bearings' | 'other'
   parentId?: string | null
   family?: ProductFamily
   logoMediaId?: string | null
@@ -205,7 +209,7 @@ export type QuoteRequestRecord = {
   status: QuoteRequestStatus
   assignedTo: string | null
   contactId?: string | null
-  priority?: 'normal' | 'high' | 'urgent'
+  priority?: 'low' | 'normal' | 'high' | 'urgent'
   followUpAt?: string | null
   notes?: string | null
   source?: Record<string, unknown>
@@ -234,7 +238,7 @@ export type InquiryRecord = {
   status: InquiryStatus
   assignedTo: string | null
   contactId?: string | null
-  priority?: 'normal' | 'high' | 'urgent'
+  priority?: 'low' | 'normal' | 'high' | 'urgent'
   followUpAt?: string | null
   message: string
   convertedRequestId?: string | null
@@ -256,6 +260,7 @@ export type QuotationStatus =
 export type QuotationLineRecord = {
   requestItemId?: string | null
   variantId?: string | null
+  descriptionLocalized?: LocalizedText
   description: string
   sku: string
   unit: string
@@ -327,6 +332,19 @@ export type ContentRecord = {
   version?: number
   key: string
   name: LocalizedText
+  layout?: {
+    imageMediaId?: string | null
+    cards: Array<{
+      id?: string
+      title: LocalizedText
+      body: LocalizedText
+      imageMediaId?: string | null
+      href?: string
+      points: LocalizedText[]
+    }>
+    points: LocalizedText[]
+    eyebrow?: LocalizedText
+  }
   body: LocalizedText
   ctaLabel?: LocalizedText
   ctaPath?: string
@@ -361,6 +379,10 @@ export type LocationRecord = {
 }
 
 export type SettingsRecord = {
+  logoMediaId?: string | null
+  officePhone?: string | null
+  fax?: string | null
+  media?: MediaAssetRecord[]
   id: string
   version?: number
   name: LocalizedText
@@ -385,6 +407,8 @@ export type TeamMemberRecord = {
 }
 
 export type AuditLogRecord = {
+  actorName?: string | null
+  entityName?: string | LocalizedText | null
   id: string
   actorId?: string | null
   resource: string
@@ -437,7 +461,8 @@ export function resolveProductImage(product: {
   media?: MediaItem[]
 }): string {
   const main = product.media?.find(
-    (m) => m.id === product.mainMediaId && m.url && m.mime?.startsWith('image/'),
+    (m) =>
+      m.id === product.mainMediaId && m.url && m.mime?.startsWith('image/'),
   )
   if (main?.url) return main.url
   const firstImage = product.media?.find(
@@ -513,4 +538,11 @@ export type ContentBlockRecord = ContentRecord
 export type CustomerContact = ContactRecord
 
 // Editor-only fields; serialized to ProductSpec before submitting.
-export type SpecificationInput = { attributeId: string; valueText?: string | null; valueNumber?: number | null; valueBoolean?: boolean | null; optionId?: string | null; optionIds?: string[] }
+export type SpecificationInput = {
+  attributeId: string
+  valueText?: string | null
+  valueNumber?: number | null
+  valueBoolean?: boolean | null
+  optionId?: string | null
+  optionIds?: string[]
+}

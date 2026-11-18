@@ -39,15 +39,12 @@ function drawBidiText(
   if (!cleaned) return
   const lineRtl = options.rtl || ARABIC_RE.test(cleaned)
   const rawTokens = tokenizeBidi(cleaned)
-  const tokens = lineRtl
-    ? rawTokens.slice().reverse()
-    : rawTokens
+  const tokens = lineRtl ? rawTokens.slice().reverse() : rawTokens
   const totalWidth = tokens.reduce(
     (sum, tk) => sum + font.widthOfTextAtSize(tk, options.size),
     0,
   )
-  const alignRight =
-    options.align === 'end' ? !options.rtl : options.rtl
+  const alignRight = options.align === 'end' ? !options.rtl : options.rtl
   let x = alignRight
     ? Math.max(options.xLeft, options.xRight - totalWidth)
     : options.xLeft
@@ -100,6 +97,7 @@ export async function quotationPdf(
   quotation: Quotation,
   customer: Record<string, unknown>,
   company: Record<string, unknown>,
+  logoBytes?: Uint8Array,
 ): Promise<Uint8Array> {
   const totals = quoteTotals(
     quotation.lines.map((line, i) => ({ ...line, id: String(i) })),
@@ -169,12 +167,22 @@ export async function quotationPdf(
     height: 66,
     color: brandDark,
   })
+  if (logoBytes) {
+    const image = await document.embedPng(logoBytes)
+    const scale = Math.min(58 / image.width, 46 / image.height)
+    page.drawImage(image, {
+      x: rtl ? MARGIN_X + 8 : PAGE_W - MARGIN_X - 66,
+      y: y - 46,
+      width: image.width * scale,
+      height: image.height * scale,
+    })
+  }
   const companyName =
     localized(company.name) ||
     t('إم إيه إس للتجارة الهندسية', 'M.A.S Engineering For Trade')
   drawBidiText(page, font, companyName, {
-    xLeft: MARGIN_X + 16,
-    xRight: PAGE_W - MARGIN_X - 16,
+    xLeft: MARGIN_X + (logoBytes && rtl ? 76 : 16),
+    xRight: PAGE_W - MARGIN_X - (logoBytes && !rtl ? 76 : 16),
     y: y - 20,
     size: 16,
     rtl,
@@ -235,9 +243,7 @@ export async function quotationPdf(
     `${t('العملة', 'Currency')}: ${quotation.currency}`,
   ]
   const customerRows = [
-    customer.name
-      ? `${t('العميل', 'Customer')}: ${String(customer.name)}`
-      : '',
+    customer.name ? `${t('العميل', 'Customer')}: ${String(customer.name)}` : '',
     customer.company
       ? `${t('الشركة', 'Company')}: ${String(customer.company)}`
       : '',
@@ -249,8 +255,12 @@ export async function quotationPdf(
   ].filter(Boolean)
 
   const halfW = (CONTENT_W - 24) / 2
-  const wrappedMeta = metaRows.flatMap(row => wrapParagraphs(font, row, 10, halfW - 8))
-  const wrappedCustomer = customerRows.flatMap(row => wrapParagraphs(font, row, 10, halfW - 8))
+  const wrappedMeta = metaRows.flatMap((row) =>
+    wrapParagraphs(font, row, 10, halfW - 8),
+  )
+  const wrappedCustomer = customerRows.flatMap((row) =>
+    wrapParagraphs(font, row, 10, halfW - 8),
+  )
   const boxRows = Math.max(wrappedMeta.length, wrappedCustomer.length, 2)
   const boxH = boxRows * 16 + 18
   page.drawRectangle({
@@ -454,7 +464,10 @@ export async function quotationPdf(
     y -= 8
   }
 
-  drawSection(t('مدة التوريد المتوقعة', 'Expected Lead Time'), quotation.leadTime)
+  drawSection(
+    t('مدة التوريد المتوقعة', 'Expected Lead Time'),
+    quotation.leadTime,
+  )
   drawSection(t('الشروط والأحكام', 'Terms & Conditions'), quotation.terms)
 
   // Page Numbers Footer

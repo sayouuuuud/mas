@@ -1,4 +1,5 @@
 'use client'
+import { RemoteSelect } from './entity-tools'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -500,8 +501,11 @@ export function RequestsPage({ id }: { id?: string }) {
   const quotationsQuery = useLiveQuery(
     id ? `/admin/quotations?requestId=${id}&pageSize=20` : null,
     async () =>
-      (await api<QuotationRecord[]>(`/admin/quotations?requestId=${id}&pageSize=20`))
-        .data,
+      (
+        await api<QuotationRecord[]>(
+          `/admin/quotations?requestId=${id}&pageSize=20`,
+        )
+      ).data,
   )
 
   const teamQuery = useLiveQuery(
@@ -517,9 +521,9 @@ export function RequestsPage({ id }: { id?: string }) {
         .data,
   )
 
-  const [priority, setPriority] = useState<'low' | 'normal' | 'high' | 'urgent'>(
-    'normal',
-  )
+  const [priority, setPriority] = useState<
+    'low' | 'normal' | 'high' | 'urgent'
+  >('normal')
   const [followUpLocal, setFollowUpLocal] = useState('')
   const [contactId, setContactId] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
@@ -668,7 +672,10 @@ export function RequestsPage({ id }: { id?: string }) {
       setReason('')
       await refreshAfterMutation()
       setFeedback(
-        c('تم تحديث حالة الطلب وتسجيل الحدث.', 'Status transitioned and logged.'),
+        c(
+          'تم تحديث حالة الطلب وتسجيل الحدث.',
+          'Status transitioned and logged.',
+        ),
       )
     } catch (err) {
       setErrorMsg(formatApiError(err, lang))
@@ -743,7 +750,10 @@ export function RequestsPage({ id }: { id?: string }) {
         <div className="space-y-6">
           <section className="panel bg-white">
             <h2 className="mb-4 text-xl font-bold">
-              {c('البنود المطلوبة (لقطة العميل المحفوظة)', 'Requested items (immutable snapshot)')}
+              {c(
+                'البنود المطلوبة (لقطة العميل المحفوظة)',
+                'Requested items (immutable snapshot)',
+              )}
             </h2>
             <div className="space-y-3">
               {(request.items || []).map((item) => {
@@ -769,11 +779,15 @@ export function RequestsPage({ id }: { id?: string }) {
                     className="flex flex-wrap items-start justify-between gap-4 rounded-xl bg-muted/60 p-4"
                   >
                     <div>
-                      <strong>{snapName || c('بند مخصص', 'Custom item')}</strong>
+                      <strong>
+                        {snapName || c('بند مخصص', 'Custom item')}
+                      </strong>
                       {varLabel && (
                         <small className="mt-0.5 block text-xs text-muted-foreground">
                           {varLabel}
-                          {item.snapshot?.sku ? ` · SKU: ${item.snapshot.sku}` : ''}
+                          {item.snapshot?.sku
+                            ? ` · SKU: ${item.snapshot.sku}`
+                            : ''}
                         </small>
                       )}
                       {item.notes && (
@@ -821,14 +835,18 @@ export function RequestsPage({ id }: { id?: string }) {
                   >
                     <div>
                       <strong dir="ltr" className="font-mono text-primary">
-                        {q.number || c('مسودة غير مصدرة', 'Draft')} · R{q.revision}
+                        {q.number || c('مسودة غير مصدرة', 'Draft')} · R
+                        {q.revision}
                       </strong>
                       <small className="block text-xs text-muted-foreground">
                         {q.status} · PDF: {q.pdfStatus}
                       </small>
                     </div>
                     <strong dir="ltr" className="font-mono text-sm">
-                      {(Number(q.totals?.total || 0) / 100).toLocaleString('en-EG')} {q.currency}
+                      {(Number(q.totals?.total || 0) / 100).toLocaleString(
+                        'en-EG',
+                      )}{' '}
+                      {q.currency}
                     </strong>
                   </Link>
                 ))}
@@ -845,7 +863,10 @@ export function RequestsPage({ id }: { id?: string }) {
 
           <section className="panel bg-white">
             <h2 className="mb-4 text-xl font-bold">
-              {c('السجل الزمني والملاحظات الداخلية', 'Timeline & internal notes')}
+              {c(
+                'السجل الزمني والملاحظات الداخلية',
+                'Timeline & internal notes',
+              )}
             </h2>
             <form className="mb-6 space-y-3" onSubmit={addNote}>
               <textarea
@@ -888,7 +909,9 @@ export function RequestsPage({ id }: { id?: string }) {
                       )}
                     </time>
                   </div>
-                  {ev.detail?.body && <p className="mt-1.5 leading-7">{ev.detail?.body}</p>}
+                  {ev.detail?.body && (
+                    <p className="mt-1.5 leading-7">{ev.detail?.body}</p>
+                  )}
                 </li>
               ))}
             </ol>
@@ -919,8 +942,8 @@ export function RequestsPage({ id }: { id?: string }) {
             </p>
             <p className="pt-1 text-xs text-muted-foreground">
               {c('قناة التواصل المفضلة:', 'Preferred channel:')}{' '}
-              {request.customerSnapshot?.preferredChannel} · {c('سياسة:', 'Policy:')}{' '}
-              {request.privacy?.policyVersion}
+              {request.customerSnapshot?.preferredChannel} ·{' '}
+              {c('سياسة:', 'Policy:')} {request.privacy?.policyVersion}
             </p>
           </div>
 
@@ -957,8 +980,13 @@ export function RequestsPage({ id }: { id?: string }) {
             </div>
 
             {allowedTransitions.length > 0 && (
-              <form className="space-y-3 border-t pt-4" onSubmit={runTransition}>
-                <Field label={c('انتقال الحالة المسموح', 'Allowed next status')}>
+              <form
+                className="space-y-3 border-t pt-4"
+                onSubmit={runTransition}
+              >
+                <Field
+                  label={c('انتقال الحالة المسموح', 'Allowed next status')}
+                >
                   <select
                     className="control"
                     value={nextStatus}
@@ -974,7 +1002,10 @@ export function RequestsPage({ id }: { id?: string }) {
                 <Field
                   label={
                     needsReason
-                      ? c('سبب الانتقال (إلزامي)', 'Transition reason (required)')
+                      ? c(
+                          'سبب الانتقال (إلزامي)',
+                          'Transition reason (required)',
+                        )
                       : c('ملاحظة / سبب (اختياري)', 'Reason / note (optional)')
                   }
                 >
@@ -999,7 +1030,10 @@ export function RequestsPage({ id }: { id?: string }) {
 
           <form className="panel space-y-4 bg-white" onSubmit={saveMetadata}>
             <h2 className="text-lg font-bold">
-              {c('الأولوية وموعد المتابعة والربط', 'Priority, follow-up & CRM link')}
+              {c(
+                'الأولوية وموعد المتابعة والربط',
+                'Priority, follow-up & CRM link',
+              )}
             </h2>
             <Field label={c('الأولوية', 'Priority')}>
               <select
@@ -1022,20 +1056,26 @@ export function RequestsPage({ id }: { id?: string }) {
               />
             </Field>
             <Field label={c('ربط بسجل عميل', 'Linked customer contact')}>
-              <select
-                className="control"
+              <RemoteSelect
+                resource="customers"
                 value={contactId}
-                onChange={(e) => setContactId(e.target.value)}
-              >
-                <option value="">{c('بدون ربط', 'Unlinked')}</option>
-                {(customersQuery.data || []).map((cust) => (
-                  <option key={cust.id} value={cust.id}>
-                    {cust.name} ({cust.phone})
-                  </option>
-                ))}
-              </select>
+                onChange={setContactId}
+                label={c('اختيار عميل', 'Choose customer')}
+              />
+              {contactId && (
+                <Link
+                  className="text-sm text-primary underline"
+                  href={`/admin/customers/${contactId}`}
+                >
+                  {c('فتح سجل العميل وطلباته', 'Open customer history')}
+                </Link>
+              )}
             </Field>
-            <button type="submit" className="btn-outline w-full" disabled={busy}>
+            <button
+              type="submit"
+              className="btn-outline w-full"
+              disabled={busy}
+            >
               {c('حفظ بيانات المتابعة', 'Save follow-up settings')}
             </button>
           </form>
@@ -1104,7 +1144,12 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
   const [convertItems, setConvertItems] = useState<
-    Array<{ customName: string; quantity: number; unitCode: string; notes: string }>
+    Array<{
+      customName: string
+      quantity: number
+      unitCode: string
+      notes: string
+    }>
   >([])
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -1328,7 +1373,9 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
         unitCode: it.unitCode,
         notes: it.notes.trim(),
       }))
-      .filter((it) => it.description.length >= 2 && it.quantity > 0 && it.unitCode)
+      .filter(
+        (it) => it.description.length >= 2 && it.quantity > 0 && it.unitCode,
+      )
 
     if (!validItems.length) {
       setErrorMsg(
@@ -1454,12 +1501,17 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                     <input
                       className="control"
                       required
-                      placeholder={c('وصف البند المطلوب', 'Requested item name')}
+                      placeholder={c(
+                        'وصف البند المطلوب',
+                        'Requested item name',
+                      )}
                       value={it.customName}
                       onChange={(e) =>
                         setConvertItems((prev) =>
                           prev.map((row, i) =>
-                            i === idx ? { ...row, customName: e.target.value } : row,
+                            i === idx
+                              ? { ...row, customName: e.target.value }
+                              : row,
                           ),
                         )
                       }
@@ -1487,7 +1539,9 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                       onChange={(e) =>
                         setConvertItems((prev) =>
                           prev.map((row, i) =>
-                            i === idx ? { ...row, unitCode: e.target.value } : row,
+                            i === idx
+                              ? { ...row, unitCode: e.target.value }
+                              : row,
                           ),
                         )
                       }
@@ -1604,7 +1658,9 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                       )}
                     </time>
                   </div>
-                  {ev.detail?.body && <p className="mt-1 leading-7">{ev.detail?.body}</p>}
+                  {ev.detail?.body && (
+                    <p className="mt-1 leading-7">{ev.detail?.body}</p>
+                  )}
                 </li>
               ))}
             </ol>
@@ -1617,7 +1673,8 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
               {c('بيانات المرسل', 'Sender snapshot')}
             </h2>
             <p className="font-semibold">
-              {inquiry.customerSnapshot?.company || inquiry.customerSnapshot?.name}
+              {inquiry.customerSnapshot?.company ||
+                inquiry.customerSnapshot?.name}
             </p>
             <p>{inquiry.customerSnapshot?.name}</p>
             <p dir="ltr">{inquiry.customerSnapshot?.phone}</p>
@@ -1718,7 +1775,10 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                 <Field
                   label={
                     needsReopenReason
-                      ? c('سبب إعادة الفتح (إلزامي)', 'Reopen reason (required)')
+                      ? c(
+                          'سبب إعادة الفتح (إلزامي)',
+                          'Reopen reason (required)',
+                        )
                       : c('ملاحظة (اختياري)', 'Note (optional)')
                   }
                 >

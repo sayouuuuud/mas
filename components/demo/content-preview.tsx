@@ -37,6 +37,8 @@ export function useContentPreview(key: string) {
     ctaEn: data.ctaLabel?.en || '',
     ctaPath: data.ctaPath || '',
     policyVersion: data.policyVersion || '',
+    layout: data.layout,
+    media: data.media || [],
     seoTitle: data.seoTitle,
     seoDescription: data.seoDescription,
   }
@@ -73,34 +75,32 @@ export function useSiteInfo() {
   const branch = locations.find((l) => l.kind === 'branch')
   const warehouse = locations.find((l) => l.kind === 'warehouse')
 
-  const makePhone = (
-    value: string | null | undefined,
-    fallback: typeof defaultPhones.mobile,
-  ) => (value ? { display: value, href: `tel:${phoneE164(value)}` } : fallback)
-
-  const whatsappDigits = (s?.whatsapp || '201004998655').replace(/\D/g, '')
-
+  const empty = { ar: '', en: '' }
+  const makePhone = (value?: string | null) => ({
+    display: value || '',
+    href: value ? `tel:${phoneE164(value)}` : undefined,
+  })
+  const whatsappDigits = (s?.whatsapp || '').replace(/\D/g, '')
   return {
-    whatsappHref: `https://wa.me/${whatsappDigits}`,
+    whatsappHref: whatsappDigits ? `https://wa.me/${whatsappDigits}` : '',
     currency: s?.currency || 'EGP',
     responseTarget: s?.responseTarget || null,
-    company: s
-      ? {
-          name: s.name,
-          email: s.email,
-          support: s.support || defaultCompany.support,
-        }
-      : defaultCompany,
+    company: {
+      name: s?.name || empty,
+      email: s?.email || '',
+      support: s?.support || empty,
+    },
+    logo: s?.media?.find((m) => m.id === s.logoMediaId)?.url,
     phones: {
-      mobile: makePhone(s?.phone, defaultPhones.mobile),
-      office: makePhone(hq?.phone, defaultPhones.office),
-      branch: makePhone(branch?.phone, defaultPhones.branch),
-      fax: defaultPhones.fax,
+      mobile: makePhone(s?.phone),
+      office: makePhone(s?.officePhone || hq?.phone),
+      branch: makePhone(branch?.phone),
+      fax: makePhone(s?.fax),
     },
     addresses: {
-      hq: hq?.address || defaultAddresses.hq,
-      branch: branch?.address || defaultAddresses.branch,
-      stores: warehouse?.address || defaultAddresses.stores,
+      hq: hq?.address || empty,
+      branch: branch?.address || empty,
+      stores: warehouse?.address || empty,
     },
     locations,
     hours: hq?.hours || branch?.hours || null,

@@ -1,6 +1,7 @@
 import 'server-only'
 import { timingSafeEqual, createHash } from 'node:crypto'
 import { z } from 'zod'
+import sharp from 'sharp'
 import { sanitizeUpload } from './media-processing'
 import type { NextRequest } from 'next/server'
 import type { RequestScope } from './auth'
@@ -10,6 +11,8 @@ import { secret } from './environment'
 import { ApiError, assert, unavailable } from './errors'
 import { requireActor } from './policy'
 import { quotationPdf } from './pdf'
+
+export type JobScope = Pick<RequestScope, 'config' | 'repository' | 'service'>
 
 export type Job = {
   id: string
@@ -25,7 +28,7 @@ export type JobResult = {
   code?: string
 }
 
-async function scan(bytes: Buffer, scope: RequestScope) {
+async function scan(bytes: Buffer, scope: JobScope) {
   const endpoint = scope.config.scannerUrl
   if (!endpoint) throw unavailable()
   const url = new URL(endpoint)
@@ -59,7 +62,7 @@ async function scan(bytes: Buffer, scope: RequestScope) {
     )
 }
 
-async function execute(job: Job, scope: RequestScope) {
+async function execute(job: Job, scope: JobScope) {
   const storage = scope.service!.storage
   const rpc = scope.repository.rpc?.bind(scope.repository)
   if (!rpc) throw unavailable()
@@ -70,10 +73,22 @@ async function execute(job: Job, scope: RequestScope) {
       customer: Record<string, unknown>
       company: Record<string, unknown>
     }>('mas_job_snapshot', { p_id: job.id, p_lease: job.leaseToken }, true)
+    let logoBytes: Buffer | undefined
+    const logo = snapshot.company?.logoMedia as { path?: string } | undefined
+    if (logo?.path) {
+      const downloaded = await storage
+        .from('catalog-public')
+        .download(logo.path)
+      if (downloaded.error || !downloaded.data) throw unavailable()
+      logoBytes = await sharp(Buffer.from(await downloaded.data.arrayBuffer()))
+        .png()
+        .toBuffer()
+    }
     const bytes = await quotationPdf(
       snapshot.quotation,
       snapshot.customer || {},
       snapshot.company || {},
+      logoBytes,
     )
     const path = `quotations/${snapshot.quotation.id}/r${snapshot.quotation.revision}.pdf`
     const result = await storage
@@ -131,7 +146,7 @@ async function execute(job: Job, scope: RequestScope) {
 }
 
 export async function drainJobs(
-  scope: RequestScope,
+  scope: JobScope,
   options: {
     maxBatches?: number
     batchSize?: number
@@ -203,8 +218,12 @@ export async function runJobs(
   const expected = secret(scope.config.jobSecret, 32),
     supplied =
       request.headers.get('authorization')?.replace(/^Bearer /, '') || ''
-  const suppliedBytes = Buffer.from(supplied), expectedBytes = Buffer.from(expected)
-  if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes))
+  const suppliedBytes = Buffer.from(supplied),
+    expectedBytes = Buffer.from(expected)
+  if (
+    suppliedBytes.length !== expectedBytes.length ||
+    !timingSafeEqual(suppliedBytes, expectedBytes)
+  )
     throw new ApiError(401, 'UNAUTHENTICATED', 'Worker authentication failed.')
   const processed = await drainJobs(scope)
   return response({ processed })
@@ -219,15 +238,16 @@ export async function adminJobsController(
   await limit(scope, request, `jobs:${actor.id}`, 20, 600, actor.id)
   if (!scope.service || !scope.repository.rpc) throw unavailable()
 
-  const input = request.body !== null
-    ? z
-        .object({
-          quotationId: z.uuid().optional(),
-          mediaId: z.uuid().optional(),
-        })
-        .strict()
-        .parse(await readBody(request))
-    : {}
+  const input =
+    request.body !== null
+      ? z
+          .object({
+            quotationId: z.uuid().optional(),
+            mediaId: z.uuid().optional(),
+          })
+          .strict()
+          .parse(await readBody(request))
+      : {}
 
   if (input.quotationId) {
     await scope.repository.rpc(

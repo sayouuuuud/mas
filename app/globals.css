@@ -753,6 +753,7 @@ html[dir='ltr'] .industry-shade {
     max-width: 45rem;
     line-height: 1.8;
   }
+  .table-wrap,
   .table-scroll {
     overflow-x: auto;
     max-width: 100%;
@@ -1192,4 +1193,12 @@ html[dir='ltr'] .page-intro::before {
 .quotation-editor,
 .quotation-print {
   min-width: 0;
+}
+
+@layer components {
+  .filter-pill { @apply inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors; }
+  .filter-pill-active { @apply border-primary bg-primary text-white; }
+  .admin-content { min-width: 0; }
+  .admin-content .panel { min-width: 0; }
+  .table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
 }

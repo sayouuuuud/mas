@@ -5,28 +5,31 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { ActionLink } from '@/components/site/action-link'
 import { SectionHeading } from '@/components/site/section-heading'
-import { productKeys, type ProductKey } from '@/lib/site'
+import { useCatalogData } from '@/components/demo/demo-provider'
+import { useContentPreview } from '@/components/demo/content-preview'
+import type { ReferenceRecord } from '@/lib/types'
 import { PublicLink as Link } from '@/components/demo/public-link'
 import { usePublicBootstrap } from '@/components/demo/demo-provider'
 import { cn } from '@/lib/utils'
 
-const productImages: Record<ProductKey, string> = {
-  oils: '/images/product-oils.png',
-  grease: '/images/product-grease.png',
-  bearings: '/images/product-bearings.png',
-}
-
 function ProductCard({
-  productKey,
+  category,
+  children,
   wide,
   href,
 }: {
-  productKey: ProductKey
+  category: ReferenceRecord & { image: string }
+  children: ReferenceRecord[]
   wide: boolean
   href: string
 }) {
   const { t, lang } = useLanguage()
-  const item = t.products.items[productKey]
+  const item = {
+    title: category.name[lang],
+    body: category.description?.[lang] || '',
+    types: children.map((row) => row.name[lang]),
+    imageAlt: category.name[lang],
+  }
   const Arrow = lang === 'ar' ? ArrowLeft : ArrowRight
 
   return (
@@ -44,13 +47,15 @@ function ProductCard({
             : 'aspect-[4/5] lg:aspect-[3/4]',
         )}
       >
-        <Image
-          src={productImages[productKey]}
-          alt={item.imageAlt}
-          fill
-          sizes="(min-width: 1280px) 380px, (min-width: 1024px) 30vw, (min-width: 640px) 45vw, 90vw"
-          className="-z-20 object-cover transition-transform duration-700 ease-out motion-safe:group-hover:scale-105"
-        />
+        {category.image && (
+          <Image
+            src={category.image}
+            alt={item.imageAlt}
+            fill
+            sizes="(min-width: 1280px) 380px, (min-width: 1024px) 30vw, (min-width: 640px) 45vw, 90vw"
+            className="-z-20 object-cover transition-transform duration-700 ease-out motion-safe:group-hover:scale-105"
+          />
+        )}
         <div
           aria-hidden="true"
           className="product-shade absolute inset-0 -z-10"
@@ -91,9 +96,10 @@ function ProductCard({
 }
 
 export function Products() {
-  const { t } = useLanguage()
-  const bootstrap = usePublicBootstrap()
-  const categories = bootstrap.data?.categories || []
+  const { t, lang } = useLanguage()
+  const { categories } = useCatalogData()
+  const roots = categories.filter((cat) => !cat.parentId)
+  const content = useContentPreview('home-products')
 
   return (
     <section
@@ -105,9 +111,9 @@ export function Products() {
         <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
           <SectionHeading
             id="products-title"
-            eyebrow={t.products.eyebrow}
-            title={t.products.title}
-            subtitle={t.products.subtitle}
+            eyebrow={content?.layout?.eyebrow?.[lang] || ''}
+            title={(lang === 'ar' ? content?.nameAr : content?.nameEn) || ''}
+            subtitle={(lang === 'ar' ? content?.bodyAr : content?.bodyEn) || ''}
           />
           <ActionLink href="/products" variant="primary" className="w-fit">
             {t.products.request}
@@ -115,23 +121,17 @@ export function Products() {
         </div>
 
         <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
-          {productKeys.map((key, index) => {
-            const matched = categories.find(
-              (cat) =>
-                cat.slug === key || (cat.family === key && !cat.parentId),
-            )
-            const href = matched
-              ? `/categories/${matched.slug}`
-              : `/products?family=${key}`
-            return (
-              <ProductCard
-                key={key}
-                productKey={key}
-                wide={index === productKeys.length - 1}
-                href={href}
-              />
-            )
-          })}
+          {roots.map((category, index) => (
+            <ProductCard
+              key={category.id}
+              category={category}
+              children={categories.filter(
+                (cat) => cat.parentId === category.id,
+              )}
+              wide={index === roots.length - 1}
+              href={`/categories/${category.slug}`}
+            />
+          ))}
         </ul>
       </div>
     </section>

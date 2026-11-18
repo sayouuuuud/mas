@@ -49,22 +49,16 @@ export function Hero() {
             <span className="block font-bold">
               {lang === 'ar' ? content.nameAr : content.nameEn}
             </span>
-          ) : (
-            <>
-              <span className="block font-light">{t.hero.titleStart}</span>
-              <span className="block font-bold">{t.hero.titleHighlight}</span>
-            </>
-          )}
+          ) : null}
         </h1>
         <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">
-          {content
-            ? lang === 'ar'
-              ? content.bodyAr
-              : content.bodyEn
-            : t.hero.subtitle}
+          {content ? (lang === 'ar' ? content.bodyAr : content.bodyEn) : ''}
         </p>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-          <ActionLink href="/request-quote" variant="accent">
+          <ActionLink
+            href={content?.ctaPath || '/request-quote'}
+            variant="accent"
+          >
             {content
               ? (lang === 'ar' ? content.cta : content.ctaEn) || t.cta.quote
               : t.cta.quote}

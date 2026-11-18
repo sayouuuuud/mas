@@ -110,7 +110,9 @@ export function DemoProvider({ children }: { children: ReactNode }) {
       if (Array.isArray(rawCompare)) {
         setComparison(
           rawCompare
-            .filter((id): id is string => typeof id === 'string' && id.length > 0)
+            .filter(
+              (id): id is string => typeof id === 'string' && id.length > 0,
+            )
             .slice(0, 3),
         )
       }
@@ -220,19 +222,20 @@ export function usePublicBootstrap() {
 
 export function useCatalogData() {
   const categoriesQuery = useLiveQuery(
-    '/catalog/categories?pageSize=48',
+    '/content/categories',
     async () =>
-      (await api<ReferenceRecord[]>('/catalog/categories?pageSize=48')).data,
+      (await api<{ items: ReferenceRecord[] }>('/content/categories')).data
+        .items,
   )
   const brandsQuery = useLiveQuery(
-    '/catalog/brands?pageSize=48',
+    '/content/brands',
     async () =>
-      (await api<ReferenceRecord[]>('/catalog/brands?pageSize=48')).data,
+      (await api<{ items: ReferenceRecord[] }>('/content/brands')).data.items,
   )
   const sectorsQuery = useLiveQuery(
-    '/catalog/sectors?pageSize=48',
+    '/content/sectors',
     async () =>
-      (await api<ReferenceRecord[]>('/catalog/sectors?pageSize=48')).data,
+      (await api<{ items: ReferenceRecord[] }>('/content/sectors')).data.items,
   )
   const unitsQuery = useLiveQuery('/content/units', async () => {
     try {
@@ -271,7 +274,7 @@ export function useCatalogData() {
       ...row,
       slug: row.slug || row.id,
       description: row.description || { ar: '', en: '' },
-      image: resolveReferenceImage(row, 'image') || '/images/product-oils.png',
+      image: resolveReferenceImage(row, 'image') || '',
       status: 'published' as const,
       parent: row.parentId || '',
     })),

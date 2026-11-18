@@ -56,7 +56,10 @@ function ReferenceCatalogView({
     }
     return (
       <div className="site-container page-section">
-        <ErrorState error={detail.error} onRetry={() => void detail.refresh()} />
+        <ErrorState
+          error={detail.error}
+          onRetry={() => void detail.refresh()}
+        />
       </div>
     )
   }
@@ -205,13 +208,15 @@ export function PublicPage({ path }: { path: string[] }) {
                   className="catalog-card"
                 >
                   <div className="relative aspect-[4/3]">
-                    <Image
-                      src={cat.image}
-                      alt={cat.name[lang]}
-                      fill
-                      sizes="33vw"
-                      className="object-cover"
-                    />
+                    {cat.image && (
+                      <Image
+                        src={cat.image}
+                        alt={cat.name[lang]}
+                        fill
+                        sizes="33vw"
+                        className="object-cover"
+                      />
+                    )}
                   </div>
                   <div className="p-6">
                     <h2 className="text-2xl font-bold">{cat.name[lang]}</h2>
@@ -341,7 +346,12 @@ export function PublicPage({ path }: { path: string[] }) {
 }
 
 function LegalPage({ type }: { type: string }) {
-  const { data: content, isLoading, error, refresh } = usePublicContentBlock(type)
+  const {
+    data: content,
+    isLoading,
+    error,
+    refresh,
+  } = usePublicContentBlock(type)
   const { lang } = useLanguage()
   const c = useCopy()
   const privacy = type === 'privacy'

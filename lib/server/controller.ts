@@ -100,6 +100,8 @@ function safeReference(row: Record<string, unknown>) {
       'imageMediaId',
       'website',
       'order',
+      'featured',
+      'group',
       'seoTitle',
       'seoDescription',
       'media',
@@ -147,7 +149,8 @@ export async function handle(request: NextRequest, path: string[]) {
           jobsConfigured: Boolean(
             scope.config.jobSecret && scope.config.jobSecret.length >= 32,
           ),
-          mediaScannerConfigured: mediaProcessingMode(scope.config) === 'antivirus',
+          mediaScannerConfigured:
+            mediaProcessingMode(scope.config) === 'antivirus',
           mediaProcessingMode: mediaProcessingMode(scope.config),
         }),
       )
@@ -172,11 +175,25 @@ export async function handle(request: NextRequest, path: string[]) {
     if (root === 'auth')
       return scope.apply(await authController(request, path.slice(1), scope))
     const service = new BackendService(scope.repository)
-    if (root === 'public' && part === 'bootstrap' && path.length === 2 && method === 'GET') {
-      const [navigation, locations, settings] = await Promise.all(
-        ['navigation', 'locations', 'settings'].map(key => scope!.repository.publicContent(key)),
+    if (
+      root === 'public' &&
+      part === 'bootstrap' &&
+      path.length === 2 &&
+      method === 'GET'
+    ) {
+      const [navigation, locations, settings, categories] = await Promise.all(
+        ['navigation', 'locations', 'settings', 'categories'].map((key) =>
+          scope!.repository.publicContent(key),
+        ),
       )
-      return scope.apply(response({ navigation: navigation?.items || [], locations: locations?.items || [], settings: (settings?.items as unknown[] | undefined)?.[0] || null }))
+      return scope.apply(
+        response({
+          navigation: navigation?.items || [],
+          categories: categories?.items || [],
+          locations: locations?.items || [],
+          settings: (settings?.items as unknown[] | undefined)?.[0] || null,
+        }),
+      )
     }
     if (root === 'catalog' && method === 'GET') {
       const query = filters(request)
@@ -251,7 +268,8 @@ export async function handle(request: NextRequest, path: string[]) {
         response({
           ...actor,
           role: 'Admin',
-          mediaScannerConfigured: mediaProcessingMode(scope.config) === 'antivirus',
+          mediaScannerConfigured:
+            mediaProcessingMode(scope.config) === 'antivirus',
           mediaProcessingMode: mediaProcessingMode(scope.config),
           jobsConfigured: Boolean(
             scope.config.jobSecret && scope.config.jobSecret.length >= 32,

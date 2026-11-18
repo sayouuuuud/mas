@@ -64,9 +64,9 @@ export const variantInput = z
   .object({
     id: uuid.optional(),
     label: name,
-    sku: z.string().trim().min(1).max(120),
+    sku: z.string().trim().max(120).default(''),
     manufacturerPartNumber: z.string().trim().max(160).optional(),
-    unitId: uuid,
+    unitId: uuid.nullable().default(null),
     minQuantity: quantity.default(1),
     quantityStep: quantity.default(1),
     packQuantity: z.number().positive().max(1000000).nullable().optional(),
@@ -87,18 +87,18 @@ export const productInput = z
   .object({
     name,
     slug,
-    summary: localized,
-    description: localized,
+    summary: localized.default({ ar: '', en: '' }),
+    description: localized.default({ ar: '', en: '' }),
     applications: localized.optional(),
     benefits: localized.optional(),
     family: z.enum(['oils', 'grease', 'bearings']),
-    categoryId: uuid,
-    brandId: uuid,
+    categoryId: uuid.nullable().default(null),
+    brandId: uuid.nullable().default(null),
     status: status.default('draft'),
     featured: z.boolean().default(false),
     modelCode: z.string().max(120).optional(),
     sectorIds: z.array(uuid).max(50).default([]),
-    variants: z.array(variantInput).min(1).max(100),
+    variants: z.array(variantInput).max(100).default([]),
     specifications: z.array(spec).max(100).default([]),
     mediaIds: z.array(uuid).max(40).default([]),
     mainMediaId: uuid.nullable().optional(),
@@ -122,6 +122,8 @@ export const referenceInput = z
     description: localized.optional(),
     status: status.default('draft'),
     order: z.number().int().min(0).max(10000).default(0),
+    featured: z.boolean().default(false),
+    group: z.enum(['oils', 'bearings', 'other']).optional(),
     parentId: uuid.nullable().optional(),
     family: z.enum(['oils', 'grease', 'bearings']).optional(),
     logoMediaId: uuid.nullable().optional(),
@@ -134,7 +136,12 @@ export const referenceInput = z
 export const unitInput = z
   .object({
     name,
-    code: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
+    code: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z][a-z0-9_]{0,39}$/),
+    usage: z.enum(['sale', 'measure', 'both']).default('both'),
     precision: z.number().int().min(0).max(3).default(0),
     active: z.boolean().default(true),
   })
@@ -142,7 +149,11 @@ export const unitInput = z
 export const attributeInput = z
   .object({
     name,
-    code: slug,
+    code: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z][a-z0-9_-]{0,79}$/),
     type: z.enum(['text', 'number', 'boolean', 'option', 'multi_option']),
     unitId: uuid.nullable().optional(),
     scope: z.enum(['product', 'variant']),
@@ -281,7 +292,7 @@ export const assignmentInput = z
 export const followUpInput = z
   .object({
     version: z.number().int().positive(),
-    priority: z.enum(['normal', 'high', 'urgent']).optional(),
+    priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
     followUpAt: z.iso.datetime({ offset: true }).nullable().optional(),
     contactId: uuid.nullable().optional(),
   })
@@ -301,6 +312,7 @@ export const quotationInput = z
             requestItemId: uuid.nullable().optional(),
             variantId: uuid.nullable().optional(),
             description: z.string().trim().min(2).max(1000),
+            descriptionLocalized: localized.optional(),
             sku: z.string().max(120).default(''),
             unit: z.string().max(40),
             quantity,
@@ -352,9 +364,32 @@ export const organizationInput = z
     notes: z.string().trim().max(2000).optional(),
   })
   .strict()
+export const contentCard = z
+  .object({
+    id: z.string().max(80).optional(),
+    title: localized,
+    body: localized,
+    imageMediaId: uuid.nullable().optional(),
+    href: z
+      .string()
+      .max(300)
+      .regex(/^\/(?!\/)[a-zA-Z0-9/_?=&%#-]*$/)
+      .optional(),
+    points: z.array(localized).max(20).default([]),
+  })
+  .strict()
+export const contentLayout = z
+  .object({
+    imageMediaId: uuid.nullable().optional(),
+    cards: z.array(contentCard).max(50).default([]),
+    points: z.array(localized).max(20).default([]),
+    eyebrow: localized.optional(),
+  })
+  .strict()
 export const contentInput = z
   .object({
     key: slug,
+    layout: contentLayout.optional(),
     name,
     body: localized,
     ctaLabel: localized.optional(),
@@ -394,7 +429,13 @@ export const settingsInput = z
     name,
     email: z.email(),
     phone,
-    whatsapp: phone,
+    whatsapp: z
+      .union([phone, z.literal(''), z.null()])
+      .optional()
+      .transform((v) => v || null),
+    logoMediaId: uuid.nullable().optional(),
+    officePhone: phone.nullable().optional(),
+    fax: phone.nullable().optional(),
     support: localized.optional(),
     currency: z.enum(['EGP', 'USD', 'EUR']),
     timezone: z.literal('Africa/Cairo'),
@@ -488,6 +529,12 @@ export const listing = z
     pack: z.string().max(40).optional(),
     sort: z.enum(['featured', 'name', 'latest']).default('featured'),
     assignedTo: uuid.optional(),
+    contactId: uuid.optional(),
+    organizationId: uuid.optional(),
+    family: z.enum(['oils', 'grease', 'bearings']).optional(),
+    kind: z.enum(['image', 'TDS', 'SDS', 'catalog']).optional(),
+    usage: z.enum(['sale', 'measure', 'both']).optional(),
+    visibility: z.enum(['public', 'private']).optional(),
     requestId: uuid.optional(),
     from: z.iso.date().optional(),
     to: z.iso.date().optional(),
