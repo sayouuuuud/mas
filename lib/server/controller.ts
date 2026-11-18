@@ -1,4 +1,5 @@
 import 'server-only'
+import { mediaProcessingMode } from './environment'
 import { z } from 'zod'
 import { NextResponse, type NextRequest } from 'next/server'
 import { requestScope } from './auth'
@@ -146,11 +147,8 @@ export async function handle(request: NextRequest, path: string[]) {
           jobsConfigured: Boolean(
             scope.config.jobSecret && scope.config.jobSecret.length >= 32,
           ),
-          mediaScannerConfigured: Boolean(
-            scope.config.scannerUrl &&
-            scope.config.scannerKey &&
-            scope.config.scannerKey.length >= 32,
-          ),
+          mediaScannerConfigured: mediaProcessingMode(scope.config) === 'antivirus',
+          mediaProcessingMode: mediaProcessingMode(scope.config),
         }),
       )
     }
@@ -253,11 +251,8 @@ export async function handle(request: NextRequest, path: string[]) {
         response({
           ...actor,
           role: 'Admin',
-          mediaScannerConfigured: Boolean(
-            scope.config.scannerUrl &&
-              scope.config.scannerKey &&
-              scope.config.scannerKey.length >= 32,
-          ),
+          mediaScannerConfigured: mediaProcessingMode(scope.config) === 'antivirus',
+          mediaProcessingMode: mediaProcessingMode(scope.config),
           jobsConfigured: Boolean(
             scope.config.jobSecret && scope.config.jobSecret.length >= 32,
           ),

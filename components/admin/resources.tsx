@@ -1774,8 +1774,8 @@ export function MediaWorkspace() {
       setFeedback(
         uploaded.status === 'quarantined'
           ? c(
-              'تم رفع الملف إلى منطقة الحجر الأمني (quarantined) وجدولة فحص البرمجيات الخبيثة.',
-              'File uploaded to quarantine and scheduled for malware scanning.',
+              'تم رفع الملف إلى منطقة الحجر الأمني (quarantined) وجدولة معالجة الملف.',
+              'File uploaded to quarantine and queued for file processing.',
             )
           : c('تم رفع الملف بنجاح.', 'File uploaded successfully.'),
       )
@@ -1836,10 +1836,15 @@ export function MediaWorkspace() {
                 'External malware scanner is not configured in current environment:',
               )}
             </strong>{' '}
-            {c(
-              'ستبقى الملفات المرفوعة في حالة الحجر الأمني (quarantined) ولن تُرقّى إلى ready للنشر العام حتى ضبط MEDIA_SCANNER_URL و MEDIA_SCANNER_KEY.',
-              'Uploaded files remain strictly in quarantined status and will not be promoted to ready until MEDIA_SCANNER_URL and MEDIA_SCANNER_KEY are configured.',
-            )}
+            {session.mediaProcessingMode === 'validation_only'
+              ? c(
+                  'الملفات تُفحص للتأكد من النوع والحجم وسلامة البنية. تُعاد معالجة الصور وتُرفض مستندات PDF ذات المحتوى النشط قبل إتاحتها للنشر. لا يُجرى فحص فيروسات خارجي في هذا الوضع.',
+                  'Files are checked for type, size and valid structure. Images are re-encoded and PDFs with active content are rejected before publication. This mode does not perform external antivirus scanning.',
+                )
+              : c(
+                  'ستبقى الملفات المرفوعة في حالة الحجر الأمني (quarantined) ولن تُرقّى إلى ready للنشر العام حتى ضبط MEDIA_SCANNER_URL و MEDIA_SCANNER_KEY.',
+                  'Uploaded files remain strictly in quarantined status and will not be promoted to ready until MEDIA_SCANNER_URL and MEDIA_SCANNER_KEY are configured.',
+                )}
           </div>
         </div>
       )}
@@ -1852,7 +1857,7 @@ export function MediaWorkspace() {
             onChange={(e) => setUploadVisibility(e.target.value as any)}
           >
             <option value="public">
-              {c('عام (للكتالوج بعد الفحص)', 'Public (catalog after scan)')}
+              {c('عام (للكتالوج بعد المعالجة)', 'Public (catalog after processing)')}
             </option>
             <option value="private">
               {c('خاص (للإدارة فقط)', 'Private (admin only)')}
@@ -1953,7 +1958,7 @@ export function MediaWorkspace() {
                   {selected.mime} · {(selected.size / 1024).toFixed(1)} KB
                 </p>
                 <p>
-                  {c('حالة الفحص:', 'Scan status:')}{' '}
+                  {c('حالة الفحص:', 'File status:')}{' '}
                   <strong>{selected.status}</strong>
                 </p>
                 {selected.scanError && (

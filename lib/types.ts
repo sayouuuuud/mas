@@ -413,6 +413,7 @@ export type AdminSession = {
   aal: 'aal1' | 'aal2'
   mfaRequired?: boolean
   mediaScannerConfigured?: boolean
+  mediaProcessingMode?: 'antivirus' | 'validation_only' | 'quarantine'
   jobsConfigured?: boolean
 }
 

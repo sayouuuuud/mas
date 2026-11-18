@@ -106,7 +106,7 @@ async function execute(job: Job, scope: RequestScope) {
     String(media.mime),
     Number(media.size),
   )
-  await scan(bytes, scope)
+  if (scope.config.mediaScanMode !== 'validation_only') await scan(bytes, scope)
   const output = sanitized.bytes,
     mime = sanitized.mime
   const bucket =

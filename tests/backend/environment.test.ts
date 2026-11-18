@@ -22,6 +22,12 @@ test('local Supabase HTTP is restricted to loopback development environments', (
     }
     check('https://project.supabase.co', true, true)
     check('https://project.supabase.co', false, true)
+    process.env.MEDIA_SCAN_MODE = 'validation_only'
+    assert.equal(configuration().mediaScanMode, 'validation_only')
+    process.env.MEDIA_SCAN_MODE = 'validation-only'
+    assert.equal(configuration().mediaScanMode, 'required')
+    delete process.env.MEDIA_SCAN_MODE
+    assert.equal(configuration().mediaScanMode, 'required')
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in before)) delete process.env[key]
     Object.assign(process.env, before)
