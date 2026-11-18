@@ -117,6 +117,7 @@ export function requestScope(request: NextRequest) {
       active: boolean
       roles: string[]
       displayName?: string
+      mfaEnabled?: boolean
     }>('mas_actor', {})
     if (!profile?.active || profile.id !== data.user.id)
       throw new ApiError(
@@ -137,6 +138,7 @@ export function requestScope(request: NextRequest) {
     return {
       id: data.user.id,
       active: true,
+      mfaEnabled: profile.mfaEnabled !== false,
       roles: ['Owner'],
       aal: level.data.currentLevel === 'aal2' ? 'aal2' : 'aal1',
       ...(profile.displayName ? { displayName: profile.displayName } : {}),

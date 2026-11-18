@@ -102,6 +102,24 @@ begin
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
 end $$;
 
+
+-- Per-account MFA preference is server-only and remains live for existing JWTs.
+do $$declare owner_id uuid:='00000000-0000-4000-8000-000000000001';begin
+ perform public.test_assert((select mfa_required from mas.profiles where id=owner_id),'MFA is enabled by default');
+ perform public.test_throws(format('select public.mas_set_mfa_requirement(%L,%L,false)',owner_id,'aal1'),'MAS_MFA_REQUIRED','password-only session cannot change MFA preference');
+ perform public.mas_set_mfa_requirement(owner_id,'aal2',false);
+ perform public.test_assert(not (select mfa_required from mas.profiles where id=owner_id),'verified admin can opt out of MFA for their account');
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',owner_id,'aal','aal1')::text,true);
+ perform public.test_assert(public.mas_actor()->>'mfaEnabled'='false','authentication metadata reports the stored preference');
+ perform public.test_assert(public.mas_list('units','{}',true)->>'total' is not null,'opted-out admin can use private RPCs at aal1');
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+ perform public.mas_set_mfa_requirement(owner_id,'aal2',true);
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',owner_id,'aal','aal1')::text,true);
+ perform public.test_throws('select public.mas_list(''units'',''{}'',true)','MAS_MFA_REQUIRED','re-enabling MFA immediately rejects an existing aal1 token');
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+ perform public.test_assert((select count(*) from mas.audit_logs where action='mfa_requirement_changed' and actor_id=owner_id)=2,'MFA changes are audited without secrets');
+end $$;
+
 set local role anon;
 select public.test_throws('select * from mas.entities','permission denied','anon cannot select private tables');
 select public.test_throws('select public.mas_command(''units'',''create'',null,null,''{}'',''00000000-0000-4000-8000-000000000001'',''aal2'')','permission denied','anon cannot invoke privileged writes');
@@ -110,6 +128,7 @@ reset role;
 set local role authenticated;
 select public.test_throws('select * from mas.profiles','permission denied','authenticated SDK cannot read arbitrary staff');
 select public.test_throws('select public.mas_submit(''request'',''{}'',''integration-key-2222'',''hash'')','permission denied','authenticated SDK cannot bypass server submission validation');
+select public.test_throws('select public.mas_set_mfa_requirement(''00000000-0000-4000-8000-000000000001'',''aal2'',false)','permission denied','authenticated clients cannot directly change MFA requirement');
 reset role;
 select public.test_assert((select bool_and(relrowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='mas' and c.relkind='r'),'all application tables have RLS');
 rollback;

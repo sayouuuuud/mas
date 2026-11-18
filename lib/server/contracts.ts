@@ -28,6 +28,7 @@ export type Actor = {
   roles: Role[]
   active: boolean
   aal: 'aal1' | 'aal2'
+  mfaEnabled?: boolean
 }
 export const quantity = z
   .number()

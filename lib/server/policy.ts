@@ -18,7 +18,7 @@ export function requireActor(actor: Actor | null): asserts actor is Actor {
       'FORBIDDEN',
       'Admin permissions are required.',
     )
-  if (actor.aal !== 'aal2')
+  if (actor.mfaEnabled !== false && actor.aal !== 'aal2')
     throw new ApiError(
       403,
       'MFA_REQUIRED',

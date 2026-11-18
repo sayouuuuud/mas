@@ -40,6 +40,9 @@ export function buildApiPath(
 
 export function formatApiError(error: unknown, lang: 'ar' | 'en'): string {
   if (error instanceof BackendError) {
+    if (error.code === 'MFA_REPLACEMENT_INCOMPLETE') return lang === 'ar'
+      ? 'المفتاح الجديد مفعّل لكن تعذر إلغاء مفتاح قديم. أعد التأكيد برمز جديد من التطبيق الجديد قبل حذف الإدخال القديم.'
+      : 'The new key is active, but an old key remains. Retry with a fresh code from the new authenticator before deleting the old entry.'
     const details = error.fieldErrors
       ? Object.entries(error.fieldErrors)
           .flatMap(([field, msgs]) =>
@@ -379,6 +382,8 @@ export const authApi = {
       method: 'POST',
       body: { factorId, challengeId, code },
     }),
+  setMfa: (input: { enabled: boolean; factorId: string; code: string; replace?: boolean }) =>
+    api<{ mfaEnabled: boolean; replaced: boolean }>('/auth/mfa/settings', { method: 'POST', body: input }),
   unenroll: (factorId: string) =>
     api<{ removed: boolean }>('/auth/mfa/unenroll', {
       method: 'POST',

@@ -136,12 +136,15 @@ const paths: Record<string, unknown> = {
       true,
     ),
   },
+  '/auth/mfa/settings': {
+    post: operation('Change own MFA requirement or rotate TOTP key after fresh code verification', true),
+  },
   '/auth/mfa/verify': {
     post: operation('Verify factorId, challengeId and six-digit code', true),
   },
   '/admin/me': {
     get: operation(
-      'Current active admin identity; requires MFA (aal2)',
+      'Current active admin identity; enforces the account MFA preference',
       true,
     ),
   },

@@ -11,6 +11,7 @@ import {
   useCopy,
 } from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
+import { AccountSecurityWorkspace } from './security-workspace'
 import { AdminLogin, AdminShell } from './admin-shell'
 import { ProductWorkspace } from './products-workspace'
 import { Dashboard, InquiriesWorkspace, RequestsPage } from './sales-workspace'
@@ -42,6 +43,7 @@ export function AdminPage({ path }: { path: string[] }) {
   else if (section === 'inquiries') body = <InquiriesWorkspace id={id} />
   else if (section === 'quotations') body = <QuotationsWorkspace id={id} />
   else if (section === 'media') body = <MediaWorkspace />
+  else if (section === 'security') body = <AccountSecurityWorkspace />
   else if (section === 'settings') body = <SettingsWorkspace />
   else if (section === 'reports') body = <Reports />
   else if (section === 'audit-log') body = <ActivityLog />
