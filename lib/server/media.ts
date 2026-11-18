@@ -31,6 +31,8 @@ export async function mediaController(
         pageSize: input.pageSize,
         q: input.q,
         status: input.status,
+        visibility: input.visibility,
+        ...(input.kind ? { kind: input.kind } : {}),
       },
       actor,
     )
@@ -112,7 +114,8 @@ export async function mediaController(
           timeBudgetMs: 18000,
         })
         const updated = await scope.repository.get('media', id, actor)
-        if (updated) return response(updated, updated.status === 'ready' ? 200 : 202)
+        if (updated)
+          return response(updated, updated.status === 'ready' ? 200 : 202)
       } catch {
         // Keep the durable quarantined state when background scanning fails.
       }

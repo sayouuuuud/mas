@@ -277,6 +277,14 @@ export class BackendService {
       'Bilingual names and descriptions are required before publication.',
     )
     assert(
+      product.categoryId && product.brandId,
+      'Select a category and brand before publication.',
+    )
+    assert(
+      product.variants.every((v) => !v.active || (v.unitId && v.sku.trim())),
+      'Active variants require a selling unit and SKU.',
+    )
+    assert(
       product.variants.some((v) => v.active),
       'At least one active variant is required.',
     )
@@ -293,6 +301,7 @@ export class BackendService {
       ['categories', product.categoryId],
       ['brands', product.brandId],
     ] as const) {
+      assert(key, 'Select a category and brand before publication.')
       const row = await this.repository.get(resource, key, actor)
       assert(
         row && row.status === 'published',

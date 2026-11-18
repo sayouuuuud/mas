@@ -40,11 +40,7 @@ export function Footer() {
         <div className="flex flex-col gap-5">
           <Logo inverted />
           <p className="max-w-sm leading-relaxed text-background/70">
-            {content
-              ? lang === 'ar'
-                ? content.bodyAr
-                : content.bodyEn
-              : t.footer.tagline}
+            {content ? (lang === 'ar' ? content.bodyAr : content.bodyEn) : ''}
           </p>
           {lang === 'ar' ? (
             <p className="text-sm text-background/60">{company.name.ar}</p>
@@ -119,7 +115,7 @@ export function Footer() {
             <Link href="/terms">{lang === 'ar' ? 'الشروط' : 'Terms'}</Link>
           </div>
           <p>
-            © {year} M.A.S Engineering For Trade. {t.footer.rights}
+            © {year} {company.name[lang]}. {t.footer.rights}
           </p>
           <a
             href="#main-content"

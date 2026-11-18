@@ -81,7 +81,12 @@ function Reports() {
   })
 
   async function handleExport(
-    resource: 'quote_requests' | 'inquiries' | 'quotations' | 'products' | 'contacts',
+    resource:
+      | 'quote_requests'
+      | 'inquiries'
+      | 'quotations'
+      | 'products'
+      | 'contacts',
   ) {
     if (busy || !validRange) return
     setBusy(true)
@@ -221,7 +226,10 @@ function Reports() {
         <>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              [c('طلبات عروض الأسعار', 'Quote requests'), summary?.requests ?? 0],
+              [
+                c('طلبات عروض الأسعار', 'Quote requests'),
+                summary?.requests ?? 0,
+              ],
               [c('الاستفسارات', 'Inquiries'), summary?.inquiries ?? 0],
               [c('عروض الأسعار', 'Quotations'), summary?.quotations ?? 0],
               [
@@ -379,7 +387,12 @@ function ActivityLog() {
         </div>
       </div>
       <div className="panel bg-white">
-        <Field label={c('بحث بالمورد أو العملية أو المعرف', 'Search resource, action or ID')}>
+        <Field
+          label={c(
+            'بحث بالمورد أو العملية أو المعرف',
+            'Search resource, action or ID',
+          )}
+        >
           <input
             className="control"
             value={q}
@@ -410,14 +423,21 @@ function ActivityLog() {
                   )}
                 </div>
                 {e.entityId && (
-                  <p dir="ltr" className="my-2 font-mono text-xs text-foreground/80">
-                    {e.entityId}
+                  <p
+                    dir="ltr"
+                    className="my-2 font-mono text-xs text-foreground/80"
+                  >
+                    {e.entityName
+                      ? typeof e.entityName === 'string'
+                        ? e.entityName
+                        : e.entityName[lang]
+                      : e.entityId}
                   </p>
                 )}
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
                     {e.actorId
-                      ? `${c('المنفذ', 'Actor')}: ${e.actorId.slice(0, 8)}…`
+                      ? `${c('المنفذ', 'Actor')}: ${e.actorName || e.actorId.slice(0, 8) + '…'}`
                       : c('النظام', 'System')}
                   </span>
                   <time>

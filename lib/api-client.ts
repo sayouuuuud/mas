@@ -40,9 +40,10 @@ export function buildApiPath(
 
 export function formatApiError(error: unknown, lang: 'ar' | 'en'): string {
   if (error instanceof BackendError) {
-    if (error.code === 'MFA_REPLACEMENT_INCOMPLETE') return lang === 'ar'
-      ? 'المفتاح الجديد مفعّل لكن تعذر إلغاء مفتاح قديم. أعد التأكيد برمز جديد من التطبيق الجديد قبل حذف الإدخال القديم.'
-      : 'The new key is active, but an old key remains. Retry with a fresh code from the new authenticator before deleting the old entry.'
+    if (error.code === 'MFA_REPLACEMENT_INCOMPLETE')
+      return lang === 'ar'
+        ? 'المفتاح الجديد مفعّل لكن تعذر إلغاء مفتاح قديم. أعد التأكيد برمز جديد من التطبيق الجديد قبل حذف الإدخال القديم.'
+        : 'The new key is active, but an old key remains. Retry with a fresh code from the new authenticator before deleting the old entry.'
     const details = error.fieldErrors
       ? Object.entries(error.fieldErrors)
           .flatMap(([field, msgs]) =>
@@ -208,14 +209,21 @@ export const submitInquiry = (
     signal,
   })
 
-export async function saveResource<T>(path: string, data: unknown, id?: string, version?: number): Promise<T> {
+export async function saveResource<T>(
+  path: string,
+  data: unknown,
+  id?: string,
+  version?: number,
+): Promise<T> {
   if (id && (!version || !Number.isInteger(version))) {
     throw new BackendError(409, 'CONFLICT', 'Reload the record before saving.')
   }
-  return (await api<T>(id ? `${path}/${id}` : path, {
-    method: id ? 'PATCH' : 'POST',
-    body: id ? { version, data } : data,
-  })).data
+  return (
+    await api<T>(id ? `${path}/${id}` : path, {
+      method: id ? 'PATCH' : 'POST',
+      body: id ? { version, data } : data,
+    })
+  ).data
 }
 
 export async function saveQuotation(
@@ -225,10 +233,21 @@ export async function saveQuotation(
   version?: number,
 ): Promise<{ data: QuotationRecord; meta?: PageMeta }> {
   if (quotationId) {
-    if (!version || !Number.isInteger(version)) throw new BackendError(409, 'CONFLICT', 'Reload the quotation before saving.')
-    return api<QuotationRecord>(`/admin/quotations/${quotationId}`, { method: 'PATCH', body: { version, data: input } })
+    if (!version || !Number.isInteger(version))
+      throw new BackendError(
+        409,
+        'CONFLICT',
+        'Reload the quotation before saving.',
+      )
+    return api<QuotationRecord>(`/admin/quotations/${quotationId}`, {
+      method: 'PATCH',
+      body: { version, data: input },
+    })
   }
-  return api<QuotationRecord>(`/admin/quote-requests/${requestId}/quotations`, { method: 'POST', body: input })
+  return api<QuotationRecord>(`/admin/quote-requests/${requestId}/quotations`, {
+    method: 'POST',
+    body: input,
+  })
 }
 
 export async function downloadServerExport(
@@ -382,11 +401,31 @@ export const authApi = {
       method: 'POST',
       body: { factorId, challengeId, code },
     }),
-  setMfa: (input: { enabled: boolean; factorId: string; code: string; replace?: boolean }) =>
-    api<{ mfaEnabled: boolean; replaced: boolean }>('/auth/mfa/settings', { method: 'POST', body: input }),
+  setMfa: (input: {
+    enabled: boolean
+    factorId: string
+    code: string
+    replace?: boolean
+  }) =>
+    api<{ mfaEnabled: boolean; replaced: boolean }>('/auth/mfa/settings', {
+      method: 'POST',
+      body: input,
+    }),
   unenroll: (factorId: string) =>
     api<{ removed: boolean }>('/auth/mfa/unenroll', {
       method: 'POST',
       body: { factorId },
     }),
+}
+
+// Reference metadata sometimes requires every page (e.g. specification templates).
+export async function listAllRecords<T>(resource: string): Promise<T[]> {
+  const rows: T[] = []
+  for (let page = 1; ; page++) {
+    const result = await api<T[]>(
+      buildApiPath(`/admin/${resource}`, { page, pageSize: 48 }),
+    )
+    rows.push(...result.data)
+    if (!result.meta || page >= result.meta.totalPages) return rows
+  }
 }

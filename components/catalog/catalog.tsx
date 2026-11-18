@@ -156,7 +156,11 @@ export function Catalog({
   sector?: string
   title?: string
   description?: string
-  subcategories?: Array<{ id: string; slug: string; name: { ar: string; en: string } }>
+  subcategories?: Array<{
+    id: string
+    slug: string
+    name: { ar: string; en: string }
+  }>
 }) {
   const { brands, categories, sectors, units } = useCatalogData()
   const { data: attributes = [] } = usePublicAttributes()
@@ -187,6 +191,7 @@ export function Catalog({
     locale: lang,
     q: q.trim() || undefined,
     category: categoryFilter || undefined,
+    family: query.get('family') || undefined,
     brand: brandFilter || undefined,
     sector: sectorFilter || undefined,
     availability: availability || undefined,
@@ -200,6 +205,7 @@ export function Catalog({
     locale: lang,
     q: q.trim() || undefined,
     category: categoryFilter || undefined,
+    family: query.get('family') || undefined,
     brand: brandFilter || undefined,
     sector: sectorFilter || undefined,
     availability: availability || undefined,
@@ -281,11 +287,13 @@ export function Catalog({
   const facets = facetsQuery.data
   const totalPages = Math.max(1, meta.totalPages || 1)
 
-  const categoryOptions = (facets?.categories || categories).map((cat: any) => ({
-    id: cat.id,
-    label: cat.name[lang],
-    count: typeof cat.count === 'number' ? cat.count : 0,
-  }))
+  const categoryOptions = (facets?.categories || categories).map(
+    (cat: any) => ({
+      id: cat.id,
+      label: cat.name[lang],
+      count: typeof cat.count === 'number' ? cat.count : 0,
+    }),
+  )
   const brandOptions = (facets?.brands || brands).map((b: any) => ({
     id: b.id,
     label: b.name[lang],
@@ -296,7 +304,8 @@ export function Catalog({
     label: s.name[lang],
     count: typeof s.count === 'number' ? s.count : 0,
   }))
-  const packOptions = facets?.packs?.map((p) => String(p.value)).filter(Boolean) || []
+  const packOptions =
+    facets?.packs?.map((p) => String(p.value)).filter(Boolean) || []
   const filterableSpecChoices = (facets?.attributes || []).flatMap((attr) =>
     (attr.values || []).map((entry) => {
       const raw = String(entry.value)
@@ -461,7 +470,9 @@ export function Catalog({
                 <Field label={c('المواصفة الفنية', 'Technical specification')}>
                   <select
                     className="control"
-                    value={attribute && specValue ? `${attribute}::${specValue}` : ''}
+                    value={
+                      attribute && specValue ? `${attribute}::${specValue}` : ''
+                    }
                     onChange={(e) => changeSpecFilter(e.target.value)}
                   >
                     <option value="">

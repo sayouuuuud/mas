@@ -100,6 +100,31 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',agent_id,'aal','aal2')::text,true);
  perform public.test_throws('select public.mas_actor()','MAS_FORBIDDEN','disabled staff immediately lose access with an existing JWT');
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+ -- Regression coverage for the integrated MVP workflows.
+ perform public.test_assert((select document->>'contactId' is not null from mas.entities where id=request_id),'submission atomically links canonical contact');
+ perform public.test_assert((select count(*) from mas.entities where resource='contacts')=1,'idempotency does not duplicate canonical contact');
+ perform public.test_assert(exists(select 1 from mas.entity_links where source_id=request_id and kind='contact'),'request/contact dependency is persisted');
+ perform public.test_throws(format('select public.mas_command(%L,%L,%L,1,%L,%L,%L)','contacts','delete',(select document->>'contactId' from mas.entities where id=request_id),'{}',owner_id,'aal2'),'MAS_VALIDATION','customer with history cannot be deleted');
+ retry:=public.mas_command('products','create',null,null,'{"name":{"ar":"مسودة","en":"Incomplete draft"},"slug":"incomplete-draft","family":"oils","categoryId":null,"brandId":null,"variants":[]}',owner_id,'aal2');
+ perform public.test_assert(retry->>'id' is not null,'incomplete draft can be saved without publication references');
+ perform public.test_throws(format('select public.mas_command(%L,%L,%L,1,%L,%L,%L)','products','publish',retry->>'id','{}',owner_id,'aal2'),'MAS_VALIDATION','incomplete draft cannot be published');
+ retry:=public.mas_import_initial('units','{"code":"piece","name":{"ar":"تغيير ممنوع","en":"Never overwrite"}}','test-existing-unit');
+ perform public.test_assert(retry->>'imported'='false' and retry->'name'->>'en'='Piece','initial import preserves existing natural key and edits');
+ retry:=public.mas_import_initial('units','{"code":"import_unit","name":{"ar":"تجربة","en":"Import unit"},"active":true,"precision":0}','test-import-unit');
+ response:=public.mas_import_initial('units','{"code":"import_unit","name":{"ar":"جديد","en":"Changed"}}','test-import-unit');
+ perform public.test_assert(retry->>'id'=response->>'id' and response->>'imported'='false','second initial import is idempotent');
+ payload:=jsonb_set(payload,'{customer,name}','"Unverified new visitor name"');
+ response:=public.mas_submit('request',payload,'integration-mvp-second','same-phone');
+ perform public.test_assert((select count(*) from mas.entities where resource='contacts')=1 and (select document->>'name'='Test Customer' from mas.entities where resource='contacts'),'matching phone reuses customer without overwriting canonical data');
+ insert into mas.entities(resource,document) select 'quote_requests',jsonb_build_object('reference','HISTORY-'||n,'contactId',(select document->>'contactId' from mas.entities where id=request_id),'status','new','source',jsonb_build_object('page','/en/request-quote')) from generate_series(1,50) n;
+ perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',owner_id,'aal','aal2')::text,true);
+ response:=public.mas_list('quote_requests',jsonb_build_object('contactId',(select document->>'contactId' from mas.entities where id=request_id),'page',2,'pageSize',48),true);
+ perform public.test_assert((response->>'total')::int=52 and jsonb_array_length(response->'data')=4,'customer history pagination includes records after first 48');
+ response:=public.mas_reports('{}');
+ perform public.test_assert((response->>'requests')::int=52 and (response->>'quotations')::int=2,'reports return truthful request and quotation counts');
+ perform public.test_assert((public.mas_list('products','{"family":"bearings"}',false)->>'total')::int=0,'family filter excludes unrelated oil products');
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);
+
 end $$;
 
 
@@ -107,6 +132,7 @@ end $$;
 do $$declare owner_id uuid:='00000000-0000-4000-8000-000000000001';begin
  perform public.test_assert((select mfa_required from mas.profiles where id=owner_id),'MFA is enabled by default');
  perform public.test_throws(format('select public.mas_set_mfa_requirement(%L,%L,false)',owner_id,'aal1'),'MAS_MFA_REQUIRED','password-only session cannot change MFA preference');
+
  perform public.mas_set_mfa_requirement(owner_id,'aal2',false);
  perform public.test_assert(not (select mfa_required from mas.profiles where id=owner_id),'verified admin can opt out of MFA for their account');
  perform set_config('request.jwt.claims',jsonb_build_object('role','authenticated','sub',owner_id,'aal','aal1')::text,true);

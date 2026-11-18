@@ -21,8 +21,11 @@ const pointIcons = [ShieldCheck, HardHat, Truck, BadgePercent]
 
 export function About() {
   const { t, lang } = useLanguage()
-  const { company, phones } = useSiteInfo()
+  const { company, phones, addresses } = useSiteInfo()
   const content = useContentPreview('about')
+  const image = content?.media.find(
+    (m) => m.id === content.layout?.imageMediaId,
+  )?.url
 
   return (
     <section
@@ -34,43 +37,40 @@ export function About() {
         <div className="flex flex-col gap-8">
           <SectionHeading
             id="about-title"
-            eyebrow={t.about.eyebrow}
+            eyebrow={content?.layout?.eyebrow?.[lang] || ''}
             title={
-              content
-                ? lang === 'ar'
-                  ? content.nameAr
-                  : content.nameEn
-                : t.about.title
+              content ? (lang === 'ar' ? content.nameAr : content.nameEn) : ''
             }
           />
           <p className="text-lg leading-relaxed text-pretty text-muted-foreground">
-            {content
-              ? lang === 'ar'
-                ? content.bodyAr
-                : content.bodyEn
-              : t.about.body}
+            {content ? (lang === 'ar' ? content.bodyAr : content.bodyEn) : ''}
           </p>
           <ul className="grid border-t sm:grid-cols-2">
-            {t.about.points.map((point, index) => {
-              const Icon = pointIcons[index] ?? ShieldCheck
-              return (
-                <li
-                  key={point.title}
-                  className="flex gap-4 border-b py-5 sm:odd:pe-6 sm:even:border-s sm:even:ps-6"
-                >
-                  <Icon
-                    className="mt-0.5 size-5 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                  <div className="flex flex-col gap-1.5">
-                    <h3 className="text-base font-bold">{point.title}</h3>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {point.body}
-                    </p>
-                  </div>
-                </li>
-              )
-            })}
+            {(content?.layout?.cards || [])
+              .map((card) => ({
+                title: card.title[lang],
+                body: card.body[lang],
+              }))
+              .map((point, index) => {
+                const Icon = pointIcons[index] ?? ShieldCheck
+                return (
+                  <li
+                    key={point.title}
+                    className="flex gap-4 border-b py-5 sm:odd:pe-6 sm:even:border-s sm:even:ps-6"
+                  >
+                    <Icon
+                      className="mt-0.5 size-5 shrink-0 text-primary"
+                      aria-hidden="true"
+                    />
+                    <div className="flex flex-col gap-1.5">
+                      <h3 className="text-base font-bold">{point.title}</h3>
+                      <p className="text-sm leading-relaxed text-muted-foreground">
+                        {point.body}
+                      </p>
+                    </div>
+                  </li>
+                )
+              })}
           </ul>
           <a
             href={phones.mobile.href}
@@ -95,13 +95,15 @@ export function About() {
 
         <figure className="notched [--notch-h:4.25rem] [--notch-w:12.5rem]">
           <div className="notched-media aspect-[4/5] bg-muted">
-            <Image
-              src="/images/about-storage.png"
-              alt={t.about.imageAlt}
-              fill
-              sizes="(min-width: 768px) 45vw, 90vw"
-              className="object-cover"
-            />
+            {image && (
+              <Image
+                src={image}
+                alt={t.about.imageAlt}
+                fill
+                sizes="(min-width: 768px) 45vw, 90vw"
+                className="object-cover"
+              />
+            )}
           </div>
           <figcaption className="notched-tab flex items-center gap-3 bg-foreground px-4 text-background">
             <MapPin
@@ -110,7 +112,7 @@ export function About() {
             />
             <span className="flex flex-col leading-tight">
               <span className="text-xs text-background/70">
-                {t.hero.stockPlace}
+                {addresses.stores[lang]}
               </span>
               <span className="text-sm font-bold">{t.hero.stockNote}</span>
             </span>
