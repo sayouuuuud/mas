@@ -91,6 +91,10 @@ export function configuration() {
       process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
     rateLimitSecret: process.env.RATE_LIMIT_SECRET,
     jobSecret: process.env.CRON_SECRET || process.env.JOB_SECRET,
+    mediaScanMode:
+      process.env.MEDIA_SCAN_MODE === 'validation_only'
+        ? ('validation_only' as const)
+        : ('required' as const),
     scannerUrl: process.env.MEDIA_SCANNER_URL,
     scannerKey: process.env.MEDIA_SCANNER_KEY,
   }
@@ -99,4 +103,16 @@ export function configuration() {
 export function secret(value: string | undefined, minimum = 20) {
   if (!value || value.length < minimum) throw unavailable()
   return value
+}
+
+// Missing or misspelled opt-outs retain the default antivirus requirement.
+export function mediaProcessingMode(config: {
+  mediaScanMode?: string
+  scannerUrl?: string
+  scannerKey?: string
+}): 'antivirus' | 'validation_only' | 'quarantine' {
+  if (config.mediaScanMode === 'validation_only') return 'validation_only'
+  return config.scannerUrl && config.scannerKey && config.scannerKey.length >= 32
+    ? 'antivirus'
+    : 'quarantine'
 }

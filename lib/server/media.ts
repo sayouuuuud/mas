@@ -9,6 +9,7 @@ import { readBody, response, limit } from './http'
 import { assert, missing, unavailable } from './errors'
 import { requireActor } from './policy'
 import { drainJobs } from './jobs'
+import { mediaProcessingMode } from './environment'
 
 export async function mediaController(
   request: NextRequest,
@@ -103,11 +104,7 @@ export async function mediaController(
       data: {},
       actor,
     })
-    if (
-      scope.config.scannerUrl &&
-      scope.config.scannerKey &&
-      scope.config.scannerKey.length >= 32
-    ) {
+    if (mediaProcessingMode(scope.config) !== 'quarantine') {
       try {
         await drainJobs(scope, {
           maxBatches: 3,

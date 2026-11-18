@@ -2,6 +2,16 @@
 
 **Not approved for production use yet.** Code, local verification, hosted database changes and real business journeys are separate milestones.
 
+## Setup requested on 18 November 2026
+
+- The requested hosted test administrator email is `admin@test.com`. Supabase rejected the supplied password because it is shorter than six characters; account creation awaits the user's replacement-password choice. No hosted account or role was created by this failed attempt.
+- Arabic/English privacy and terms were written and saved as two draft content records in MAS DB. They remain unpublished: automatic approval review rejected immediate legal publication without explicit approval of the completed texts. See [reviewable Arabic texts](docs/LEGAL-POLICIES.ar.md) and [bilingual source](content/initial-legal-policies.json).
+- The user will add company/catalog data. No company, unit, reference, customer or product fixtures were added to the hosted database.
+- An explicit `MEDIA_SCAN_MODE=validation_only` option is prepared in this branch. Default and unknown settings retain the antivirus requirement. Validation-only mode still verifies structure/MIME/size, re-encodes images, and rejects active PDFs; it never claims an antivirus verdict.
+- Real isolated browser/Storage tests passed valid PNG → WebP → ready/download with no configured scanner; a JavaScript-bearing PDF was rejected and never received a public path. Unit tests total 41; typecheck and build pass.
+- Automatic approval review rejected setting validation-only mode for Vercel Production and Preview without explicit approval of that exact change. The environment variable was not created and production behavior remains unchanged.
+- [Google SMTP setup instructions](docs/GOOGLE-SMTP.ar.md) target Supabase Auth, which actually sends the app's invitation/recovery messages. Vercel SMTP variables alone have no effect in this codebase.
+
 ## Source and target
 
 - Reviewed `sayouuuuud/mas`, `main` at `6b36589d59680bc18f1cb7b9804b38a926794763`. The other remaining branch is an older design revision. No `project.zip` was supplied in this session.

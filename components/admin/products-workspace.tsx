@@ -1512,8 +1512,8 @@ function ProductEditor({ id }: { id: string }) {
             {quarantinedCount > 0 && (
               <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
                 {c(
-                  `يوجد ${quarantinedCount} ملف في الحجر الأمني (quarantined) بانتظار الفاحص؛ الوسائط الجاهزة (ready) فقط متاحة للربط والنشر العام.`,
-                  `${quarantinedCount} media file(s) are currently quarantined pending malware scan; only ready public files can be attached for publication.`,
+                  `يوجد ${quarantinedCount} ملف في الحجر الأمني (quarantined) بانتظار المعالجة؛ الوسائط الجاهزة (ready) فقط متاحة للربط والنشر العام.`,
+                  `${quarantinedCount} media file(s) are currently quarantined pending file processing; only ready public files can be attached for publication.`,
                 )}
               </div>
             )}
