@@ -35,7 +35,7 @@ export async function authController(
       return response({
         id: actor.id,
         role: 'Admin',
-        mfaRequired: actor.aal !== 'aal2',
+        mfaRequired: actor.mfaEnabled !== false && actor.aal !== 'aal2',
       })
     } catch (error) {
       await scope.user.auth.signOut({ scope: 'local' })
@@ -127,7 +127,7 @@ export async function authController(
     return response({
       ...actor,
       role: 'Admin',
-      mfaRequired: actor.aal !== 'aal2',
+      mfaRequired: actor.mfaEnabled !== false && actor.aal !== 'aal2',
     })
 
   if (action === 'password' && method === 'POST') {
@@ -163,7 +163,7 @@ export async function authController(
         'PASSWORD_UPDATE_FAILED',
         'The password could not be updated. Reauthenticate and try again.',
       )
-    return response({ updated: true, mfaRequired: actor.aal !== 'aal2' })
+    return response({ updated: true, mfaRequired: actor.mfaEnabled !== false && actor.aal !== 'aal2' })
   }
 
   if (action === 'mfa/factors' && method === 'GET') {
@@ -186,8 +186,11 @@ export async function authController(
   }
 
   if (action === 'mfa/enroll' && method === 'POST') {
-    await limit(scope, request, `mfa:${actor.id}`, 5, 600)
+    await limit(scope, request, `mfa-enroll:${actor.id}`, 5, 600)
     const existing = await scope.user.auth.mfa.listFactors()
+    if (existing.error) throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Authentication is temporarily unavailable.')
+    if (existing.data.all.some(f => f.status === 'verified') && actor.aal !== 'aal2')
+      throw new ApiError(403, 'MFA_REQUIRED', 'Verify the current authenticator before creating a replacement.')
     if (!existing.error) {
       for (const stale of existing.data.all.filter(
         (f) => f.status === 'unverified',
@@ -197,7 +200,7 @@ export async function authController(
     }
     const result = await scope.user.auth.mfa.enroll({
       factorType: 'totp',
-      friendlyName: `M.A.S Admin (${new Date().toISOString().slice(0, 10)})`,
+      friendlyName: `M.A.S Admin ${new Date().toISOString()}`,
     })
     if (result.error)
       authFailure(
@@ -213,7 +216,7 @@ export async function authController(
   }
 
   if (action === 'mfa/challenge' && method === 'POST') {
-    await limit(scope, request, `mfa:${actor.id}`, 10, 600)
+    await limit(scope, request, `mfa-challenge:${actor.id}`, 10, 600)
     const input = z
       .object({ factorId: z.uuid() })
       .strict()
@@ -227,6 +230,99 @@ export async function authController(
         'The verification challenge could not be created.',
       )
     return response({ id: result.data.id, expiresAt: result.data.expires_at })
+  }
+
+  if (action === 'mfa/settings' && method === 'POST') {
+    await limit(scope, request, `mfa-settings:${actor.id}`, 10, 600)
+    const input = z
+      .object({
+        enabled: z.boolean(),
+        factorId: z.uuid(),
+        code: z.string().regex(/^\d{6}$/),
+        replace: z.boolean().default(false),
+      })
+      .strict()
+      .parse(await readBody(request))
+    const factors = await scope.user.auth.mfa.listFactors()
+    if (factors.error)
+      throw new ApiError(
+        503,
+        'AUTH_UNAVAILABLE',
+        'Authentication is temporarily unavailable.',
+      )
+    const target = factors.data.all.find(
+      (f) => f.id === input.factorId && f.factor_type === 'totp',
+    )
+    if (!target)
+      throw new ApiError(404, 'NOT_FOUND', 'The authenticator does not exist.')
+    assert(
+      input.enabled || target.status === 'verified',
+      'Verify an existing authenticator before disabling MFA.',
+    )
+    assert(
+      input.enabled || !input.replace,
+      'Replacement requires MFA activation.',
+    )
+    if (
+      target.status !== 'verified' &&
+      factors.data.all.some((f) => f.status === 'verified') &&
+      actor.aal !== 'aal2'
+    )
+      throw new ApiError(
+        403,
+        'MFA_REQUIRED',
+        'Verify the current authenticator before replacing it.',
+      )
+    const verified = await scope.user.auth.mfa.challengeAndVerify({
+      factorId: input.factorId,
+      code: input.code,
+    })
+    if (verified.error)
+      authFailure(
+        verified.error,
+        401,
+        'INVALID_MFA_CODE',
+        'The verification code is invalid or expired.',
+      )
+    const confirmed = await scope.actor()
+    if (confirmed.id !== actor.id || confirmed.aal !== 'aal2')
+      throw new ApiError(
+        403,
+        'MFA_REQUIRED',
+        'Two-factor verification is required.',
+      )
+    const preference = await scope.repository.rpc<{ mfaEnabled: boolean }>(
+      'mas_set_mfa_requirement',
+      {
+        p_actor: confirmed.id,
+        p_aal: confirmed.aal,
+        p_required: input.enabled,
+      },
+      true,
+    )
+    if (input.enabled && input.replace) {
+      // Keep the original factor until its replacement is verified and enabled.
+      for (const old of factors.data.all.filter(
+        (f) =>
+          f.id !== input.factorId &&
+          f.factor_type === 'totp' &&
+          f.status === 'verified',
+      )) {
+        const removed = await scope.user.auth.mfa.unenroll({
+          factorId: old.id,
+        })
+        if (removed.error)
+          throw new ApiError(
+            503,
+            'MFA_REPLACEMENT_INCOMPLETE',
+            'The new key is active, but an old key could not be removed. Retry using a new code from the new authenticator.',
+          )
+      }
+    }
+    return response({
+      ...preference,
+      replaced: input.enabled && input.replace,
+    })
   }
 
   if (action === 'mfa/unenroll' && method === 'POST') {
@@ -256,7 +352,7 @@ export async function authController(
         (factor) => factor.status === 'verified',
       )
       assert(
-        verified.some((factor) => factor.id !== input.factorId),
+        actor.mfaEnabled === false || verified.some((factor) => factor.id !== input.factorId),
         'Enroll and verify a replacement before removing the last factor.',
       )
     }

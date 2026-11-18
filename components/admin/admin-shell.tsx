@@ -95,6 +95,7 @@ export const adminNavigation = [
   { id: 'navigation', ar: 'قوائم التنقل', en: 'Navigation', icon: Layers },
   { id: 'locations', ar: 'الفروع والمخازن', en: 'Locations', icon: MapPin },
   { id: 'settings', ar: 'الإعدادات', en: 'Settings', icon: Settings },
+  { id: 'security', ar: 'أمان حسابي', en: 'Account security', icon: Shield },
   { id: 'team', ar: 'حسابات الأدمن', en: 'Admin accounts', icon: Shield },
   { id: 'audit-log', ar: 'سجل التدقيق', en: 'Audit log', icon: History },
   { id: 'reports', ar: 'التقارير', en: 'Reports', icon: ChartNoAxesCombined },
@@ -118,7 +119,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   )
 
   const canLoadAdminMe = Boolean(
-    authQuery.data && authQuery.data.active && authQuery.data.aal === 'aal2',
+    authQuery.data && authQuery.data.active && (authQuery.data.mfaEnabled === false || authQuery.data.aal === 'aal2'),
   )
 
   const adminMeQuery = useLiveQuery(
@@ -226,7 +227,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     return <AdminLogin />
   }
 
-  if (session.aal !== 'aal2' || session.mfaRequired) {
+  if ((session.mfaEnabled !== false && session.aal !== 'aal2') || session.mfaRequired) {
     return (
       <main className="login-root">
         <section className="login-story">

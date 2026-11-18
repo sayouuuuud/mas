@@ -412,6 +412,7 @@ export type AdminSession = {
   active: boolean
   aal: 'aal1' | 'aal2'
   mfaRequired?: boolean
+  mfaEnabled?: boolean
   mediaScannerConfigured?: boolean
   mediaProcessingMode?: 'antivirus' | 'validation_only' | 'quarantine'
   jobsConfigured?: boolean

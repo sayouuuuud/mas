@@ -25,6 +25,7 @@ const SECTIONS = [
   'navigation',
   'locations',
   'settings',
+  'security',
   'team',
   'audit-log',
   'reports',
@@ -52,7 +53,7 @@ export default async function Page({
 
   if (id) {
     if (
-      ['media', 'settings', 'audit-log', 'reports', 'login', 'reset-password'].includes(
+      ['media', 'settings', 'security', 'audit-log', 'reports', 'login', 'reset-password'].includes(
         section,
       )
     ) {

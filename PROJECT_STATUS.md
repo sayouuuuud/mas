@@ -2,6 +2,14 @@
 
 **Not approved for production use yet.** Code, local verification, hosted database changes and real business journeys are separate milestones.
 
+## MFA account management — 18 November 2026
+
+- The hosted test administrator `admin@test.com` now exists and is active; production password login was verified, and MFA remains required. No credentials are stored in this report.
+- `/admin/security` adds per-account disable/re-enable and new secret/QR rotation. Old keys are removed only after successful replacement verification; cancel and invalid-code paths preserve the old verified key.
+- Applied migration `20261118052201_admin_mfa_preferences.sql` to MAS DB. Existing accounts retain MFA by default; live checks confirmed the active profile still requires MFA, RLS remains enabled, and only service_role can call the preference mutation RPC.
+- 45 unit/contract tests, 57 SQL assertions, typecheck/build and real isolated Auth/PostgREST browser flows pass. The real user's factor was not changed. Additional lost-device instructions were removed from the login screen as requested.
+- See [MFA implementation and verification](docs/MFA-MANAGEMENT.ar.md). Earlier setup notes below describe the state at their recorded step, including the initial rejected password attempt.
+
 ## Setup requested on 18 November 2026
 
 - The requested hosted test administrator email is `admin@test.com`. Supabase rejected the supplied password because it is shorter than six characters; account creation awaits the user's replacement-password choice. No hosted account or role was created by this failed attempt.
