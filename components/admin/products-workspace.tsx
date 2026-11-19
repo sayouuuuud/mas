@@ -3,7 +3,7 @@ import { useUnsavedForm } from './form-state'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import {
   Archive,
   Check,
@@ -47,7 +47,6 @@ import type {
   ProductFamily,
   PublishStatus,
   SectorRecord,
-  SpecificationInput,
   ProductSpec,
   UnitRecord,
 } from '@/lib/types'
@@ -473,6 +472,13 @@ function ProductEditor({ id }: { id: string }) {
     '/admin/attributes?page=1&pageSize=48',
     async () => await listAllRecords<AttributeRecord>('attributes'),
   )
+  const categoriesQuery = useLiveQuery(
+    '/admin/categories?page=1&pageSize=48',
+    () => listAllRecords<CategoryRecord>('categories'),
+  )
+  const brandsQuery = useLiveQuery('/admin/brands?page=1&pageSize=48', () =>
+    listAllRecords<BrandRecord>('brands'),
+  )
   const [tab, setTab] = useState(0)
   const [nameAr, setNameAr] = useState('')
   const [nameEn, setNameEn] = useState('')
@@ -513,7 +519,11 @@ function ProductEditor({ id }: { id: string }) {
   const [seoTitleEn, setSeoTitleEn] = useState('')
   const [seoDescAr, setSeoDescAr] = useState('')
   const [seoDescEn, setSeoDescEn] = useState('')
-  const [specifications, setSpecifications] = useState<SpecificationInput[]>([])
+  const [standardsText, setStandardsText] = useState('')
+  const [specifications, setSpecifications] = useState<ProductSpec[]>([])
+  const [packSize, setPackSize] = useState('')
+  const [packMeasureId, setPackMeasureId] = useState('')
+  const [packError, setPackError] = useState('')
   const [variants, setVariants] = useState<EditableVariant[]>([])
   const [initializedKey, setInitializedKey] = useState('')
   const [baseVersion, setBaseVersion] = useState<number>()
@@ -556,25 +566,8 @@ function ProductEditor({ id }: { id: string }) {
       setSeoTitleEn(product.seoTitle?.en || '')
       setSeoDescAr(product.seoDescription?.ar || '')
       setSeoDescEn(product.seoDescription?.en || '')
-      setSpecifications(
-        (product.specifications || []).map((sp) => {
-          const attribute = attributesQuery.data?.find(
-            (a) => a.id === sp.attributeId,
-          )
-          return {
-            attributeId: sp.attributeId,
-            ...(typeof sp.value === 'number'
-              ? { valueNumber: sp.value }
-              : typeof sp.value === 'boolean'
-                ? { valueBoolean: sp.value }
-                : Array.isArray(sp.value)
-                  ? { optionIds: sp.value }
-                  : attribute?.type === 'option'
-                    ? { optionId: sp.value }
-                    : { valueText: sp.value }),
-          }
-        }),
-      )
+      setStandardsText((product.standards || []).join('\n'))
+      setSpecifications(product.specifications || [])
       setVariants(
         (product.variants || []).map((v) => ({
           id: v.id,
@@ -595,37 +588,108 @@ function ProductEditor({ id }: { id: string }) {
         })),
       )
       setInitializedKey(`${product.id}:${product.version}`)
-    } else if (isNew && initializedKey !== 'new' && activeUnits.length > 0) {
-      setVariants([
-        {
-          sku: '',
-          manufacturerPartNumber: '',
-          labelAr: 'العبوة القياسية',
-          labelEn: 'Standard Unit',
-          unitId: activeUnits[0].id,
-          packQuantity: '',
-          packUnitId: '',
-          minQuantity: 1,
-          quantityStep: 1,
-          availability: 'available',
-          active: true,
-        },
-      ])
-      setInitializedKey('new')
     }
-  }, [isNew, product, initializedKey, activeUnits])
+  }, [isNew, product, initializedKey])
 
-  const applicableProductAttributes = useMemo(() => {
-    const allAttrs = (attributesQuery.data || []).filter(
-      (a) => a.scope === 'product',
+  const categoryIds = new Set<string>()
+  let currentCategory = categoryId
+  while (currentCategory && !categoryIds.has(currentCategory)) {
+    categoryIds.add(currentCategory)
+    currentCategory =
+      categoriesQuery.data?.find((category) => category.id === currentCategory)
+        ?.parentId || ''
+  }
+  const applicableAttributes = (attributesQuery.data || []).filter(
+    (attribute) =>
+      !attribute.categories?.length ||
+      attribute.categories.some((rule) => categoryIds.has(rule.categoryId)),
+  )
+  const requiredAttributes = new Set(
+    applicableAttributes
+      .filter((attribute) =>
+        attribute.categories?.some(
+          (rule) => rule.required && categoryIds.has(rule.categoryId),
+        ),
+      )
+      .map((attribute) => attribute.id),
+  )
+  const measureUnits = (unitsQuery.data || []).filter(
+    (unit) => unit.active && unit.usage !== 'sale',
+  )
+  const defaultSellingUnit =
+    activeUnits.find((unit) => unit.code === 'piece') || activeUnits[0]
+  const defaultPackMeasure = measureUnits.find(
+    (unit) => unit.code === (family === 'grease' ? 'kg' : 'l'),
+  )
+  const selectedPackMeasure = packMeasureId || defaultPackMeasure?.id || ''
+
+  function updateVariant(index: number, patch: Partial<EditableVariant>) {
+    markDirty()
+    setVariants((rows) =>
+      rows.map((row, i) => {
+        if (i !== index) return row
+        const hasSizeChange =
+          'packQuantity' in patch || 'packUnitId' in patch || 'unitId' in patch
+        const next = { ...row, ...patch }
+        if (hasSizeChange && row.labelAr === packName(row, 'ar'))
+          next.labelAr = ''
+        if (hasSizeChange && row.labelEn === packName(row, 'en'))
+          next.labelEn = ''
+        return next
+      }),
     )
-    if (!categoryId) return allAttrs
-    return allAttrs.filter(
-      (a) =>
-        !a.categories?.length ||
-        a.categories.some((cItem) => cItem.categoryId === categoryId),
-    )
-  }, [attributesQuery.data, categoryId])
+  }
+
+  function addPack() {
+    const amount = Number(packSize)
+    const measure = measureUnits.find((unit) => unit.id === selectedPackMeasure)
+    if (
+      !measure ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > 1000000 ||
+      !defaultSellingUnit
+    ) {
+      setPackError(
+        c(
+          'أدخل حجمًا صالحًا واختر وحدة المحتوى. يلزم وجود وحدة بيع نشطة.',
+          'Enter a valid size and choose a content unit. An active selling unit is required.',
+        ),
+      )
+      return
+    }
+    if (
+      variants.some(
+        (variant) =>
+          variant.packUnitId === measure.id &&
+          Number(variant.packQuantity) === amount &&
+          variant.active,
+      )
+    ) {
+      setPackError(c('الحجم ده موجود بالفعل.', 'This size already exists.'))
+      return
+    }
+    setPackError('')
+    setPackSize('')
+    markDirty()
+    setVariants((rows) => [
+      ...rows,
+      {
+        sku: '',
+        manufacturerPartNumber: '',
+        labelAr: '',
+        labelEn: '',
+        unitId: defaultSellingUnit.id,
+        packQuantity: String(amount),
+        packUnitId: measure.id,
+        minQuantity: 1,
+        quantityStep: 1,
+        availability: 'on_request',
+        active: true,
+        order: Math.max(-1, ...rows.map((row) => row.order || 0)) + 1,
+      },
+    ])
+  }
 
   if (!isNew && productQuery.isLoading) return <LoadingState />
   if (!isNew && (productQuery.error || !product)) {
@@ -636,6 +700,18 @@ function ProductEditor({ id }: { id: string }) {
         title={c('تعذر تحميل بيانات المنتج', 'Unable to load product')}
       />
     )
+  }
+
+  function packName(variant: EditableVariant, locale: 'ar' | 'en') {
+    const measure = unitsQuery.data?.find(
+      (unit) => unit.id === variant.packUnitId,
+    )
+    if (measure && variant.packQuantity)
+      return `${variant.packQuantity} ${measure.name[locale]}`
+    const sellingUnit = unitsQuery.data?.find(
+      (unit) => unit.id === variant.unitId,
+    )
+    return sellingUnit?.name[locale] || (locale === 'ar' ? 'قطعة' : 'Piece')
   }
 
   function buildProductPayload() {
@@ -655,8 +731,14 @@ function ProductEditor({ id }: { id: string }) {
       modelCode: modelCode.trim(),
       featured,
       status: product?.status || 'draft',
-      summary: { ar: summaryAr.trim(), en: summaryEn.trim() },
-      description: { ar: descriptionAr.trim(), en: descriptionEn.trim() },
+      summary: {
+        ar: summaryAr.trim() || descriptionAr.trim().slice(0, 500),
+        en: summaryEn.trim() || descriptionEn.trim().slice(0, 500),
+      },
+      description: {
+        ar: descriptionAr.trim() || summaryAr.trim(),
+        en: descriptionEn.trim() || summaryEn.trim(),
+      },
       applications: {
         ar: applicationsTextAr.trim(),
         en: applicationsTextEn.trim(),
@@ -669,32 +751,22 @@ function ProductEditor({ id }: { id: string }) {
       mediaIds: combinedMedia,
       sectorIds,
       relatedIds,
-      specifications: specifications
-        .filter(
-          (sp) =>
-            (sp.valueText != null && sp.valueText.trim() !== '') ||
-            sp.valueNumber != null ||
-            sp.valueBoolean != null ||
-            Boolean(sp.optionId) ||
-            Boolean(sp.optionIds?.length),
-        )
-        .map((sp) => ({
-          attributeId: sp.attributeId,
-          value:
-            sp.valueNumber ??
-            sp.valueBoolean ??
-            sp.optionId ??
-            sp.optionIds ??
-            sp.valueText ??
-            '',
-        })),
+      standards: [
+        ...new Set(
+          standardsText
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean),
+        ),
+      ],
+      specifications,
       variants: variants.map((v) => ({
         ...(v.id ? { id: v.id } : {}),
         sku: v.sku.trim(),
         manufacturerPartNumber: v.manufacturerPartNumber.trim(),
         label: {
-          ar: v.labelAr.trim() || v.labelEn.trim(),
-          en: v.labelEn.trim() || v.labelAr.trim(),
+          ar: v.labelAr.trim() || v.labelEn.trim() || packName(v, 'ar'),
+          en: v.labelEn.trim() || v.labelAr.trim() || packName(v, 'en'),
         },
         unitId: v.unitId || null,
         packQuantity:
@@ -714,6 +786,16 @@ function ProductEditor({ id }: { id: string }) {
   async function handleSave(e?: FormEvent) {
     e?.preventDefault()
     if (busy) return null
+    if (packSize.trim()) {
+      setTab(2)
+      setPackError(
+        c(
+          'اضغط «أضف الحجم» لحفظه مع المنتج، أو امسح الرقم.',
+          'Add the entered size before saving, or clear it.',
+        ),
+      )
+      return null
+    }
     const payload = buildProductPayload()
     if (!payload.slug || !payload.name.ar || !payload.name.en) {
       setErrorMsg(
@@ -798,12 +880,10 @@ function ProductEditor({ id }: { id: string }) {
   }
 
   const tabs = [
-    c('الأساسيات', 'Basics'),
-    c('الوصف والتطبيقات', 'Description'),
-    c('المواصفات الفنية', 'Specifications'),
-    c('المتغيرات والعبوات', 'Variants'),
-    c('الوسائط والملفات', 'Media'),
-    c('SEO والروابط', 'SEO & Links'),
+    c('بيانات المنتج', 'Product details'),
+    c('المواصفات', 'Specifications'),
+    c('العبوات والأحجام', 'Packs & sizes'),
+    c('الصور والمستندات', 'Images & documents'),
   ]
 
   const currentStatus: PublishStatus = product?.status || 'draft'
@@ -922,650 +1002,122 @@ function ProductEditor({ id }: { id: string }) {
         className="panel space-y-6 bg-white"
       >
         {tab === 0 && (
-          <div className="grid gap-5 md:grid-cols-2">
-            <Field label={c('الاسم بالعربية', 'Arabic name')}>
-              <input
-                className="control"
-                required
-                value={nameAr}
-                onChange={(e) => setNameAr(e.target.value)}
-              />
-            </Field>
-            <Field label={c('الاسم بالإنجليزية', 'English name')}>
-              <input
-                className="control"
-                dir="ltr"
-                required
-                value={nameEn}
-                onChange={(e) => {
-                  setNameEn(e.target.value)
-                  if (isNew && !slug) setSlug(toSlug(e.target.value))
-                }}
-              />
-            </Field>
-            <Field label={c('رمز الرابط اللاتيني (Slug)', 'URL slug')}>
-              <input
-                className="control font-mono"
-                dir="ltr"
-                required
-                placeholder="hydraulic-oil-iso-68"
-                value={slug}
-                onChange={(e) => setSlug(toSlug(e.target.value))}
-              />
-            </Field>
-            <Field label={c('العائلة الرئيسية', 'Product family')}>
-              <select
-                className="control"
-                value={family}
-                onChange={(e) => {
-                  setFamily(e.target.value as ProductFamily)
-                  setCategoryId('')
-                }}
-              >
-                <option value="oils">
-                  {c('زيوت صناعية', 'Industrial Oils')}
-                </option>
-                <option value="grease">{c('شحومات', 'Greases')}</option>
-                <option value="bearings">
-                  {c('رولمان بلي', 'Industrial Bearings')}
-                </option>
-              </select>
-            </Field>
-            <Field
-              label={c(
-                'التصنيف (مطلوب للنشر)',
-                'Category (required to publish)',
-              )}
-            >
-              <RemoteSelect
-                resource="categories"
-                value={categoryId}
-                onChange={(value: any) => {
-                  markDirty()
-                  setCategoryId(value)
-                }}
-                label={c('اختيار التصنيف', 'Choose category')}
-                filters={{ family }}
-              />
-            </Field>
-            <Field label={c('العلامة التجارية', 'Brand')}>
-              <RemoteSelect
-                resource="brands"
-                value={brandId}
-                onChange={(value: any) => {
-                  markDirty()
-                  setBrandId(value)
-                }}
-                label={c('اختيار العلامة', 'Choose brand')}
-              />
-            </Field>
-            <Field
-              label={c('كود الموديل / المرجع الفني', 'Model / technical code')}
-            >
-              <input
-                className="control font-mono"
-                dir="ltr"
-                value={modelCode}
-                onChange={(e) => setModelCode(e.target.value)}
-              />
-            </Field>
-            <label className="flex items-center gap-3 self-end pb-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={featured}
-                onChange={(e) => setFeatured(e.target.checked)}
-              />
-              {c(
-                'إظهار ضمن المنتجات المختارة في الرئيسية',
-                'Feature on homepage',
-              )}
-            </label>
-            <Field label={c('ملخص قصير بالعربية', 'Arabic summary')}>
-              <textarea
-                rows={2}
-                className="control"
-                value={summaryAr}
-                onChange={(e) => setSummaryAr(e.target.value)}
-              />
-            </Field>
-            <Field label={c('ملخص قصير بالإنجليزية', 'English summary')}>
-              <textarea
-                rows={2}
-                dir="ltr"
-                className="control"
-                value={summaryEn}
-                onChange={(e) => setSummaryEn(e.target.value)}
-              />
-            </Field>
-          </div>
-        )}
-
-        {tab === 1 && (
-          <div className="grid gap-5 md:grid-cols-2">
-            <Field label={c('الوصف التفصيلي بالعربية', 'Arabic description')}>
-              <textarea
-                rows={5}
-                className="control"
-                value={descriptionAr}
-                onChange={(e) => setDescriptionAr(e.target.value)}
-              />
-            </Field>
-            <Field
-              label={c('الوصف التفصيلي بالإنجليزية', 'English description')}
-            >
-              <textarea
-                rows={5}
-                dir="ltr"
-                className="control"
-                value={descriptionEn}
-                onChange={(e) => setDescriptionEn(e.target.value)}
-              />
-            </Field>
-            <Field
-              label={c(
-                'التطبيقات بالعربية (سطر لكل تطبيق)',
-                'Arabic applications (one per line)',
-              )}
-            >
-              <textarea
-                rows={4}
-                className="control"
-                value={applicationsTextAr}
-                onChange={(e) => setApplicationsTextAr(e.target.value)}
-              />
-            </Field>
-            <Field
-              label={c(
-                'التطبيقات بالإنجليزية (سطر لكل تطبيق)',
-                'English applications (one per line)',
-              )}
-            >
-              <textarea
-                rows={4}
-                dir="ltr"
-                className="control"
-                value={applicationsTextEn}
-                onChange={(e) => setApplicationsTextEn(e.target.value)}
-              />
-            </Field>
-            <Field
-              label={c(
-                'المزايا بالعربية (سطر لكل ميزة)',
-                'Arabic benefits (one per line)',
-              )}
-            >
-              <textarea
-                rows={4}
-                className="control"
-                value={benefitsTextAr}
-                onChange={(e) => setBenefitsTextAr(e.target.value)}
-              />
-            </Field>
-            <Field
-              label={c(
-                'المزايا بالإنجليزية (سطر لكل ميزة)',
-                'English benefits (one per line)',
-              )}
-            >
-              <textarea
-                rows={4}
-                dir="ltr"
-                className="control"
-                value={benefitsTextEn}
-                onChange={(e) => setBenefitsTextEn(e.target.value)}
-              />
-            </Field>
-            <div className="md:col-span-2">
-              <Field
-                label={c(
-                  'ملاحظة مصدر المواصفات الداخلية',
-                  'Internal specification source note',
-                )}
-              >
+          <div className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label={c('اسم المنتج بالعربية', 'Arabic name')}>
                 <input
                   className="control"
-                  value={sourceNote}
-                  onChange={(e) => setSourceNote(e.target.value)}
+                  required
+                  value={nameAr}
+                  onChange={(event) => setNameAr(event.target.value)}
+                />
+              </Field>
+              <Field label={c('اسم المنتج بالإنجليزية', 'English name')}>
+                <input
+                  className="control"
+                  dir="ltr"
+                  required
+                  value={nameEn}
+                  onChange={(event) => setNameEn(event.target.value)}
+                />
+              </Field>
+              <Field label={c('التصنيف', 'Category')}>
+                <select
+                  className="control"
+                  value={categoryId}
+                  onChange={(event) => {
+                    const category = categoriesQuery.data?.find(
+                      (row) => row.id === event.target.value,
+                    )
+                    setCategoryId(event.target.value)
+                    if (category?.family && category.family !== family) {
+                      setFamily(category.family)
+                      setPackMeasureId('')
+                    }
+                  }}
+                >
+                  <option value="">
+                    {c('اختر تصنيفًا', 'Choose a category')}
+                  </option>
+                  {(categoriesQuery.data || []).map((category) => {
+                    const parent = categoriesQuery.data?.find(
+                      (row) => row.id === category.parentId,
+                    )
+                    return (
+                      <option key={category.id} value={category.id}>
+                        {parent ? `${parent.name[lang]} / ` : ''}
+                        {category.name[lang]}
+                        {category.status !== 'published'
+                          ? c(' (مسودة أو مؤرشف)', ' (unpublished)')
+                          : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+              </Field>
+              <Field label={c('العلامة التجارية', 'Brand')}>
+                <select
+                  className="control"
+                  value={brandId}
+                  onChange={(event) => setBrandId(event.target.value)}
+                >
+                  <option value="">{c('اختر علامة', 'Choose a brand')}</option>
+                  {(brandsQuery.data || []).map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name[lang]}
+                      {brand.status !== 'published'
+                        ? c(' (مسودة أو مؤرشف)', ' (unpublished)')
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <details className="md:col-span-2">
+                <summary className="cursor-pointer text-sm text-primary">
+                  {c('إضافة تصنيف أو علامة', 'Add a category or brand')}
+                </summary>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <RemoteSelect
+                    resource="categories"
+                    value={categoryId}
+                    label={c('التصنيف', 'Category')}
+                    filters={{ family }}
+                    onChange={(id: string) => {
+                      markDirty()
+                      setCategoryId(id)
+                      void categoriesQuery.refresh()
+                    }}
+                  />
+                  <RemoteSelect
+                    resource="brands"
+                    value={brandId}
+                    label={c('العلامة التجارية', 'Brand')}
+                    onChange={(id: string) => {
+                      markDirty()
+                      setBrandId(id)
+                      void brandsQuery.refresh()
+                    }}
+                  />
+                </div>
+              </details>
+              <Field label={c('الوصف بالعربية', 'Arabic description')}>
+                <textarea
+                  className="control"
+                  rows={4}
+                  value={descriptionAr}
+                  onChange={(event) => setDescriptionAr(event.target.value)}
+                />
+              </Field>
+              <Field label={c('الوصف بالإنجليزية', 'English description')}>
+                <textarea
+                  className="control"
+                  dir="ltr"
+                  rows={4}
+                  value={descriptionEn}
+                  onChange={(event) => setDescriptionEn(event.target.value)}
                 />
               </Field>
             </div>
-          </div>
-        )}
-
-        {tab === 2 && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {c(
-                'تُقرأ خصائص المواصفات من قاموس المواصفات الفنية، مع تمييز الحقول الإلزامية للتصنيف المختار.',
-                'Specification fields come from your Attributes dictionary, highlighting required attributes for the selected category.',
-              )}
-            </p>
-            {applicableProductAttributes.length === 0 ? (
-              <EmptyState
-                title={c(
-                  'لا توجد مواصفات معرّفة بعد',
-                  'No product attributes defined',
-                )}
-                description={c(
-                  'يمكنك تعريف مواصفات مثل اللزوجة أو درجة NLGI أو القطر الداخلي من قسم المواصفات الفنية.',
-                  'Define attributes such as ISO VG, NLGI grade or bore diameter in the Attributes section.',
-                )}
-              />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {applicableProductAttributes.map((attr) => {
-                  const rule = attr.categories?.find(
-                    (cRule) => cRule.categoryId === categoryId,
-                  )
-                  const current = specifications.find(
-                    (s) => s.attributeId === attr.id,
-                  )
-
-                  function upsertSpec(patch: Partial<SpecificationInput>) {
-                    setSpecifications((prev) => {
-                      const existing = prev.find(
-                        (s) => s.attributeId === attr.id,
-                      )
-                      if (existing) {
-                        return prev.map((s) =>
-                          s.attributeId === attr.id ? { ...s, ...patch } : s,
-                        )
-                      }
-                      return [...prev, { attributeId: attr.id, ...patch }]
-                    })
-                  }
-
-                  const labelText = `${lang === 'ar' ? attr.name.ar : attr.name.en} (${attr.code})${rule?.required ? ' *' : ''}`
-
-                  return (
-                    <div key={attr.id} className="rounded-xl border p-4">
-                      <Field label={labelText}>
-                        {attr.type === 'number' ? (
-                          <input
-                            type="number"
-                            step="any"
-                            className="control font-mono"
-                            dir="ltr"
-                            placeholder={
-                              rule?.min != null || rule?.max != null
-                                ? `${rule?.min ?? '—'} .. ${rule?.max ?? '—'}`
-                                : ''
-                            }
-                            value={current?.valueNumber ?? ''}
-                            onChange={(e) =>
-                              upsertSpec({
-                                valueNumber:
-                                  e.target.value === ''
-                                    ? null
-                                    : Number(e.target.value),
-                              })
-                            }
-                          />
-                        ) : attr.type === 'boolean' ? (
-                          <select
-                            className="control"
-                            value={
-                              current?.valueBoolean == null
-                                ? ''
-                                : current.valueBoolean
-                                  ? 'true'
-                                  : 'false'
-                            }
-                            onChange={(e) =>
-                              upsertSpec({
-                                valueBoolean:
-                                  e.target.value === ''
-                                    ? null
-                                    : e.target.value === 'true',
-                              })
-                            }
-                          >
-                            <option value="">{c('غير محدد', 'Unset')}</option>
-                            <option value="true">{c('نعم', 'Yes')}</option>
-                            <option value="false">{c('لا', 'No')}</option>
-                          </select>
-                        ) : attr.type === 'option' ? (
-                          <select
-                            className="control"
-                            value={current?.optionId || ''}
-                            onChange={(e) =>
-                              upsertSpec({ optionId: e.target.value || null })
-                            }
-                          >
-                            <option value="">
-                              {c('اختر قيمة…', 'Select option…')}
-                            </option>
-                            {(attr.options || []).map((opt) => (
-                              <option key={opt.id || opt.code} value={opt.id}>
-                                {lang === 'ar' ? opt.label.ar : opt.label.en}
-                              </option>
-                            ))}
-                          </select>
-                        ) : attr.type === 'multi_option' ? (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {(attr.options || []).map((opt) => {
-                              const optId = opt.id || ''
-                              const checked = Boolean(
-                                current?.optionIds?.includes(optId),
-                              )
-                              return (
-                                <label
-                                  key={optId || opt.code}
-                                  className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => {
-                                      const nextIds = e.target.checked
-                                        ? [...(current?.optionIds || []), optId]
-                                        : (current?.optionIds || []).filter(
-                                            (x) => x !== optId,
-                                          )
-                                      upsertSpec({ optionIds: nextIds })
-                                    }}
-                                  />
-                                  {lang === 'ar' ? opt.label.ar : opt.label.en}
-                                </label>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <input
-                            className="control"
-                            value={current?.valueText || ''}
-                            onChange={(e) =>
-                              upsertSpec({ valueText: e.target.value || null })
-                            }
-                          />
-                        )}
-                      </Field>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === 3 && (
-          <div className="space-y-4">
-            {!activeUnits.length && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                {c(
-                  'يجب إنشاء وحدة بيع نشطة أولًا من قسم وحدات البيع والقياس قبل حفظ المتغيرات.',
-                  'Create at least one active selling unit in Units before saving variants.',
-                )}{' '}
-                <Link
-                  href="/admin/units/new"
-                  className="font-semibold underline"
-                >
-                  {c('إضافة وحدة الآن', 'Create unit now')}
-                </Link>
-              </div>
-            )}
-
-            {variants.map((v, idx) => (
-              <div
-                key={v.id || idx}
-                className="space-y-4 rounded-xl border p-4"
-              >
-                <div className="grid gap-3 md:grid-cols-4">
-                  <Field label={c('وصف العبوة بالعربية', 'Arabic label')}>
-                    <input
-                      className="control"
-                      required
-                      value={v.labelAr}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, labelAr: e.target.value }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label={c('وصف العبوة بالإنجليزية', 'English label')}>
-                    <input
-                      className="control"
-                      dir="ltr"
-                      required
-                      value={v.labelEn}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, labelEn: e.target.value }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label={c(
-                      'الرمز الداخلي (يتولد تلقائيًا لو فارغ)',
-                      'Internal SKU (generated when blank)',
-                    )}
-                  >
-                    <input
-                      className="control font-mono"
-                      dir="ltr"
-                      value={v.sku}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx ? { ...row, sku: e.target.value } : row,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label={c('وحدة البيع', 'Selling unit')}>
-                    <RemoteSelect
-                      resource="units"
-                      filters={{ usage: 'sale' }}
-                      value={v.unitId}
-                      onChange={(unitId: string) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx ? { ...row, unitId } : row,
-                          ),
-                        )
-                      }
-                      label={c('وحدة البيع', 'Selling unit')}
-                    />
-                  </Field>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-5 md:items-end">
-                  <Field label={c('الحد الأدنى للكمية', 'Min qty')}>
-                    <input
-                      type="number"
-                      min={0.001}
-                      step="any"
-                      className="control"
-                      value={v.minQuantity}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, minQuantity: Number(e.target.value) }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label={c('خطوة الزيادة', 'Qty step')}>
-                    <input
-                      type="number"
-                      min={0.001}
-                      step="any"
-                      className="control"
-                      value={v.quantityStep}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, quantityStep: Number(e.target.value) }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label={c('حجم العبوة الداخلي', 'Pack size (optional)')}
-                  >
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      className="control"
-                      value={v.packQuantity}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, packQuantity: e.target.value }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label={c('وحدة المحتوى', 'Pack unit')}>
-                    <select
-                      className="control"
-                      value={v.packUnitId}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, packUnitId: e.target.value }
-                              : row,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="">{c('بدون', 'None')}</option>
-                      {activeUnits.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.code}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label={c('حالة التوفر', 'Availability')}>
-                    <select
-                      className="control"
-                      value={v.availability}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, availability: e.target.value as any }
-                              : row,
-                          ),
-                        )
-                      }
-                    >
-                      <option value="available">
-                        {c('متوفر', 'Available')}
-                      </option>
-                      <option value="on_request">
-                        {c('حسب الطلب', 'On request')}
-                      </option>
-                      <option value="unavailable">
-                        {c('غير متوفر حاليًا', 'Unavailable')}
-                      </option>
-                    </select>
-                  </Field>
-                </div>
-
-                <VariantSpecsEditor
-                  attributes={(attributesQuery.data || []).filter(
-                    (a) =>
-                      a.scope === 'variant' &&
-                      (!a.categories.length ||
-                        a.categories.some(
-                          (rule) => rule.categoryId === categoryId,
-                        )),
-                  )}
-                  specifications={v.specifications || []}
-                  onChange={(specs) =>
-                    setVariants((current) =>
-                      current.map((row, i) =>
-                        i === idx ? { ...row, specifications: specs } : row,
-                      ),
-                    )
-                  }
-                />
-                <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={v.active}
-                      onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx
-                              ? { ...row, active: e.target.checked }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                    {c('متغير بيع نشط', 'Active selling variant')}
-                  </label>
-                  {variants.length > 1 && (
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-red-700 hover:underline"
-                      onClick={() =>
-                        setVariants((prev) => prev.filter((_, i) => i !== idx))
-                      }
-                    >
-                      {c('إزالة المتغير', 'Remove variant')}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={() =>
-                setVariants((prev) => [
-                  ...prev,
-                  {
-                    sku: '',
-                    manufacturerPartNumber: '',
-                    labelAr: '',
-                    labelEn: '',
-                    unitId: activeUnits[0]?.id || '',
-                    packQuantity: '',
-                    packUnitId: '',
-                    minQuantity: 1,
-                    quantityStep: 1,
-                    availability: 'available',
-                    active: true,
-                  },
-                ])
-              }
-            >
-              <Plus className="size-4" />
-              {c('إضافة عبوة / متغير بيع', 'Add selling variant')}
-            </button>
-          </div>
-        )}
-
-        {tab === 4 && (
-          <div className="space-y-5">
             <MediaPicker
               value={mainMediaId}
               onChange={(value: any) => {
@@ -1575,6 +1127,532 @@ function ProductEditor({ id }: { id: string }) {
               label={c('الصورة الرئيسية للمنتج', 'Main product image')}
               alt={{ ar: nameAr, en: nameEn }}
             />
+
+            <details className="rounded-xl border p-4">
+              <summary className="cursor-pointer font-semibold">
+                {c(
+                  'تفاصيل اختيارية وإعدادات متقدمة',
+                  'Optional details and advanced settings',
+                )}
+              </summary>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Field label={c('رابط المنتج', 'URL slug')}>
+                  <input
+                    className="control"
+                    dir="ltr"
+                    placeholder={toSlug(nameEn)}
+                    value={slug}
+                    onChange={(event) => setSlug(toSlug(event.target.value))}
+                  />
+                </Field>
+                <Field label={c('كود الموديل', 'Model code')}>
+                  <input
+                    className="control"
+                    dir="ltr"
+                    value={modelCode}
+                    onChange={(event) => setModelCode(event.target.value)}
+                  />
+                </Field>
+                {(!categoryId ||
+                  !categoriesQuery.data?.find((row) => row.id === categoryId)
+                    ?.family) && (
+                  <Field label={c('عائلة المنتج', 'Product family')}>
+                    <select
+                      className="control"
+                      value={family}
+                      onChange={(event) =>
+                        setFamily(event.target.value as ProductFamily)
+                      }
+                    >
+                      <option value="oils">{c('زيوت', 'Oils')}</option>
+                      <option value="grease">{c('شحوم', 'Grease')}</option>
+                      <option value="bearings">
+                        {c('رولمان بلي', 'Bearings')}
+                      </option>
+                    </select>
+                  </Field>
+                )}
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={featured}
+                    onChange={(event) => setFeatured(event.target.checked)}
+                  />
+                  {c('منتج مميز', 'Featured product')}
+                </label>
+                <Field label={c('ملخص بالعربية', 'Arabic summary')}>
+                  <textarea
+                    className="control"
+                    rows={2}
+                    value={summaryAr}
+                    onChange={(event) => setSummaryAr(event.target.value)}
+                  />
+                </Field>
+                <Field label={c('ملخص بالإنجليزية', 'English summary')}>
+                  <textarea
+                    className="control"
+                    dir="ltr"
+                    rows={2}
+                    value={summaryEn}
+                    onChange={(event) => setSummaryEn(event.target.value)}
+                  />
+                </Field>
+                <Field
+                  label={c(
+                    'التطبيقات بالعربية (سطر لكل تطبيق)',
+                    'Arabic applications (one per line)',
+                  )}
+                >
+                  <textarea
+                    rows={4}
+                    className="control"
+                    value={applicationsTextAr}
+                    onChange={(e) => setApplicationsTextAr(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label={c(
+                    'التطبيقات بالإنجليزية (سطر لكل تطبيق)',
+                    'English applications (one per line)',
+                  )}
+                >
+                  <textarea
+                    rows={4}
+                    dir="ltr"
+                    className="control"
+                    value={applicationsTextEn}
+                    onChange={(e) => setApplicationsTextEn(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label={c(
+                    'المزايا بالعربية (سطر لكل ميزة)',
+                    'Arabic benefits (one per line)',
+                  )}
+                >
+                  <textarea
+                    rows={4}
+                    className="control"
+                    value={benefitsTextAr}
+                    onChange={(e) => setBenefitsTextAr(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label={c(
+                    'المزايا بالإنجليزية (سطر لكل ميزة)',
+                    'English benefits (one per line)',
+                  )}
+                >
+                  <textarea
+                    rows={4}
+                    dir="ltr"
+                    className="control"
+                    value={benefitsTextEn}
+                    onChange={(e) => setBenefitsTextEn(e.target.value)}
+                  />
+                </Field>
+                <div className="md:col-span-2">
+                  <Field
+                    label={c(
+                      'ملاحظة مصدر المواصفات الداخلية',
+                      'Internal specification source note',
+                    )}
+                  >
+                    <input
+                      className="control"
+                      value={sourceNote}
+                      onChange={(e) => setSourceNote(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+              <div className="mt-5 space-y-4">
+                <RemoteSelect
+                  resource="sectors"
+                  value={sectorIds}
+                  onChange={(value: any) => {
+                    markDirty()
+                    setSectorIds(value)
+                  }}
+                  multiple
+                  label={c('القطاعات المرتبطة', 'Applicable sectors')}
+                />
+                <RemoteSelect
+                  resource="products"
+                  value={relatedIds}
+                  onChange={(ids: string[]) => {
+                    markDirty()
+                    setRelatedIds(ids.filter((value) => value !== id))
+                  }}
+                  multiple
+                  label={c('منتجات ذات صلة', 'Related products')}
+                />
+                <div className="grid gap-5 border-t pt-5 md:grid-cols-2">
+                  <Field label={c('عنوان SEO بالعربية', 'Arabic SEO title')}>
+                    <input
+                      className="control"
+                      value={seoTitleAr}
+                      onChange={(e) => setSeoTitleAr(e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label={c('عنوان SEO بالإنجليزية', 'English SEO title')}
+                  >
+                    <input
+                      className="control"
+                      dir="ltr"
+                      value={seoTitleEn}
+                      onChange={(e) => setSeoTitleEn(e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label={c('وصف SEO بالعربية', 'Arabic SEO description')}
+                  >
+                    <textarea
+                      rows={2}
+                      className="control"
+                      value={seoDescAr}
+                      onChange={(e) => setSeoDescAr(e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label={c('وصف SEO بالإنجليزية', 'English SEO description')}
+                  >
+                    <textarea
+                      rows={2}
+                      dir="ltr"
+                      className="control"
+                      value={seoDescEn}
+                      onChange={(e) => setSeoDescEn(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
+
+        {tab === 1 && (
+          <div className="space-y-5">
+            <Field
+              label={c('المواصفات والمعايير', 'Specifications and standards')}
+              hint={c(
+                'أضف مواصفة واحدة في كل سطر من النشرة الفنية للمنتج.',
+                'Add one specification per line from the product data sheet.',
+              )}
+            >
+              <textarea
+                className="control"
+                rows={6}
+                dir="auto"
+                placeholder={'API SN/CF\nACEA A3/B4\nMB 229.31'}
+                value={standardsText}
+                onChange={(event) => setStandardsText(event.target.value)}
+              />
+            </Field>
+            {applicableAttributes.some(
+              (attribute) => attribute.scope === 'product',
+            ) && (
+              <section className="space-y-3 border-t pt-4">
+                <h2 className="font-bold">
+                  {c(
+                    'خصائص فنية للبحث والمقارنة',
+                    'Technical attributes for search and comparison',
+                  )}
+                </h2>
+                <VariantSpecsEditor
+                  attributes={applicableAttributes.filter(
+                    (attribute) => attribute.scope === 'product',
+                  )}
+                  requiredAttributes={requiredAttributes}
+                  specifications={specifications}
+                  onChange={setSpecifications}
+                />
+              </section>
+            )}
+          </div>
+        )}
+
+        {tab === 2 && (
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label={c('حجم العبوة', 'Pack size')}>
+                  <input
+                    className="control max-w-36"
+                    type="number"
+                    min="0.001"
+                    max="1000000"
+                    step="any"
+                    placeholder="1"
+                    value={packSize}
+                    onChange={(event) => setPackSize(event.target.value)}
+                  />
+                </Field>
+                <Field label={c('وحدة المحتوى', 'Content unit')}>
+                  <select
+                    className="control"
+                    value={selectedPackMeasure}
+                    onChange={(event) => setPackMeasureId(event.target.value)}
+                  >
+                    <option value="">{c('اختر وحدة', 'Choose a unit')}</option>
+                    {measureUnits.map((unit) => (
+                      <option value={unit.id} key={unit.id}>
+                        {unit.name[lang]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <button type="button" className="btn-primary" onClick={addPack}>
+                  <Plus className="size-4" />
+                  {c('أضف الحجم', 'Add size')}
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => {
+                    markDirty()
+                    setVariants((rows) => [
+                      ...rows,
+                      {
+                        sku: '',
+                        manufacturerPartNumber: '',
+                        labelAr: '',
+                        labelEn: '',
+                        unitId: defaultSellingUnit?.id || '',
+                        packQuantity: '',
+                        packUnitId: '',
+                        minQuantity: 1,
+                        quantityStep: 1,
+                        availability: 'on_request',
+                        active: true,
+                        order:
+                          Math.max(-1, ...rows.map((row) => row.order || 0)) +
+                          1,
+                      },
+                    ])
+                  }}
+                >
+                  {c('أضف خيار بيع مخصص', 'Add custom selling option')}
+                </button>
+              </div>
+              {packError && (
+                <p role="alert" className="mt-2 text-sm text-red-700">
+                  {packError}
+                </p>
+              )}
+            </div>
+            {variants.map((variant, index) => (
+              <article
+                key={variant.id || `new-${variant.order ?? index}`}
+                className="space-y-3 rounded-xl border p-4"
+              >
+                <div className="flex flex-wrap items-end gap-3">
+                  <h2 className="min-w-32 self-center font-bold" dir="auto">
+                    {(lang === 'ar' ? variant.labelAr : variant.labelEn) ||
+                      packName(variant, lang)}
+                  </h2>
+                  <Field label={c('وحدة البيع', 'Selling unit')}>
+                    <select
+                      className="control"
+                      value={variant.unitId}
+                      onChange={(event) =>
+                        updateVariant(index, { unitId: event.target.value })
+                      }
+                    >
+                      <option value="">
+                        {c('اختر وحدة', 'Choose a unit')}
+                      </option>
+                      {activeUnits.map((unit) => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.name[lang]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label={c('التوفر', 'Availability')}>
+                    <select
+                      className="control"
+                      value={variant.availability}
+                      onChange={(event) =>
+                        updateVariant(index, {
+                          availability: event.target
+                            .value as EditableVariant['availability'],
+                        })
+                      }
+                    >
+                      <option value="available">
+                        {c('متوفر', 'Available')}
+                      </option>
+                      <option value="on_request">
+                        {c('حسب الطلب', 'On request')}
+                      </option>
+                      <option value="unavailable">
+                        {c('غير متوفر', 'Unavailable')}
+                      </option>
+                    </select>
+                  </Field>
+                  <button
+                    type="button"
+                    className="ms-auto self-center text-sm font-medium text-red-700 hover:underline"
+                    onClick={() => {
+                      markDirty()
+                      setVariants((rows) => rows.filter((_, i) => i !== index))
+                    }}
+                  >
+                    {c('إزالة', 'Remove')}
+                  </button>
+                </div>
+                <details className="border-t pt-3">
+                  <summary className="cursor-pointer text-sm font-semibold">
+                    {c('إعدادات العبوة المتقدمة', 'Advanced pack settings')}
+                  </summary>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <Field label={c('اسم العبوة بالعربية', 'Arabic pack name')}>
+                      <input
+                        className="control"
+                        value={variant.labelAr}
+                        placeholder={packName(variant, 'ar')}
+                        onChange={(event) =>
+                          updateVariant(index, { labelAr: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label={c('اسم العبوة بالإنجليزية', 'English pack name')}
+                    >
+                      <input
+                        className="control"
+                        value={variant.labelEn}
+                        placeholder={packName(variant, 'en')}
+                        onChange={(event) =>
+                          updateVariant(index, { labelEn: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field label={c('الرمز الداخلي SKU', 'Internal SKU')}>
+                      <input
+                        className="control"
+                        dir="ltr"
+                        value={variant.sku}
+                        onChange={(event) =>
+                          updateVariant(index, { sku: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label={c('مرجع المصنّع', 'Manufacturer part number')}
+                    >
+                      <input
+                        className="control"
+                        dir="ltr"
+                        value={variant.manufacturerPartNumber}
+                        onChange={(event) =>
+                          updateVariant(index, {
+                            manufacturerPartNumber: event.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label={c('محتوى العبوة', 'Pack content')}>
+                      <input
+                        className="control"
+                        type="number"
+                        min="0.001"
+                        step="any"
+                        value={variant.packQuantity}
+                        onChange={(event) =>
+                          updateVariant(index, {
+                            packQuantity: event.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label={c('وحدة المحتوى', 'Content unit')}>
+                      <select
+                        className="control"
+                        value={variant.packUnitId}
+                        onChange={(event) =>
+                          updateVariant(index, {
+                            packUnitId: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">{c('بدون', 'None')}</option>
+                        {(unitsQuery.data || []).map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.name[lang]}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field
+                      label={c('أقل كمية للطلب', 'Minimum order quantity')}
+                    >
+                      <input
+                        className="control"
+                        type="number"
+                        min="0.001"
+                        step="any"
+                        value={variant.minQuantity}
+                        onChange={(event) =>
+                          updateVariant(index, {
+                            minQuantity: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label={c('خطوة الكمية', 'Quantity step')}>
+                      <input
+                        className="control"
+                        type="number"
+                        min="0.001"
+                        step="any"
+                        value={variant.quantityStep}
+                        onChange={(event) =>
+                          updateVariant(index, {
+                            quantityStep: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={variant.active}
+                        onChange={(event) =>
+                          updateVariant(index, { active: event.target.checked })
+                        }
+                      />
+                      {c('خيار بيع نشط', 'Active selling option')}
+                    </label>
+                  </div>
+                </details>
+                <VariantSpecsEditor
+                  attributes={applicableAttributes.filter(
+                    (attribute) => attribute.scope === 'variant',
+                  )}
+                  requiredAttributes={requiredAttributes}
+                  specifications={variant.specifications || []}
+                  onChange={(specifications) =>
+                    updateVariant(index, { specifications })
+                  }
+                />
+              </article>
+            ))}
+            {variants.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                {c(
+                  'أضف حجمًا أو خيار بيع قبل النشر.',
+                  'Add at least one size or selling option before publishing.',
+                )}
+              </p>
+            )}
+          </div>
+        )}
+
+        {tab === 3 && (
+          <div className="space-y-5">
             <MediaPicker
               value={mediaIds}
               onChange={(value: any) => {
@@ -1591,66 +1669,6 @@ function ProductEditor({ id }: { id: string }) {
             />
           </div>
         )}
-
-        {tab === 5 && (
-          <div className="space-y-6">
-            <RemoteSelect
-              resource="sectors"
-              value={sectorIds}
-              onChange={(value: any) => {
-                markDirty()
-                setSectorIds(value)
-              }}
-              multiple
-              label={c('القطاعات المرتبطة', 'Applicable sectors')}
-            />
-            <RemoteSelect
-              resource="products"
-              value={relatedIds}
-              onChange={(ids: string[]) =>
-                setRelatedIds(ids.filter((value) => value !== id))
-              }
-              multiple
-              label={c('منتجات ذات صلة', 'Related products')}
-            />
-            <div className="grid gap-5 border-t pt-5 md:grid-cols-2">
-              <Field label={c('عنوان SEO بالعربية', 'Arabic SEO title')}>
-                <input
-                  className="control"
-                  value={seoTitleAr}
-                  onChange={(e) => setSeoTitleAr(e.target.value)}
-                />
-              </Field>
-              <Field label={c('عنوان SEO بالإنجليزية', 'English SEO title')}>
-                <input
-                  className="control"
-                  dir="ltr"
-                  value={seoTitleEn}
-                  onChange={(e) => setSeoTitleEn(e.target.value)}
-                />
-              </Field>
-              <Field label={c('وصف SEO بالعربية', 'Arabic SEO description')}>
-                <textarea
-                  rows={2}
-                  className="control"
-                  value={seoDescAr}
-                  onChange={(e) => setSeoDescAr(e.target.value)}
-                />
-              </Field>
-              <Field
-                label={c('وصف SEO بالإنجليزية', 'English SEO description')}
-              >
-                <textarea
-                  rows={2}
-                  dir="ltr"
-                  className="control"
-                  value={seoDescEn}
-                  onChange={(e) => setSeoDescEn(e.target.value)}
-                />
-              </Field>
-            </div>
-          </div>
-        )}
       </div>
     </form>
   )
@@ -1658,10 +1676,12 @@ function ProductEditor({ id }: { id: string }) {
 
 function VariantSpecsEditor({
   attributes,
+  requiredAttributes,
   specifications,
   onChange,
 }: {
   attributes: AttributeRecord[]
+  requiredAttributes: Set<string>
   specifications: ProductSpec[]
   onChange: (specs: ProductSpec[]) => void
 }) {
@@ -1685,7 +1705,13 @@ function VariantSpecsEditor({
           (spec) => spec.attributeId === attribute.id,
         )?.value
         return (
-          <Field key={attribute.id} label={attribute.name[lang]}>
+          <Field
+            key={attribute.id}
+            label={
+              attribute.name[lang] +
+              (requiredAttributes.has(attribute.id) ? ' *' : '')
+            }
+          >
             {attribute.type === 'boolean' ? (
               <select
                 className="control"

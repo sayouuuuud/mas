@@ -40,7 +40,7 @@ begin
  job:=public.mas_claim_jobs(1)->0;
  perform public.test_throws(format('select public.mas_finish_job(%L,%L,%L,null)',job->>'id',gen_random_uuid(),'{}'),'MAS_CONFLICT','stale worker lease rejected');
  perform public.mas_finish_job((job->>'id')::uuid,(job->>'leaseToken')::uuid,'{"path":"test/clean.webp","mime":"image/webp","size":80,"sha256":"test"}',null);
- product:=public.mas_command('products','create',null,null,jsonb_build_object('name',jsonb_build_object('ar','زيت صناعي','en','Industrial oil'),'slug','industrial-oil','summary',jsonb_build_object('ar','وصف عربي','en','English summary'),'description',jsonb_build_object('ar','تفاصيل المنتج','en','Product details'),'family','oils','status','draft','categoryId',category->>'id','brandId',brand->>'id','mainMediaId',media->>'id','variants',jsonb_build_array(jsonb_build_object('sku','TEST-SKU','label',jsonb_build_object('ar','عبوة','en','Pack'),'unitId',unit->>'id','minQuantity',2,'quantityStep',2,'active',true,'availability','available')),'sourceNote','CONFIDENTIAL_INTERNAL'),owner_id,'aal2');
+ product:=public.mas_command('products','create',null,null,jsonb_build_object('name',jsonb_build_object('ar','زيت صناعي','en','Industrial oil'),'slug','industrial-oil','summary',jsonb_build_object('ar','وصف عربي','en','English summary'),'description',jsonb_build_object('ar','تفاصيل المنتج','en','Product details'),'family','oils','status','draft','categoryId',category->>'id','brandId',brand->>'id','mainMediaId',media->>'id','variants',jsonb_build_array(jsonb_build_object('sku','TEST-SKU','label',jsonb_build_object('ar','عبوة','en','Pack'),'unitId',unit->>'id','minQuantity',2,'quantityStep',2,'active',true,'availability','available')),'standards',jsonb_build_array('API SN/CF','ACEA A3/B4'),'sourceNote','CONFIDENTIAL_INTERNAL'),owner_id,'aal2');
  perform public.test_assert(public.mas_get('products',product->>'id',false) is null,'draft product is not public');
  product:=public.mas_command('products','publish',(product->>'id')::uuid,1,'{}',owner_id,'aal2');
  variant:=(product->'variants'->0->>'id')::uuid;
@@ -51,6 +51,8 @@ begin
  perform public.test_assert(public.mas_get('products','industrial-oil',false)->>'sourceNote' is null,'public RPC strips internal notes');
  perform public.test_assert((public.mas_list('products','{}',false)->>'total')::int=1,'published catalog pagination total');
  perform public.test_assert((public.mas_facets('{}')->>'total')::int=1,'catalog facets count published products');
+ perform public.test_assert(public.mas_get('products','industrial-oil',false)->'standards'='["API SN/CF","ACEA A3/B4"]'::jsonb,'published product detail exposes standards in entered order');
+ perform public.test_assert((public.mas_list('products','{"q":"API SN/CF"}',false)->>'total')::int=1,'public search finds published product standards');
  perform public.test_assert((public.mas_list('products','{"q":"CONFIDENTIAL_INTERNAL"}',false)->>'total')::int=0,'public search cannot probe internal notes');
  perform public.test_throws(format('select public.mas_bulk_products(%L,%L,%L,%L)','archive',jsonb_build_array(jsonb_build_object('id',product->>'id','version',2),jsonb_build_object('id',product->>'id','version',999)),owner_id,'aal2'),'MAS_CONFLICT','bulk operation rejects one stale item');
  perform public.test_assert((select document->>'status' from mas.entities where id=(product->>'id')::uuid)='published','bulk conflict rolls back all earlier changes');
