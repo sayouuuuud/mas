@@ -792,10 +792,10 @@ export function ProductDetail({ slug }: { slug: string }) {
   const relatedProducts = relatedQuery.data || []
 
   return (
-    <div className="site-container page-section">
+    <div className="site-container pt-7 pb-12 sm:pt-9 sm:pb-16">
       <nav
         aria-label={c('مسار الصفحة', 'Breadcrumb')}
-        className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+        className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground sm:mb-5"
       >
         <Link className="hover:text-primary" href="/products">
           {c('الكتالوج', 'Catalog')}
@@ -812,11 +812,11 @@ export function ProductDetail({ slug }: { slug: string }) {
           </>
         )}
       </nav>
-      <div className="grid gap-9 lg:grid-cols-2">
-        <div>
+      <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
+        <div className="min-w-0">
           <button
             type="button"
-            className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-muted"
+            className="relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden rounded-[16px] bg-muted"
             onClick={() => setZoom(true)}
             aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
           >
@@ -826,7 +826,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               fill
               priority
               sizes="(min-width: 1024px) 45vw, 90vw"
-              className="object-contain p-4 sm:p-7"
+              className="object-contain p-3 sm:p-5"
             />
           </button>
           {galleryImages.length > 1 && (
@@ -835,7 +835,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 <button
                   type="button"
                   key={src}
-                  className={`relative size-16 overflow-hidden rounded-lg border-2 ${displayedImage === src ? 'border-primary' : 'border-transparent'}`}
+                  className={`relative size-14 overflow-hidden rounded-[8px] border-2 sm:size-16 ${displayedImage === src ? 'border-primary' : 'border-transparent'}`}
                   onClick={() => setSelectedImage(src)}
                   aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
                 >
@@ -851,8 +851,8 @@ export function ProductDetail({ slug }: { slug: string }) {
             </div>
           )}
         </div>
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             {brand && (
               <Link
                 className="text-sm font-bold text-primary"
@@ -869,24 +869,27 @@ export function ProductDetail({ slug }: { slug: string }) {
                   : c('توريد حسب الطلب', 'Supply on request')}
             </Badge>
           </div>
-          <h1 className="mt-3 text-3xl font-bold sm:text-4xl" dir="auto">
+          <h1
+            className="mt-2.5 text-3xl leading-tight font-bold wrap-anywhere sm:text-4xl"
+            dir="auto"
+          >
             {product.name[lang]}
           </h1>
           {product.summary[lang] &&
             product.summary[lang] !== product.description?.[lang] && (
-              <p className="mt-3 font-medium text-primary">
+              <p className="mt-2.5 font-medium wrap-anywhere text-primary">
                 {product.summary[lang]}
               </p>
             )}
-          <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">
+          <p className="mt-3 leading-relaxed wrap-anywhere whitespace-pre-line text-muted-foreground">
             {product.description?.[lang] || product.summary[lang]}
           </p>
           {documents.length > 0 && (
-            <div className="mt-5">
+            <div className="mt-4">
               <ProductDocuments documents={documents} />
             </div>
           )}
-          <div className="mt-6 space-y-4 border-t pt-5">
+          <div className="mt-5 space-y-3.5 border-t pt-4">
             <fieldset>
               <legend className="mb-2 text-sm font-bold">
                 {c('العبوات المتاحة', 'Available packs')}
@@ -906,9 +909,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                       type="button"
                       key={option.id}
                       aria-pressed={variant.id === option.id}
-                      className={
-                        variant.id === option.id ? 'btn-primary' : 'btn-outline'
-                      }
+                      className={`${variant.id === option.id ? 'btn-primary' : 'btn-outline'} min-h-11 min-w-14 rounded-lg px-3.5 py-2`}
                       onClick={() => {
                         setVariantId(option.id)
                         setSelectedImage('')
@@ -934,7 +935,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 {c('الكمية المطلوبة', 'Required quantity')} (
                 {unit?.name[lang] || c('وحدة', 'Unit')})
               </label>
-              <div className="flex w-fit items-center rounded-lg border">
+              <div className="inline-flex min-h-11 items-center rounded-lg border">
                 <button
                   type="button"
                   className="quantity-button"
@@ -951,7 +952,8 @@ export function ProductDetail({ slug }: { slug: string }) {
                 </button>
                 <input
                   id="product-quantity"
-                  className="w-24 bg-transparent text-center"
+                  className="h-10 w-16 [appearance:textfield] bg-transparent text-center tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  inputMode={precision > 0 ? 'decimal' : 'numeric'}
                   type="number"
                   min={minQty}
                   step={stepQty}
@@ -988,7 +990,7 @@ export function ProductDetail({ slug }: { slug: string }) {
             </div>
             <button
               type="button"
-              className="btn-primary w-full"
+              className="btn-primary min-h-11 w-full rounded-lg px-4 py-2"
               disabled={!validQuantity || full || unavailable}
               onClick={() => {
                 addToCart(variant.id, quantity, {
@@ -1017,7 +1019,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                   ? c('أُضيف إلى الطلب', 'Added to request')
                   : c('أضف لطلب عرض السعر', 'Add to quote request')}
             </button>
-            <div aria-live="polite">
+            <div aria-live="polite" className="empty:absolute">
               {added && (
                 <Link
                   className="text-sm font-bold text-primary underline"
@@ -1040,8 +1042,14 @@ export function ProductDetail({ slug }: { slug: string }) {
       </div>
 
       {(standards.length > 0 || allSpecs.length > 0) && (
-        <section className="mt-12" aria-labelledby="product-specifications">
-          <h2 id="product-specifications" className="mb-4 text-2xl font-bold">
+        <section
+          className="mt-8 border-t pt-5 sm:mt-10 sm:pt-6"
+          aria-labelledby="product-specifications"
+        >
+          <h2
+            id="product-specifications"
+            className="mb-3 text-2xl leading-tight font-bold"
+          >
             {c('المواصفات', 'Specifications')}
           </h2>
           {standards.length > 0 && (
@@ -1049,7 +1057,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               {standards.map((standard) => (
                 <li
                   key={standard}
-                  className="flex items-center gap-3 rounded-xl border bg-muted/45 p-4"
+                  className="flex min-w-0 items-center gap-2.5 rounded-lg border bg-muted/45 px-3.5 py-3"
                 >
                   <ListChecks
                     className="size-5 shrink-0 text-primary"
@@ -1063,7 +1071,7 @@ export function ProductDetail({ slug }: { slug: string }) {
             </ul>
           )}
           {allSpecs.length > 0 && (
-            <dl className="spec-list mt-4">
+            <dl className="spec-list mt-3 overflow-hidden rounded-lg border">
               {allSpecs.map((spec) => {
                 const attribute = attributes.find(
                   (item) => item.id === spec.attributeId,
@@ -1089,7 +1097,7 @@ export function ProductDetail({ slug }: { slug: string }) {
         </section>
       )}
       {(product.applications?.[lang] || product.benefits?.[lang]) && (
-        <div className="mt-10 grid gap-6 sm:grid-cols-2">
+        <div className="mt-8 grid gap-5 sm:grid-cols-2">
           {product.applications?.[lang] && (
             <section>
               <h2 className="text-xl font-bold">
@@ -1129,18 +1137,18 @@ export function ProductDetail({ slug }: { slug: string }) {
         </div>
       )}
       {relatedProducts.length > 0 && (
-        <section className="mt-16">
-          <h2 className="mb-6 text-2xl font-bold">
+        <section className="mt-8 border-t pt-5 sm:mt-10 sm:pt-6">
+          <h2 className="mb-4 text-2xl leading-tight font-bold">
             {c('منتجات مرتبطة', 'Related products')}
           </h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
             {relatedProducts.map((related) => (
               <Link
                 href={`/products/${related.slug || related.id}`}
                 key={related.id}
-                className="catalog-card group"
+                className="catalog-card group rounded-[16px]"
               >
-                <div className="relative aspect-[16/10] bg-muted">
+                <div className="relative aspect-[16/10] border-b bg-muted">
                   <Image
                     src={resolveProductImage(related)}
                     alt=""
@@ -1184,7 +1192,7 @@ function ProductDocuments({ documents }: { documents: MediaItem[] }) {
       {documents.map((file) => (
         <li key={file.id}>
           <a
-            className="btn-outline"
+            className="btn-outline min-h-11 rounded-lg px-3.5 py-2"
             href={file.url}
             target="_blank"
             rel="noopener noreferrer"
