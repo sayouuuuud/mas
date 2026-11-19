@@ -146,14 +146,11 @@ export function Dashboard() {
 
   const hasSettings = Boolean(settingsQuery.data?.length)
   const hasActiveUnit = Boolean(unitsQuery.data?.some((u) => u.active))
-  const hasPublishedPrivacy = Boolean(
-    contentQuery.data?.some(
-      (b) =>
-        b.key === 'privacy' &&
-        b.status === 'published' &&
-        Boolean(b.policyVersion),
-    ),
+  const privacyPolicy = contentQuery.data?.find(
+    (block) => block.key === 'privacy',
   )
+  const hasPublishedPrivacy =
+    privacyPolicy?.status === 'published' && Boolean(privacyPolicy.policyVersion)
   const needsBootstrap =
     !settingsQuery.isLoading &&
     !unitsQuery.isLoading &&
@@ -217,7 +214,9 @@ export function Dashboard() {
               </Badge>
             </Link>
             <Link
-              href="/admin/content/new"
+              href={
+                privacyPolicy ? `/admin/content/${privacyPolicy.id}` : '/admin/content/new'
+              }
               className="flex items-center justify-between rounded-xl border p-3.5 text-sm hover:border-primary"
             >
               <span>

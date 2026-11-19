@@ -595,6 +595,9 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
     )
   }
 
+  const contentKey = (form.key || '').trim().toLowerCase()
+  const isPrivacyPolicy = contentKey === 'privacy'
+
   function buildPayload() {
     switch (section) {
       case 'categories':
@@ -702,7 +705,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         }
       case 'content':
         return {
-          key: form.key.trim().toLowerCase(),
+          key: contentKey,
           name: { ar: form.nameAr.trim(), en: form.nameEn.trim() },
           body: { ar: form.bodyAr.trim(), en: form.bodyEn.trim() },
           ctaLabel: { ar: form.ctaLabelAr.trim(), en: form.ctaLabelEn.trim() },
@@ -752,12 +755,50 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
     }
   }
 
-  async function handleSubmit(e?: FormEvent) {
+  function contentValidationError(publishing: boolean) {
+    if ((form.nameAr || '').trim().length < 2)
+      return c(
+        'اكتب الاسم بالعربية (حرفان على الأقل).',
+        'Enter an Arabic name with at least two characters.',
+      )
+    if ((form.nameEn || '').trim().length < 2)
+      return c(
+        'اكتب الاسم بالإنجليزية (حرفان على الأقل).',
+        'Enter an English name with at least two characters.',
+      )
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(contentKey))
+      return c(
+        'اكتب مفتاح المحتوى بحروف إنجليزية أو أرقام، واستخدم شرطة للفصل، مثل home-hero.',
+        'Enter a content key using English letters, numbers and single hyphens, such as home-hero.',
+      )
+    if (publishing && isPrivacyPolicy) {
+      if (!form.bodyAr.trim() || !form.bodyEn.trim())
+        return c(
+          'أضف نص سياسة الخصوصية بالعربية والإنجليزية قبل النشر.',
+          'Add both the Arabic and English privacy policy text before publishing.',
+        )
+      if (!form.policyVersion.trim())
+        return c(
+          'أدخل رقم إصدار سياسة الخصوصية قبل النشر.',
+          'Enter a privacy policy version before publishing.',
+        )
+    }
+    return ''
+  }
+
+  async function handleSubmit(e?: FormEvent, publishing = false) {
     e?.preventDefault()
     if (busy) return null
-    setBusy(true)
     setErrorMsg('')
     setFeedback('')
+    if (section === 'content') {
+      const error = contentValidationError(publishing)
+      if (error) {
+        setErrorMsg(error)
+        return null
+      }
+    }
+    setBusy(true)
     try {
       if (section === 'team') {
         if (isNew) {
@@ -824,7 +865,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
   async function runPublishAction(action: 'publish' | 'unpublish' | 'archive') {
     if (busy || !meta.publishable) return
-    const saved = await handleSubmit()
+    const saved = await handleSubmit(undefined, action === 'publish')
     if (!saved) return
     setBusy(true)
     setErrorMsg('')
@@ -1112,6 +1153,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
             <Field label={c('الاسم بالعربية', 'Arabic name')}>
               <input
                 required
+                maxLength={section === 'content' ? 160 : undefined}
                 className="control"
                 value={form.nameAr || ''}
                 onChange={(e) => setForm({ ...form, nameAr: e.target.value })}
@@ -1120,6 +1162,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
             <Field label={c('الاسم بالإنجليزية', 'English name')}>
               <input
                 required
+                maxLength={section === 'content' ? 160 : undefined}
                 dir="ltr"
                 className="control"
                 value={form.nameEn || ''}
@@ -1748,51 +1791,49 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
             {section === 'content' && (
               <>
-                <div className="md:col-span-2">
-                  <ContentLayoutEditor
-                    value={form.layout || { cards: [], points: [] }}
-                    onChange={(layout: any) => {
-                      markDirty()
-                      setForm({ ...form, layout })
-                    }}
-                  />
-                </div>
                 <Field
-                  label={c(
-                    'مفتاح الكتلة (مثل privacy أو terms أو about أو home-hero)',
-                    'Block key (e.g. privacy, terms, about, home-hero, footer)',
+                  label={c('مفتاح المحتوى', 'Content key')}
+                  hint={c(
+                    'أمثلة: privacy للخصوصية، terms للشروط، home-hero لمقدمة الرئيسية.',
+                    'Examples: privacy for the privacy policy, terms for the terms, and home-hero for the homepage introduction.',
                   )}
                 >
                   <input
                     required
                     dir="ltr"
+                    maxLength={180}
                     className="control font-mono"
                     placeholder="privacy"
                     value={form.key || ''}
                     onChange={(e) =>
-                      setForm({ ...form, key: toSlug(e.target.value) })
+                      setForm({ ...form, key: e.target.value })
                     }
                   />
                 </Field>
-                <Field
-                  label={c(
-                    'إصدار السياسة (مطلوب عند key = privacy، مثل 2026-04)',
-                    'Policy version (required when key = privacy, e.g. 2026-04)',
-                  )}
-                >
-                  <input
-                    dir="ltr"
-                    className="control font-mono"
-                    placeholder="2026-04"
-                    value={form.policyVersion || ''}
-                    onChange={(e) =>
-                      setForm({ ...form, policyVersion: e.target.value })
-                    }
-                  />
-                </Field>
+                {(isPrivacyPolicy || form.policyVersion) && (
+                  <Field
+                    label={c('إصدار سياسة الخصوصية', 'Privacy policy version')}
+                    hint={c(
+                      'الإصدار مطلوب للنشر. بعد تعديل النص المنشور، احفظ التعديل كمسودة وانشره برقم إصدار جديد.',
+                      'A version is required to publish. After editing published text, save it as a draft and publish it with a new version.',
+                    )}
+                  >
+                    <input
+                      dir="ltr"
+                      maxLength={40}
+                      className="control font-mono"
+                      placeholder="1.0"
+                      value={form.policyVersion || ''}
+                      onChange={(e) =>
+                        setForm({ ...form, policyVersion: e.target.value })
+                      }
+                    />
+                  </Field>
+                )}
                 <Field label={c('النص بالعربية', 'Arabic body')}>
                   <textarea
                     rows={6}
+                    maxLength={10000}
                     className="control"
                     value={form.bodyAr || ''}
                     onChange={(e) =>
@@ -1803,6 +1844,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                 <Field label={c('النص بالإنجليزية', 'English body')}>
                   <textarea
                     rows={6}
+                    maxLength={10000}
                     dir="ltr"
                     className="control"
                     value={form.bodyEn || ''}
@@ -1811,6 +1853,17 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                     }
                   />
                 </Field>
+                {!isPrivacyPolicy && (
+                  <div className="md:col-span-2">
+                    <ContentLayoutEditor
+                      value={form.layout || { cards: [], points: [] }}
+                      onChange={(layout: any) => {
+                        markDirty()
+                        setForm({ ...form, layout })
+                      }}
+                    />
+                  </div>
+                )}
               </>
             )}
 
