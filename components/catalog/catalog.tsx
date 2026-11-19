@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { FacetFilter } from './facet-filter'
 import { ComparisonToggle } from './comparison'
 import { ProductImageDialog } from './product-image-dialog'
+import detailStyles from './product-detail.module.css'
 import { PublicLink as Link } from '@/components/demo/public-link'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
@@ -15,8 +16,11 @@ import {
   Check,
   Minus,
   Plus,
+  ArrowDownToLine,
   FileText,
   ListChecks,
+  Maximize2,
+  ShoppingBag,
 } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useDemo, useCatalogData } from '@/components/demo/demo-provider'
@@ -792,387 +796,441 @@ export function ProductDetail({ slug }: { slug: string }) {
   const relatedProducts = relatedQuery.data || []
 
   return (
-    <div className="site-container page-section">
-      <nav
-        aria-label={c('مسار الصفحة', 'Breadcrumb')}
-        className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
-      >
-        <Link className="hover:text-primary" href="/products">
-          {c('الكتالوج', 'Catalog')}
-        </Link>
-        {category && (
-          <>
-            <span aria-hidden="true">/</span>
-            <Link
-              className="hover:text-primary"
-              href={`/categories/${category.slug || category.id}`}
-            >
-              {category.name[lang]}
-            </Link>
-          </>
-        )}
-      </nav>
-      <div className="grid gap-9 lg:grid-cols-2">
-        <div>
-          <button
-            type="button"
-            className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-muted"
-            onClick={() => setZoom(true)}
-            aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
-          >
-            <Image
-              src={displayedImage}
-              alt={product.name[lang]}
-              fill
-              priority
-              sizes="(min-width: 1024px) 45vw, 90vw"
-              className="object-contain p-4 sm:p-7"
-            />
-          </button>
-          {galleryImages.length > 1 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {galleryImages.map((src, i) => (
-                <button
-                  type="button"
-                  key={src}
-                  className={`relative size-16 overflow-hidden rounded-lg border-2 ${displayedImage === src ? 'border-primary' : 'border-transparent'}`}
-                  onClick={() => setSelectedImage(src)}
-                  aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
-                >
-                  <Image
-                    src={src}
-                    alt=""
-                    fill
-                    sizes="64px"
-                    className="object-contain"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            {brand && (
+    <div className={detailStyles.page}>
+      <div className="site-container py-8 sm:py-11">
+        <nav
+          aria-label={c('مسار الصفحة', 'Breadcrumb')}
+          className="mb-5 flex flex-wrap items-center gap-2 text-sm font-medium text-muted-foreground sm:mb-7"
+        >
+          <Link className="hover:text-primary" href="/products">
+            {c('الكتالوج', 'Catalog')}
+          </Link>
+          {category && (
+            <>
+              <span aria-hidden="true">/</span>
               <Link
-                className="text-sm font-bold text-primary"
-                href={`/brands/${brand.slug || brand.id}`}
+                className="hover:text-primary"
+                href={`/categories/${category.slug || category.id}`}
               >
-                {brand.name[lang]}
+                {category.name[lang]}
               </Link>
-            )}
-            <Badge tone={unavailable ? 'neutral' : 'gold'}>
-              {unavailable
-                ? c('غير متاح حاليًا', 'Currently unavailable')
-                : variant.availability === 'available'
-                  ? c('متاح للتوريد', 'Available')
-                  : c('توريد حسب الطلب', 'Supply on request')}
-            </Badge>
-          </div>
-          <h1 className="mt-3 text-3xl font-bold sm:text-4xl" dir="auto">
-            {product.name[lang]}
-          </h1>
-          {product.summary[lang] &&
-            product.summary[lang] !== product.description?.[lang] && (
-              <p className="mt-3 font-medium text-primary">
-                {product.summary[lang]}
-              </p>
-            )}
-          <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">
-            {product.description?.[lang] || product.summary[lang]}
-          </p>
-          {documents.length > 0 && (
-            <div className="mt-5">
-              <ProductDocuments documents={documents} />
-            </div>
+            </>
           )}
-          <div className="mt-6 space-y-4 border-t pt-5">
-            <fieldset>
-              <legend className="mb-2 text-sm font-bold">
-                {c('العبوات المتاحة', 'Available packs')}
-              </legend>
-              <div className="flex flex-wrap gap-2">
-                {product.variants.map((option) => {
-                  const measure = units.find(
-                    (item) => item.id === option.packUnitId,
-                  )
-                  const size =
-                    option.packQuantity && measure
-                      ? `${option.packQuantity} ${measure.name[lang]}`
-                      : ''
-                  const label = option.label[lang]
-                  return (
-                    <button
-                      type="button"
-                      key={option.id}
-                      aria-pressed={variant.id === option.id}
-                      className={
-                        variant.id === option.id ? 'btn-primary' : 'btn-outline'
-                      }
-                      onClick={() => {
-                        setVariantId(option.id)
-                        setSelectedImage('')
-                        setAdded(false)
-                      }}
-                    >
-                      <span dir="auto">{label || size}</span>
-                      {size && label !== size && (
-                        <span dir="auto" className="text-xs opacity-80">
-                          {size}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
-            <div>
-              <label
-                htmlFor="product-quantity"
-                className="mb-2 block text-sm font-bold"
-              >
-                {c('الكمية المطلوبة', 'Required quantity')} (
-                {unit?.name[lang] || c('وحدة', 'Unit')})
-              </label>
-              <div className="flex w-fit items-center rounded-lg border">
-                <button
-                  type="button"
-                  className="quantity-button"
-                  disabled={quantity <= minQty}
-                  onClick={() => {
-                    setQuantity((q) =>
-                      Math.max(minQty, Number((q - stepQty).toFixed(3))),
-                    )
-                    setAdded(false)
-                  }}
-                  aria-label={c('تقليل الكمية', 'Decrease quantity')}
-                >
-                  <Minus className="size-4" />
-                </button>
-                <input
-                  id="product-quantity"
-                  className="w-24 bg-transparent text-center"
-                  type="number"
-                  min={minQty}
-                  step={stepQty}
-                  max={99999}
-                  value={Number.isNaN(quantity) ? '' : quantity}
-                  onChange={(e) => {
-                    setQuantity(e.target.valueAsNumber)
-                    setAdded(false)
-                  }}
-                />
-                <button
-                  type="button"
-                  className="quantity-button"
-                  disabled={quantity >= 99999}
-                  onClick={() => {
-                    setQuantity((q) =>
-                      Math.min(99999, Number((q + stepQty).toFixed(3))),
-                    )
-                    setAdded(false)
-                  }}
-                  aria-label={c('زيادة الكمية', 'Increase quantity')}
-                >
-                  <Plus className="size-4" />
-                </button>
-              </div>
-              {!validQuantity && (
-                <p className="mt-2 text-sm text-red-700" role="alert">
-                  {c(
-                    `الحد الأدنى ${minQty} ومضاعفات ${stepQty} (حتى 99999).`,
-                    `Minimum ${minQty} in steps of ${stepQty} (up to 99999).`,
-                  )}
-                </p>
-              )}
-            </div>
+        </nav>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] lg:gap-8">
+          <div className={detailStyles.gallery}>
             <button
               type="button"
-              className="btn-primary w-full"
-              disabled={!validQuantity || full || unavailable}
-              onClick={() => {
-                addToCart(variant.id, quantity, {
-                  productId: product.id,
-                  productSlug: product.slug || product.id,
-                  productName: product.name,
-                  variantLabel: variant.label,
-                  sku: variant.sku,
-                  unitCode: unit?.code,
-                  unitName: unit?.name,
-                  precision,
-                  minQuantity: minQty,
-                  quantityStep: stepQty,
-                })
-                setAdded(true)
-              }}
+              className={`${detailStyles.stage} group relative block aspect-square w-full cursor-zoom-in overflow-hidden rounded-3xl focus-visible:outline-2 focus-visible:outline-offset-4 sm:aspect-[5/4]`}
+              onClick={() => setZoom(true)}
+              aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
             >
-              {added ? (
-                <Check className="size-4" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              {unavailable
-                ? c('غير متاح للطلب حاليًا', 'Currently unavailable')
-                : added
-                  ? c('أُضيف إلى الطلب', 'Added to request')
-                  : c('أضف لطلب عرض السعر', 'Add to quote request')}
+              <Image
+                src={displayedImage}
+                alt={product.name[lang]}
+                fill
+                priority
+                sizes="(min-width: 1024px) 45vw, 90vw"
+                className="object-contain p-5 sm:p-9"
+              />
+              <span
+                className="absolute end-3 top-3 inline-flex size-10 items-center justify-center rounded-full border bg-white text-foreground shadow-sm transition-colors group-hover:text-primary sm:end-4 sm:top-4"
+                aria-hidden="true"
+              >
+                <Maximize2 className="size-4" />
+              </span>
             </button>
-            <div aria-live="polite">
-              {added && (
+            {galleryImages.length > 1 && (
+              <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border bg-white p-2.5">
+                {galleryImages.map((src, i) => (
+                  <button
+                    type="button"
+                    key={src}
+                    className="relative size-16 overflow-hidden rounded-xl border bg-muted transition-colors hover:border-primary aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary"
+                    aria-pressed={displayedImage === src}
+                    onClick={() => setSelectedImage(src)}
+                    aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
+                  >
+                    <Image
+                      src={src}
+                      alt=""
+                      fill
+                      sizes="64px"
+                      className="object-contain p-1.5"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 rounded-3xl border bg-white p-4 shadow-[0_18px_45px_-36px_#172f3a77] sm:p-7 lg:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {brand && (
                 <Link
-                  className="text-sm font-bold text-primary underline"
-                  href="/request-quote"
+                  className="text-sm font-bold text-primary underline-offset-4 hover:underline"
+                  href={`/brands/${brand.slug || brand.id}`}
                 >
-                  {c('مراجعة طلب عرض السعر', 'Review quote request')}
+                  {brand.name[lang]}
                 </Link>
               )}
-              {full && (
-                <p className="text-sm">
-                  {c(
-                    'وصلت إلى 30 بندًا. راجع طلبك أولًا.',
-                    'You have reached 30 items. Review your request first.',
-                  )}
+              <Badge
+                tone={
+                  unavailable
+                    ? 'neutral'
+                    : variant.availability === 'available'
+                      ? 'green'
+                      : 'gold'
+                }
+              >
+                {unavailable
+                  ? c('غير متاح حاليًا', 'Currently unavailable')
+                  : variant.availability === 'available'
+                    ? c('متاح للتوريد', 'Available')
+                    : c('توريد حسب الطلب', 'Supply on request')}
+              </Badge>
+            </div>
+            <h1
+              className="mt-4 text-[clamp(2rem,4vw,3.55rem)] leading-[1.12] font-bold wrap-anywhere"
+              dir="auto"
+            >
+              {product.name[lang]}
+            </h1>
+            {product.summary[lang] &&
+              product.summary[lang] !== product.description?.[lang] && (
+                <p className="mt-3 font-medium text-primary">
+                  {product.summary[lang]}
                 </p>
               )}
+            <p className="mt-4 leading-relaxed wrap-anywhere whitespace-pre-line text-muted-foreground sm:text-lg">
+              {product.description?.[lang] || product.summary[lang]}
+            </p>
+            {documents.length > 0 && (
+              <div className="mt-5 border-t pt-4">
+                <ProductDocuments documents={documents} />
+              </div>
+            )}
+            <div
+              className={`${detailStyles.purchase} mt-6 space-y-4 rounded-2xl p-3.5 sm:p-5`}
+            >
+              <fieldset>
+                <legend className="mb-2 text-sm font-bold">
+                  {c('العبوات المتاحة', 'Available packs')}
+                </legend>
+                <div className="flex flex-wrap gap-2">
+                  {product.variants.map((option) => {
+                    const measure = units.find(
+                      (item) => item.id === option.packUnitId,
+                    )
+                    const size =
+                      option.packQuantity && measure
+                        ? `${option.packQuantity} ${measure.name[lang]}`
+                        : ''
+                    const label = option.label[lang]
+                    return (
+                      <button
+                        type="button"
+                        key={option.id}
+                        aria-pressed={variant.id === option.id}
+                        className={detailStyles.pack}
+                        onClick={() => {
+                          setVariantId(option.id)
+                          setSelectedImage('')
+                          setAdded(false)
+                        }}
+                      >
+                        <span dir="auto">{label || size}</span>
+                        {size && label !== size && (
+                          <span dir="auto" className="text-xs opacity-80">
+                            {size}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+              <div className="grid gap-3 border-t border-white/20 pt-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
+                <div>
+                  <label
+                    htmlFor="product-quantity"
+                    className="mb-2 block text-sm font-bold"
+                  >
+                    {c('الكمية المطلوبة', 'Required quantity')} (
+                    {unit?.name[lang] || c('وحدة', 'Unit')})
+                  </label>
+                  <div
+                    className={`${detailStyles.quantity} flex w-fit items-center rounded-xl`}
+                  >
+                    <button
+                      type="button"
+                      className="quantity-button"
+                      disabled={quantity <= minQty}
+                      onClick={() => {
+                        setQuantity((q) =>
+                          Math.max(minQty, Number((q - stepQty).toFixed(3))),
+                        )
+                        setAdded(false)
+                      }}
+                      aria-label={c('تقليل الكمية', 'Decrease quantity')}
+                    >
+                      <Minus className="size-4" />
+                    </button>
+                    <input
+                      id="product-quantity"
+                      className="h-10 w-14 bg-transparent text-center tabular-nums sm:w-16"
+                      inputMode={precision > 0 ? 'decimal' : 'numeric'}
+                      type="number"
+                      min={minQty}
+                      step={stepQty}
+                      max={99999}
+                      value={Number.isNaN(quantity) ? '' : quantity}
+                      onChange={(e) => {
+                        setQuantity(e.target.valueAsNumber)
+                        setAdded(false)
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="quantity-button"
+                      disabled={quantity >= 99999}
+                      onClick={() => {
+                        setQuantity((q) =>
+                          Math.min(99999, Number((q + stepQty).toFixed(3))),
+                        )
+                        setAdded(false)
+                      }}
+                      aria-label={c('زيادة الكمية', 'Increase quantity')}
+                    >
+                      <Plus className="size-4" />
+                    </button>
+                  </div>
+                  {!validQuantity && (
+                    <p className="mt-2 text-sm text-amber-200" role="alert">
+                      {c(
+                        `الحد الأدنى ${minQty} ومضاعفات ${stepQty} (حتى 99999).`,
+                        `Minimum ${minQty} in steps of ${stepQty} (up to 99999).`,
+                      )}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className={detailStyles.request}
+                  disabled={!validQuantity || full || unavailable}
+                  onClick={() => {
+                    addToCart(variant.id, quantity, {
+                      productId: product.id,
+                      productSlug: product.slug || product.id,
+                      productName: product.name,
+                      variantLabel: variant.label,
+                      sku: variant.sku,
+                      unitCode: unit?.code,
+                      unitName: unit?.name,
+                      precision,
+                      minQuantity: minQty,
+                      quantityStep: stepQty,
+                    })
+                    setAdded(true)
+                  }}
+                >
+                  {added ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <ShoppingBag
+                      className="size-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {unavailable
+                    ? c('غير متاح للطلب حاليًا', 'Currently unavailable')
+                    : added
+                      ? c('أُضيف إلى الطلب', 'Added to request')
+                      : c('أضف لطلب عرض السعر', 'Add to quote request')}
+                </button>
+              </div>
+              <div aria-live="polite" className="empty:hidden">
+                {added && (
+                  <Link
+                    className="text-sm font-bold text-[#f4e4bb] underline underline-offset-4"
+                    href="/request-quote"
+                  >
+                    {c('مراجعة طلب عرض السعر', 'Review quote request')}
+                  </Link>
+                )}
+                {full && (
+                  <p className="text-sm">
+                    {c(
+                      'وصلت إلى 30 بندًا. راجع طلبك أولًا.',
+                      'You have reached 30 items. Review your request first.',
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {(standards.length > 0 || allSpecs.length > 0) && (
-        <section className="mt-12" aria-labelledby="product-specifications">
-          <h2 id="product-specifications" className="mb-4 text-2xl font-bold">
-            {c('المواصفات', 'Specifications')}
-          </h2>
-          {standards.length > 0 && (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {standards.map((standard) => (
-                <li
-                  key={standard}
-                  className="flex items-center gap-3 rounded-xl border bg-muted/45 p-4"
-                >
-                  <ListChecks
-                    className="size-5 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                  <bdi className="min-w-0 break-words text-sm font-medium">
-                    {standard}
-                  </bdi>
-                </li>
-              ))}
-            </ul>
-          )}
-          {allSpecs.length > 0 && (
-            <dl className="spec-list mt-4">
-              {allSpecs.map((spec) => {
-                const attribute = attributes.find(
-                  (item) => item.id === spec.attributeId,
-                )
-                const specUnit = units.find(
-                  (item) => item.id === attribute?.unitId,
-                )
-                const formatted = formatSpecValue(
-                  spec,
-                  attribute,
-                  specUnit,
-                  lang,
-                )
-                return (
-                  <div key={spec.attributeId}>
-                    <dt>{formatted.label}</dt>
-                    <dd dir="auto">{formatted.value}</dd>
-                  </div>
-                )
-              })}
-            </dl>
-          )}
-        </section>
-      )}
-      {(product.applications?.[lang] || product.benefits?.[lang]) && (
-        <div className="mt-10 grid gap-6 sm:grid-cols-2">
-          {product.applications?.[lang] && (
-            <section>
-              <h2 className="text-xl font-bold">
-                {c('الاستخدامات', 'Applications')}
-              </h2>
-              <p className="mt-2 whitespace-pre-line leading-7 text-muted-foreground">
-                {product.applications[lang]}
-              </p>
-            </section>
-          )}
-          {product.benefits?.[lang] && (
-            <section>
-              <h2 className="text-xl font-bold">{c('المزايا', 'Benefits')}</h2>
-              <p className="mt-2 whitespace-pre-line leading-7 text-muted-foreground">
-                {product.benefits[lang]}
-              </p>
-            </section>
-          )}
-        </div>
-      )}
-      {!!product.sectorIds?.length && (
-        <div className="mt-6 flex flex-wrap gap-2">
-          {product.sectorIds.map((id) => {
-            const sector = sectors.find((item) => item.id === id)
-            return (
-              sector && (
-                <Link
-                  className="btn-outline"
-                  key={id}
-                  href={`/sectors/${sector.slug || sector.id}`}
-                >
-                  {sector.name[lang]}
-                </Link>
-              )
-            )
-          })}
-        </div>
-      )}
-      {relatedProducts.length > 0 && (
-        <section className="mt-16">
-          <h2 className="mb-6 text-2xl font-bold">
-            {c('منتجات مرتبطة', 'Related products')}
-          </h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {relatedProducts.map((related) => (
-              <Link
-                href={`/products/${related.slug || related.id}`}
-                key={related.id}
-                className="catalog-card group"
+        {(standards.length > 0 || allSpecs.length > 0) && (
+          <section
+            className={`${detailStyles.specifications} mt-9 rounded-3xl border p-4 sm:mt-11 sm:p-7`}
+            aria-labelledby="product-specifications"
+          >
+            <h2
+              id="product-specifications"
+              className="mb-5 flex items-center gap-3 text-2xl font-bold"
+            >
+              <span
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-foreground text-white"
+                aria-hidden="true"
               >
-                <div className="relative aspect-[16/10] bg-muted">
-                  <Image
-                    src={resolveProductImage(related)}
-                    alt=""
-                    fill
-                    className="object-contain p-3"
-                    sizes="(min-width: 1024px) 30vw, (min-width: 640px) 46vw, 90vw"
-                  />
-                </div>
-                <div className="flex flex-1 flex-col gap-2 p-4">
-                  <h3 className="font-bold group-hover:text-primary" dir="auto">
-                    {related.name[lang]}
-                  </h3>
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {related.summary[lang]}
-                  </p>
-                  <span className="mt-auto inline-flex items-center gap-2 pt-2 text-sm font-semibold text-primary">
-                    {c('عرض المنتج', 'View product')}
-                    <DirectionArrow />
-                  </span>
-                </div>
-              </Link>
-            ))}
+                <ListChecks className="size-5" />
+              </span>
+              {c('المواصفات', 'Specifications')}
+            </h2>
+            {standards.length > 0 && (
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {standards.map((standard) => (
+                  <li
+                    key={standard}
+                    className="flex min-w-0 items-center gap-2.5 rounded-xl border bg-white px-3.5 py-3 shadow-xs"
+                  >
+                    <ListChecks
+                      className="size-4 shrink-0 text-primary"
+                      aria-hidden="true"
+                    />
+                    <bdi className="min-w-0 break-words text-sm font-medium">
+                      {standard}
+                    </bdi>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {allSpecs.length > 0 && (
+              <dl className="mt-4 divide-y overflow-hidden rounded-xl border bg-white">
+                {allSpecs.map((spec) => {
+                  const attribute = attributes.find(
+                    (item) => item.id === spec.attributeId,
+                  )
+                  const specUnit = units.find(
+                    (item) => item.id === attribute?.unitId,
+                  )
+                  const formatted = formatSpecValue(
+                    spec,
+                    attribute,
+                    specUnit,
+                    lang,
+                  )
+                  return (
+                    <div
+                      key={spec.attributeId}
+                      className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-4"
+                    >
+                      <dt className="text-muted-foreground">
+                        {formatted.label}
+                      </dt>
+                      <dd className="font-semibold wrap-anywhere" dir="auto">
+                        {formatted.value}
+                      </dd>
+                    </div>
+                  )
+                })}
+              </dl>
+            )}
+          </section>
+        )}
+        {(product.applications?.[lang] || product.benefits?.[lang]) && (
+          <div className="mt-10 grid gap-6 sm:grid-cols-2">
+            {product.applications?.[lang] && (
+              <section className="rounded-2xl border bg-white p-5 sm:p-6">
+                <h2 className="text-xl font-bold">
+                  {c('الاستخدامات', 'Applications')}
+                </h2>
+                <p className="mt-2 whitespace-pre-line leading-7 text-muted-foreground">
+                  {product.applications[lang]}
+                </p>
+              </section>
+            )}
+            {product.benefits?.[lang] && (
+              <section className="rounded-2xl border bg-white p-5 sm:p-6">
+                <h2 className="text-xl font-bold">
+                  {c('المزايا', 'Benefits')}
+                </h2>
+                <p className="mt-2 whitespace-pre-line leading-7 text-muted-foreground">
+                  {product.benefits[lang]}
+                </p>
+              </section>
+            )}
           </div>
-        </section>
-      )}
-      {zoom && (
-        <ProductImageDialog
-          src={displayedImage}
-          alt={product.name[lang]}
-          onClose={() => setZoom(false)}
-        />
-      )}
+        )}
+        {!!product.sectorIds?.length && (
+          <div className="mt-6 flex flex-wrap gap-2">
+            {product.sectorIds.map((id) => {
+              const sector = sectors.find((item) => item.id === id)
+              return (
+                sector && (
+                  <Link
+                    className="btn-outline"
+                    key={id}
+                    href={`/sectors/${sector.slug || sector.id}`}
+                  >
+                    {sector.name[lang]}
+                  </Link>
+                )
+              )
+            })}
+          </div>
+        )}
+        {relatedProducts.length > 0 && (
+          <section className="mt-11 border-t pt-7 sm:mt-14">
+            <h2 className="mb-5 text-2xl font-bold sm:text-3xl">
+              {c('منتجات مرتبطة', 'Related products')}
+            </h2>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {relatedProducts.map((related) => (
+                <Link
+                  href={`/products/${related.slug || related.id}`}
+                  key={related.id}
+                  className="catalog-card group transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-md focus-visible:outline-2"
+                >
+                  <div
+                    className={`${detailStyles.relatedImage} relative aspect-[16/10] border-b`}
+                  >
+                    <Image
+                      src={resolveProductImage(related)}
+                      alt=""
+                      fill
+                      className="object-contain p-4"
+                      sizes="(min-width: 1024px) 30vw, (min-width: 640px) 46vw, 90vw"
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col gap-2 p-5">
+                    <h3
+                      className="font-bold group-hover:text-primary"
+                      dir="auto"
+                    >
+                      {related.name[lang]}
+                    </h3>
+                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                      {related.summary[lang]}
+                    </p>
+                    <span className="mt-auto inline-flex items-center gap-2 pt-2 text-sm font-semibold text-primary">
+                      {c('عرض المنتج', 'View product')}
+                      <DirectionArrow />
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+        {zoom && (
+          <ProductImageDialog
+            src={displayedImage}
+            alt={product.name[lang]}
+            onClose={() => setZoom(false)}
+          />
+        )}
+      </div>
     </div>
   )
 }
@@ -1184,19 +1242,26 @@ function ProductDocuments({ documents }: { documents: MediaItem[] }) {
       {documents.map((file) => (
         <li key={file.id}>
           <a
-            className="btn-outline"
+            className="inline-flex max-w-full items-center gap-2 rounded-xl border bg-muted px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/50 hover:bg-surface-tint"
             href={file.url}
             target="_blank"
             rel="noopener noreferrer"
             title={file.name}
             aria-label={`${file.kind}: ${file.name}`}
           >
-            <FileText className="size-4" aria-hidden="true" />
+            <FileText
+              className="size-4 shrink-0 text-primary"
+              aria-hidden="true"
+            />
             {file.kind === 'TDS'
               ? c('النشرة الفنية', 'Technical data sheet')
               : file.kind === 'SDS'
                 ? c('نشرة السلامة', 'Safety data sheet')
                 : c('تنزيل الكتالوج', 'Download catalog')}
+            <ArrowDownToLine
+              className="size-3.5 shrink-0 text-primary"
+              aria-hidden="true"
+            />
           </a>
         </li>
       ))}

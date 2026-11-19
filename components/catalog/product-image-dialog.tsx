@@ -18,11 +18,10 @@ export function ProductImageDialog({
   useEffect(() => {
     const element = dialog.current
     const previousOverflow = document.body.style.overflow
-    element?.showModal()
+    if (element && !element.open) element.showModal()
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = previousOverflow
-      element?.close()
     }
   }, [])
   return (
@@ -49,7 +48,7 @@ export function ProductImageDialog({
           alt={alt}
           fill
           sizes="(min-width: 768px) 600px, 90vw"
-          className="object-cover"
+          className="object-contain"
         />
       </div>
     </dialog>
