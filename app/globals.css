@@ -903,6 +903,7 @@ html[dir='ltr'] .industry-shade {
 @layer components {
   .catalog-layout {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 1.5rem;
   }
@@ -924,7 +925,7 @@ html[dir='ltr'] .industry-shade {
   }
 }
 @media (min-width: 1024px) {
-  .catalog-layout {
+  .catalog-layout[data-filters-open='true'] {
     grid-template-columns: 15rem minmax(0, 1fr);
   }
 }
