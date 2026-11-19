@@ -816,18 +816,27 @@ export function ProductDetail({ slug }: { slug: string }) {
         <div className="min-w-0">
           <button
             type="button"
-            className="relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden rounded-[16px] bg-muted"
+            className="relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden rounded-[12px] bg-muted"
             onClick={() => setZoom(true)}
             aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
           >
             <Image
               src={displayedImage}
-              alt={product.name[lang]}
+              alt=""
+              aria-hidden="true"
               fill
-              priority
+              loading="eager"
               sizes="(min-width: 1024px) 45vw, 90vw"
-              className="object-contain p-3 sm:p-5"
+              className="pointer-events-none scale-110 object-cover opacity-55 blur-xl"
             />
+            <span className="absolute inset-3 flex items-center justify-center sm:inset-5">
+              <img
+                src={displayedImage}
+                alt={product.name[lang]}
+                fetchPriority="high"
+                className="block h-auto max-h-full w-auto max-w-full rounded-[8px]"
+              />
+            </span>
           </button>
           {galleryImages.length > 1 && (
             <div className="mt-3 flex flex-wrap gap-2">
@@ -835,7 +844,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 <button
                   type="button"
                   key={src}
-                  className={`relative size-14 overflow-hidden rounded-[8px] border-2 sm:size-16 ${displayedImage === src ? 'border-primary' : 'border-transparent'}`}
+                  className={`relative size-14 overflow-hidden rounded-[6px] border-2 sm:size-16 ${displayedImage === src ? 'border-primary' : 'border-transparent'}`}
                   onClick={() => setSelectedImage(src)}
                   aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
                 >
@@ -909,7 +918,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                       type="button"
                       key={option.id}
                       aria-pressed={variant.id === option.id}
-                      className={`${variant.id === option.id ? 'btn-primary' : 'btn-outline'} min-h-11 min-w-14 rounded-lg px-3.5 py-2`}
+                      className={`${variant.id === option.id ? 'btn-primary' : 'btn-outline'} min-h-11 min-w-14 rounded-[10px] px-3.5 py-2`}
                       onClick={() => {
                         setVariantId(option.id)
                         setSelectedImage('')
@@ -935,7 +944,7 @@ export function ProductDetail({ slug }: { slug: string }) {
                 {c('الكمية المطلوبة', 'Required quantity')} (
                 {unit?.name[lang] || c('وحدة', 'Unit')})
               </label>
-              <div className="inline-flex min-h-11 items-center rounded-lg border">
+              <div className="inline-flex min-h-11 items-center rounded-[10px] border">
                 <button
                   type="button"
                   className="quantity-button"
@@ -990,7 +999,7 @@ export function ProductDetail({ slug }: { slug: string }) {
             </div>
             <button
               type="button"
-              className="btn-primary min-h-11 w-full rounded-lg px-4 py-2"
+              className="btn-primary min-h-11 w-full rounded-[10px] px-4 py-2"
               disabled={!validQuantity || full || unavailable}
               onClick={() => {
                 addToCart(variant.id, quantity, {
@@ -1057,7 +1066,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               {standards.map((standard) => (
                 <li
                   key={standard}
-                  className="flex min-w-0 items-center gap-2.5 rounded-lg border bg-muted/45 px-3.5 py-3"
+                  className="flex min-w-0 items-center gap-2.5 rounded-[10px] border bg-muted/45 px-3.5 py-3"
                 >
                   <ListChecks
                     className="size-5 shrink-0 text-primary"
@@ -1071,7 +1080,7 @@ export function ProductDetail({ slug }: { slug: string }) {
             </ul>
           )}
           {allSpecs.length > 0 && (
-            <dl className="spec-list mt-3 overflow-hidden rounded-lg border">
+            <dl className="spec-list mt-3 overflow-hidden rounded-[10px] border">
               {allSpecs.map((spec) => {
                 const attribute = attributes.find(
                   (item) => item.id === spec.attributeId,
@@ -1146,7 +1155,7 @@ export function ProductDetail({ slug }: { slug: string }) {
               <Link
                 href={`/products/${related.slug || related.id}`}
                 key={related.id}
-                className="catalog-card group rounded-[16px]"
+                className="catalog-card group rounded-[12px]"
               >
                 <div className="relative aspect-[16/10] border-b bg-muted">
                   <Image
@@ -1192,7 +1201,7 @@ function ProductDocuments({ documents }: { documents: MediaItem[] }) {
       {documents.map((file) => (
         <li key={file.id}>
           <a
-            className="btn-outline min-h-11 rounded-lg px-3.5 py-2"
+            className="btn-outline min-h-11 rounded-[10px] px-3.5 py-2"
             href={file.url}
             target="_blank"
             rel="noopener noreferrer"
