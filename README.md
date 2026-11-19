@@ -1,30 +1,162 @@
 # M.A.S Engineering For Trade
 
-Arabic/English B2B product catalog and quote requests. Next.js 16, React 19, TypeScript, Supabase Auth/PostgreSQL/Storage.
+كتالوج B2B بالعربية والإنجليزية لإدارة المنتجات وطلبات عروض الأسعار والعملاء، مع لوحة إدارة ومحتوى مرتبط بقاعدة البيانات وملفات PDF رسمية. نطاق الـMVP هو الاستفسار والتوريد وعروض الأسعار؛ لا يتضمن دفعًا إلكترونيًا.
+
+**الموقع:** [mas-xi.vercel.app](https://mas-xi.vercel.app) · **الإدارة:** [/admin](https://mas-xi.vercel.app/admin)
+
+آخر تحديث للتوثيق: **19 نوفمبر 2026**. آخر تحقق تشغيلي موثق: **18 نوفمبر 2026**، بعد دمج [PR #8](https://github.com/sayouuuuud/mas/pull/8).
+
+## الحالة الحالية
+
+نُشر تحديث الإدارة وربط المحتوى على Vercel، وطُبق تحديث قاعدة البيانات `20261118071701_mvp_integrated_workflows.sql`. نُقل المحتوى الموجود إلى قاعدة الإنتاج: **83 سجلًا، منها 21 صورة وشعارًا**، مع 15 تصنيفًا و12 علامة تجارية و6 قطاعات و3 مواقع. إعادة الاستيراد لم تنشئ سجلات إضافية.
+
+المحتوى الأصلي يضم مجموعات وأنواع منتجات، ولا يضم سجلات SKU أو مواصفات مصنّعين معتمدة؛ لذلك لم تُنشأ منتجات أو مقاسات افتراضية في الإنتاج.
+
+**استقبال العملاء ما زال يحتاج استكمال الآتي، وفق آخر تحقق موثق:**
+
+- اعتماد ونشر الخصوصية والشروط بالعربية والإنجليزية. النصوص محفوظة كمسودات، وإرسال الطلبات يحتاج نسخة خصوصية منشورة.
+- إعداد SMTP في Supabase Auth، ثم اختبار وصول دعوات الحساب واستعادة كلمة المرور لصندوق بريد فعلي.
+- إضافة المنتجات الفعلية ومتغيراتها ومقاساتها ومواصفاتها المعتمدة ونشرها من الإدارة.
+- استبدال بيانات حساب التجربة بحساب إدارة فعلي وبريد مملوك وكلمة مرور قوية.
+
+راجع [نتائج قبول الـMVP](docs/MVP-ACCEPTANCE-RESULTS.ar.md) للحالة الأحدث. [PROJECT_STATUS.md](PROJECT_STATUS.md) سجل لمراحل التنفيذ السابقة؛ بعض القيود والأرقام فيه تصف الحالة قبل تحديث 18 نوفمبر.
+
+## الإمكانيات المنفذة
+
+- **الكتالوج:** منتجات ومتغيرات SKU، تصنيفات متفرعة، علامات وقطاعات، بحث وفلاتر وصفحات نتائج ومقارنة وسلة طلب عرض سعر.
+- **إدارة المراجع:** اختيار قابل للبحث والترقيم، إضافة سريعة من النماذج، وربط المنتجات بالتصنيفات والعلامات والقطاعات.
+- **الصور والمستندات:** رفع من الجهاز داخل النماذج، مكتبة وسائط، صورة رئيسية ومعرض مرتب ومرفقات TDS وSDS وكتالوجات PDF.
+- **الطلبات والعملاء:** طلبات متعددة البنود أو بنود حرة، استفسارات، إيصال بعد الحفظ، منع تكرار الإرسال، إسناد ومتابعة وملاحظات وسجل أحداث.
+- **العلاقات:** ربط الطلبات والاستفسارات بجهات الاتصال والمؤسسات داخل معاملة واحدة، مع حفظ بيانات العميل القديمة وتاريخ المعاملات وحماية السجلات المرتبطة من الحذف.
+- **عروض الأسعار:** وصفان عربي وإنجليزي محفوظان، لغة وعملة للمستند، حسابات بالخادم، إصدار ورقم ومراجعات، وPDF خاص يحتفظ ببيانات الشركة وشعارها وقت الإصدار.
+- **المحتوى:** إعدادات الشركة والفروع والتنقل، وصور وشرائح وبطاقات ونقاط بالعربية والإنجليزية. تعديل المسودة يحافظ على النسخة المنشورة حتى نشر التعديل.
+- **الإدارة والأمان:** دور واجهة واحد `Admin` مع `Owner` داخليًا، وMFA افتراضي، وإدارة مفتاح الربط من `/admin/security`، وتدقيق وتعارض نسخ وتنبيه للتغييرات غير المحفوظة.
+- **الوحدات والمواصفات:** وحدات بيع وقياس أو الاستخدامين، دقة للكميات، وقوالب خواص اختيارية مع قواعد نشر.
+
+## التقنية
+
+| الجزء | التقنية |
+| --- | --- |
+| التطبيق والواجهات | Next.js 16.3.3، React 19، TypeScript، Tailwind CSS |
+| المصادقة والبيانات والملفات | Supabase Auth، PostgreSQL، Storage |
+| الصور والمستندات | Sharp، pdf-lib، خط عربي مضمّن |
+| الاختبارات | Node test runner، PostgreSQL 17 مع Docker، Playwright |
+| الاستضافة | Vercel |
+
+سجلات التطبيق ومساعداته داخل مخطط PostgreSQL الخاص `mas`، وتُكشف دوال RPC محددة فقط. المتصفح يتعامل مع API التطبيق، وتخزين الزائر المحلي يقتصر على سلة الطلب والمقارنة وآخر إيصال ولغة العرض.
+
+## التشغيل المحلي
+
+المتطلبات: **Node.js 24** و**pnpm 12.3.4** المثبت في `package.json`. تحتاج Docker لاختبارات قاعدة البيانات، ومتصفح Chromium لاختبارات الواجهة.
 
 ```sh
+git clone https://github.com/sayouuuuud/mas.git
+cd mas
 pnpm install --frozen-lockfile
+cp .env.example .env.local
+```
+
+اضبط متغيرات البيئة في `.env.local`، ثم شغّل:
+
+```sh
 pnpm dev
+```
+
+افتح [localhost:3000](http://localhost:3000). التشغيل الإنتاجي محليًا:
+
+```sh
+pnpm build
+pnpm start
+```
+
+### إعداد البيئة
+
+الأسماء المرجعية في [.env.example](.env.example). لا ترفع القيم الفعلية أو ملفات البيئة إلى GitHub.
+
+| المتغير | الاستخدام |
+| --- | --- |
+| `SUPABASE_URL` | رابط مشروع Supabase |
+| `SUPABASE_PUBLISHABLE_KEY` | المفتاح العام لعميل Supabase |
+| `SUPABASE_SECRET_KEY` | اعتماد الخادم للعمليات المميزة؛ لا يُكشف للمتصفح |
+| `SITE_URL` | أصل الموقع، مثل `http://localhost:3000` محليًا أو دومين الإنتاج عبر HTTPS |
+| `RATE_LIMIT_SECRET` | سر مستقل لا يقل عن 32 محرفًا لحدود الاستخدام |
+| `CRON_SECRET` | سر مستقل لا يقل عن 32 محرفًا لتشغيل المهام |
+| `MEDIA_SCAN_MODE` | `required` افتراضيًا، أو `validation_only` عند اختياره صراحة |
+| `MEDIA_SCANNER_URL` و`MEDIA_SCANNER_KEY` | عنوان HTTPS واعتماد فاحص الملفات عند استخدام `required` |
+
+يدعم التطبيق بعض أسماء Supabase البديلة القديمة؛ تفاصيلها في [lib/server/environment.ts](lib/server/environment.ts). لا تضع اعتماد الخادم أو كلمات مرور البريد أو أسرار المهام في متغيرات `NEXT_PUBLIC_*`.
+
+**وضع الملفات المعتمد للإنتاج والمعاينة هو `MEDIA_SCAN_MODE=validation_only`.** يستمر التحقق من النوع والحجم والبنية، وإعادة معالجة الصور ورفض PDF النشط، لكنه **لا يجري فحص فيروسات خارجيًا**. ملف المثال يحتفظ بالافتراضي `required`؛ في هذا الوضع لا تصبح الملفات جاهزة دون نجاح الفاحص الخارجي.
+
+### قاعدة البيانات وحساب الإدارة
+
+1. استخدم مشروع Supabase المقصود، وراجع وطبّق ملفات [supabase/migrations](supabase/migrations) بالترتيب قبل تشغيل الوظائف المعتمدة عليها. البناء لا يطبق migrations تلقائيًا.
+2. لإنشاء أول مالك في مشروع جديد، أنشئ مستخدم Auth فعليًا، واضبط `OWNER_USER_ID` و`OWNER_DISPLAY_NAME` واعتماد الخادم، ثم شغّل `pnpm bootstrap:owner` مع تحميل هذه المتغيرات في بيئة العملية. الأمر لا ينشئ مستخدم Auth تلقائيًا، ولا يوفر حسابًا أو كلمة مرور افتراضيين.
+3. أكمل ربط تطبيق المصادقة عند تسجيل الدخول. إدارة MFA تخص الحساب الحالي وتحتفظ بالتحقق قبل تبديل المفتاح أو تعطيل الاشتراط.
+4. اضبط إعدادات الشركة والوحدات والمراجع والمحتوى القانوني والمنتجات، ثم اختبر رحلة الطلب والمستند كاملة.
+
+SQL داخل `tests/database` مخصص لقواعد الاختبار المؤقتة فقط؛ لا يُستخدم لتهيئة قاعدة إنتاج.
+
+### نقل المحتوى الموجود
+
+السكربت [scripts/import-current-content.ts](scripts/import-current-content.ts) ينقل محتوى الموقع الأصلي والصور من المصدر إلى قاعدة البيانات وStorage. يحتاج اعتماد خادم، و`IMPORT_EXPECTED_PROJECT` المطابق للمشروع المقصود، وتشغيل Node بشرط `react-server`.
+
+- يتعرف على السجلات الموجودة ولا يستبدل تعديلات الإدارة.
+- يمرر الصور عبر الرفع والمعالجة الفعليين قبل ربطها.
+- لا ينشئ مستخدمين أو عملاء أو طلبات اختبار أو مواصفات SKU افتراضية.
+- لا ينشر الخصوصية أو الشروط ضمن الاستيراد.
+
+تفاصيل النتائج وحدود إعادة التشغيل في [تقرير القبول](docs/MVP-ACCEPTANCE-RESULTS.ar.md).
+
+## الاختبارات
+
+```sh
 pnpm typecheck
 pnpm test
-pnpm test:db # Docker; creates and removes its own isolated PostgreSQL container
+pnpm test:db
 pnpm build
 ```
 
-Use Node 24 and the pinned `pnpm@12.3.4`. The public and Admin workspaces call the backend API; visitor session state stores only the RFQ cart, comparison selection and last receipt. Real operation requires the configured Supabase project, reviewed migrations, an authorized Admin with MFA, approved business/legal data and a malware scanner. Build/test success does not create these prerequisites.
+`pnpm test:db` ينشئ ويحذف حاوية PostgreSQL معزولة، ويختبر migrations والصلاحيات والمعاملات والتزامن. لا يحل محل اختبار خدمات Auth وStorage الفعلية.
 
-Read [PROJECT_STATUS.md](PROJECT_STATUS.md) for verified results and outstanding release gates. The application is not yet certified ready for production use.
+لاختبارات المتصفح، اترك خادم التطوير يعمل، ثم شغّل في نافذة أخرى:
 
-For browser verification, start `pnpm dev`, then run `pnpm test:browser`. Set `PLAYWRIGHT_EXECUTABLE_PATH` if Chromium is not at `/usr/bin/chromium`. Workspace browser contracts intercept API responses; they are deliberately distinguished from live Supabase tests.
+```sh
+pnpm test:browser
+```
 
-- [MFA account controls and binding-key management (Arabic)](docs/MFA-MANAGEMENT.ar.md)
-- [Google SMTP setup for account emails (Arabic)](docs/GOOGLE-SMTP.ar.md)
-- [Privacy and terms drafts for review (Arabic)](docs/LEGAL-POLICIES.ar.md)
-- [Real Supabase/Auth/Storage/MFA/PDF verification results (Arabic)](docs/REAL-E2E-VERIFICATION.ar.md)
-- [Backend implementation, API and connection instructions (Arabic)](docs/BACKEND.ar.md)
-- [Product requirements](docs/PRD.ar.md)
-- [Frontend coverage](docs/FRONTEND-COMPLETENESS.ar.md)
-- [Environment variable names](.env.example)
-- API inventory: `GET /api/v1/openapi` (works before database configuration).
+اضبط `BASE_URL` إذا تغير عنوان التطبيق، و`PLAYWRIGHT_EXECUTABLE_PATH` إذا لم يكن Chromium في `/usr/bin/chromium`.
 
-Application records and helpers live in the private `mas` PostgreSQL schema. Only allowlisted RPCs are exposed. Never expose the Supabase server secret to the browser. SQL under `tests/database` is for disposable local tests only.
+| التحقق الموثق في 18 نوفمبر | النتيجة وحدودها |
+| --- | --- |
+| TypeScript وبناء الإنتاج | ناجحان؛ فحوصات GitHub وبناء Vercel نجحت بعد الدمج |
+| اختبارات النماذج والاستعلامات الأمامية | 10 اختبارات ناجحة |
+| اختبارات الخادم | 39 اختبارًا ناجحًا |
+| تكامل PostgreSQL والتزامن | ناجح، بما فيه منع التكرار والتعارض وحماية العلاقات والتاريخ بعد أول 48 سجلًا |
+| فحص صفحات المتصفح | 30 حالة صفحة/مقاس بالعربية والإنجليزية |
+| عقود مساحات العمل | API معترض للتحقق من الحفظ والتعارض والإصدار؛ لا يثبت تخزينًا حقيقيًا |
+| القبول بخدمات فعلية محليًا | رفع صورة ← نشر منتج ← طلب زائر ← عميل ومؤسسة ← عرض سعر ← تنزيل PDF، مع فحص 24 صفحة إدارة وعلاقات |
+| فحص الإنتاج بالقراءة | 16 حالة صفحة/مقاس، ومحتوى الشركة والمراجع والصور من قاعدة الإنتاج |
+
+اختبار الرحلة الفعلية في [tests/browser/live-acceptance.cjs](tests/browser/live-acceptance.cjs) يحتاج بيئة محلية معزولة وملف اعتماد خارجي عبر `E2E_CREDENTIALS_FILE`، ويمكن تحديد عنوان التطبيق عبر `E2E_URL`. ينشئ بيانات اختبار محلية، ويرفض عنوان تطبيق عامًا، ولا يعمل بمجرد تشغيل خادم التطوير دون تجهيز خدمات الاختبار. الأسرار والمخرجات تبقى خارج المستودع في `work/` المتجاهل.
+
+## التشغيل على Vercel
+
+- اضبط متغيرات البيئة للبيئات المقصودة، وراجع `SITE_URL` وروابط إعادة توجيه Supabase Auth عند تغيير الدومين.
+- SMTP الخاص بدعوات الحساب واستعادة كلمة المرور يُضبط في **Supabase Auth**. متغيرات SMTP في Vercel وحدها لا ترسل بريدًا في هذا التطبيق.
+- إعداد تشغيل المهام الدائمة موجود في [vercel.json](vercel.json)، ويستخدم `/api/v1/internal/jobs` مع `CRON_SECRET`.
+- `GET /api/v1/openapi` يعرض فهرس API حتى قبل إعداد قاعدة البيانات.
+- `GET /api/v1/health` يعيد `503 NOT_READY` عند عدم اكتمال المتطلبات التشغيلية. نجاح البناء لا يعني اكتمال بيانات التشغيل أو نشر السياسات أو وصول البريد.
+
+## المراجع
+
+- [نتائج قبول الإدارة وربط المحتوى](docs/MVP-ACCEPTANCE-RESULTS.ar.md)
+- [خطة مراجعة الإدارة والـMVP](docs/MVP-ADMIN-AUDIT-PLAN.ar.md)
+- [إدارة MFA ومفتاح الربط](docs/MFA-MANAGEMENT.ar.md)
+- [إعداد Google SMTP لرسائل الحساب](docs/GOOGLE-SMTP.ar.md)
+- [مسودات الخصوصية والشروط](docs/LEGAL-POLICIES.ar.md) و[النصوص بالعربية والإنجليزية](content/initial-legal-policies.json)
+- [التحقق السابق بخدمات Auth وStorage وMFA وPDF](docs/REAL-E2E-VERIFICATION.ar.md)
+- [الباك إند وAPI](docs/BACKEND.ar.md)
+- [متطلبات المنتج](docs/PRD.ar.md)
+- [تغطية الواجهات](docs/FRONTEND-COMPLETENESS.ar.md)
+- [سجل مراحل المشروع](PROJECT_STATUS.md)
