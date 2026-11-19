@@ -393,8 +393,8 @@ export function Catalog({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              className="btn-outline lg:hidden"
-              onClick={() => setFiltersOpen(!filtersOpen)}
+              className="btn-outline"
+              onClick={() => setFiltersOpen((open) => !open)}
               aria-expanded={filtersOpen}
               aria-controls="catalog-filters"
             >
@@ -422,10 +422,11 @@ export function Catalog({
             </label>
           </div>
         </div>
-        <div className="catalog-layout">
+        <div className="catalog-layout" data-filters-open={filtersOpen}>
           <aside
             id="catalog-filters"
-            className={`filter-panel ${filtersOpen ? '' : 'hidden lg:block'}`}
+            className="filter-panel"
+            hidden={!filtersOpen}
           >
             <div className="mb-6 flex justify-between">
               <h2 className="font-bold">
