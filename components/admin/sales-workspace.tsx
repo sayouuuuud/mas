@@ -92,9 +92,9 @@ const INQUIRY_STATUS_LABELS: Record<
   spam: { ar: 'غير مرغوب', en: 'Spam', tone: 'red' },
 }
 
-function toDatetimeLocalValue(iso?: string | null) {
-  if (!iso) return ''
-  const d = new Date(iso)
+function toDatetimeLocalValue(value?: string | Date | null) {
+  if (!value) return ''
+  const d = new Date(value)
   if (Number.isNaN(d.getTime())) return ''
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -523,7 +523,9 @@ export function RequestsPage({ id }: { id?: string }) {
   const [priority, setPriority] = useState<
     'low' | 'normal' | 'high' | 'urgent'
   >('normal')
-  const [followUpLocal, setFollowUpLocal] = useState('')
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [followUpTime, setFollowUpTime] = useState('')
+  const [followUpError, setFollowUpError] = useState('')
   const [contactId, setContactId] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
   const [nextStatus, setNextStatus] = useState('')
@@ -538,7 +540,12 @@ export function RequestsPage({ id }: { id?: string }) {
   useEffect(() => {
     if (!request) return
     setPriority(request.priority || 'normal')
-    setFollowUpLocal(toDatetimeLocalValue(request.followUpAt))
+    const [date = '', time = ''] = toDatetimeLocalValue(
+      request.followUpAt,
+    ).split('T')
+    setFollowUpDate(date)
+    setFollowUpTime(time)
+    setFollowUpError('')
     setContactId(request.contactId || '')
     setAssigneeId(request.assignedTo || '')
     const allowed = RFQ_TRANSITIONS[request.status] || []
@@ -593,22 +600,55 @@ export function RequestsPage({ id }: { id?: string }) {
   async function saveMetadata(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (busy || !request) return
-    setBusy(true)
     setFeedback('')
     setErrorMsg('')
+    setFollowUpError('')
+
+    let followUpIso: string | null = null
+    const clock = followUpTime
+      .trim()
+      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+      .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+
+    if (followUpDate || clock) {
+      const time = /^([01]?[0-9]|2[0-3]):?([0-5][0-9])$/.exec(clock)
+      if (!followUpDate || !time) {
+        setFollowUpError(
+          c(
+            'اختار تاريخ واكتب وقت صحيح بنظام 24 ساعة، مثل 14:30 أو 1430.',
+            'Choose a date and enter a valid 24-hour time, such as 14:30 or 1430.',
+          ),
+        )
+        return
+      }
+
+      const local = `${followUpDate}T${time[1].padStart(2, '0')}:${time[2]}`
+      const date = new Date(local)
+      if (toDatetimeLocalValue(date) !== local) {
+        setFollowUpError(
+          c(
+            'الموعد ده غير متاح في توقيت جهازك. اختار وقت تاني.',
+            'This date and time is unavailable in your device time zone. Choose another time.',
+          ),
+        )
+        return
+      }
+
+      followUpIso =
+        request.followUpAt && toDatetimeLocalValue(request.followUpAt) === local
+          ? request.followUpAt
+          : date.toISOString()
+    }
+
+    setBusy(true)
     try {
-      const followUpIso = followUpLocal
-        ? new Date(followUpLocal).toISOString()
-        : null
       await api(`/admin/quote-requests/${request.id}`, {
         method: 'PATCH',
         body: {
           version: request.version,
-          data: {
-            priority,
-            followUpAt: followUpIso,
-            contactId: contactId || null,
-          },
+          priority,
+          followUpAt: followUpIso,
+          contactId: contactId || null,
         },
       })
       await refreshAfterMutation()
@@ -1046,14 +1086,63 @@ export function RequestsPage({ id }: { id?: string }) {
                 <option value="urgent">{c('عاجلة', 'Urgent')}</option>
               </select>
             </Field>
-            <Field label={c('موعد المتابعة القادم', 'Next follow-up')}>
-              <input
-                type="datetime-local"
-                className="control"
-                value={followUpLocal}
-                onChange={(e) => setFollowUpLocal(e.target.value)}
-              />
-            </Field>
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-medium">
+                {c('موعد المتابعة القادم', 'Next follow-up')}
+              </legend>
+              <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-2">
+                <Field label={c('التاريخ', 'Date')}>
+                  <input
+                    type="date"
+                    dir="ltr"
+                    className="control min-w-0"
+                    value={followUpDate}
+                    onChange={(e) => {
+                      setFollowUpDate(e.target.value)
+                      setFollowUpError('')
+                    }}
+                  />
+                </Field>
+                <Field label={c('الساعة', 'Time')}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    dir="ltr"
+                    className="control min-w-0"
+                    placeholder="14:30"
+                    maxLength={5}
+                    value={followUpTime}
+                    onChange={(e) => {
+                      setFollowUpTime(e.target.value)
+                      setFollowUpError('')
+                    }}
+                  />
+                </Field>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+                <span className="text-muted-foreground">
+                  {c('24 ساعة بتوقيت جهازك', '24-hour time on your device')}
+                </span>
+                {(followUpDate || followUpTime) && (
+                  <button
+                    type="button"
+                    className="text-primary underline"
+                    onClick={() => {
+                      setFollowUpDate('')
+                      setFollowUpTime('')
+                      setFollowUpError('')
+                    }}
+                  >
+                    {c('مسح الموعد', 'Clear date and time')}
+                  </button>
+                )}
+              </div>
+              {followUpError && (
+                <p className="text-sm text-red-700" role="alert">
+                  {followUpError}
+                </p>
+              )}
+            </fieldset>
             <Field label={c('ربط بسجل عميل', 'Linked customer contact')}>
               <RemoteSelect
                 resource="customers"

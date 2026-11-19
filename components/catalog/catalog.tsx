@@ -812,7 +812,7 @@ export function ProductDetail({ slug }: { slug: string }) {
           </>
         )}
       </nav>
-      <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
+      <div className="page-entrance grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
         <div className="min-w-0">
           <button
             type="button"
@@ -1052,7 +1052,7 @@ export function ProductDetail({ slug }: { slug: string }) {
 
       {(standards.length > 0 || allSpecs.length > 0) && (
         <section
-          className="mt-8 border-t pt-5 sm:mt-10 sm:pt-6"
+          className="scroll-reveal mt-8 border-t pt-5 sm:mt-10 sm:pt-6"
           aria-labelledby="product-specifications"
         >
           <h2
@@ -1106,7 +1106,7 @@ export function ProductDetail({ slug }: { slug: string }) {
         </section>
       )}
       {(product.applications?.[lang] || product.benefits?.[lang]) && (
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
+        <div className="scroll-reveal mt-8 grid gap-5 sm:grid-cols-2">
           {product.applications?.[lang] && (
             <section>
               <h2 className="text-xl font-bold">
@@ -1146,7 +1146,7 @@ export function ProductDetail({ slug }: { slug: string }) {
         </div>
       )}
       {relatedProducts.length > 0 && (
-        <section className="mt-8 border-t pt-5 sm:mt-10 sm:pt-6">
+        <section className="scroll-reveal mt-8 border-t pt-5 sm:mt-10 sm:pt-6">
           <h2 className="mb-4 text-2xl leading-tight font-bold">
             {c('منتجات مرتبطة', 'Related products')}
           </h2>
