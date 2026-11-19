@@ -8,6 +8,7 @@ import { Header } from '@/components/site/header'
 import { Footer } from '@/components/site/footer'
 import { About } from '@/components/site/about'
 import { Sectors } from '@/components/site/sectors'
+import { ScrollEdgeBlur } from '@/components/site/scroll-edge-blur'
 import { WhatsAppFloat } from '@/components/site/whatsapp-float'
 import {
   DirectionArrow,
@@ -340,6 +341,7 @@ export function PublicPage({ path }: { path: string[] }) {
       </main>
       <ComparisonTray />
       <Footer />
+      <ScrollEdgeBlur />
       <WhatsAppFloat />
     </>
   )

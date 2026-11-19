@@ -8,6 +8,7 @@ import { Hero } from '@/components/site/hero'
 import { Partners } from '@/components/site/partners'
 import { Products } from '@/components/site/products'
 import { QuoteContact } from '@/components/site/quote-contact'
+import { ScrollEdgeBlur } from '@/components/site/scroll-edge-blur'
 import { Sectors } from '@/components/site/sectors'
 import { WhatsAppFloat } from '@/components/site/whatsapp-float'
 
@@ -15,7 +16,7 @@ export function HomePage() {
   return (
     <QuoteProvider>
       <Header />
-      <main id="main-content">
+      <main id="main-content" className="site-home">
         <Hero />
         <BrandMarquee />
         <About />
@@ -25,6 +26,7 @@ export function HomePage() {
         <QuoteContact />
       </main>
       <Footer />
+      <ScrollEdgeBlur />
       <WhatsAppFloat />
     </QuoteProvider>
   )
