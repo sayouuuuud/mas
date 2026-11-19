@@ -99,6 +99,7 @@ export const productInput = z
     modelCode: z.string().max(120).optional(),
     sectorIds: z.array(uuid).max(50).default([]),
     variants: z.array(variantInput).max(100).default([]),
+    standards: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
     specifications: z.array(spec).max(100).default([]),
     mediaIds: z.array(uuid).max(40).default([]),
     mainMediaId: uuid.nullable().optional(),

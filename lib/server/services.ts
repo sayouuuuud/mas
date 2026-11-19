@@ -81,6 +81,7 @@ export function safeProduct(row: Entity) {
     'media',
     'sectorIds',
     'relatedIds',
+    'standards',
     'specifications',
     'seoTitle',
     'seoDescription',
@@ -161,12 +162,13 @@ export class BackendService {
     version?: number,
   ) {
     permit(actor, resource)
+    let existing: Entity | undefined
     if (id) {
       assert(
         Number.isInteger(version) && Number(version) > 0,
         'An expected version is required.',
       )
-      await this.read(resource, id, actor)
+      existing = await this.read(resource, id, actor)
     }
     const data =
       resource === 'products'
@@ -175,6 +177,12 @@ export class BackendService {
             resourceSchemas[resource] as z.ZodType<Record<string, unknown>>,
             input,
           )
+    if (
+      resource === 'products' &&
+      existing?.standards &&
+      (data as ProductData).standards === undefined
+    )
+      (data as ProductData).standards = existing.standards as string[]
     if (
       id &&
       resource === 'products' &&
@@ -281,16 +289,18 @@ export class BackendService {
       'Select a category and brand before publication.',
     )
     assert(
-      product.variants.every((v) => !v.active || (v.unitId && v.sku.trim())),
-      'Active variants require a selling unit and SKU.',
+      product.variants.every((v) => !v.active || v.unitId),
+      'Active variants require a selling unit.',
     )
     assert(
       product.variants.some((v) => v.active),
       'At least one active variant is required.',
     )
+    const enteredSkus = product.variants
+      .map((v) => v.sku.toLowerCase())
+      .filter(Boolean)
     assert(
-      new Set(product.variants.map((v) => v.sku.toLowerCase())).size ===
-        product.variants.length,
+      new Set(enteredSkus).size === enteredSkus.length,
       'SKU values must be unique.',
     )
     assert(

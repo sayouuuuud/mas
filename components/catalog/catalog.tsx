@@ -16,7 +16,7 @@ import {
   Minus,
   Plus,
   FileText,
-  ShieldCheck,
+  ListChecks,
 } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useDemo, useCatalogData } from '@/components/demo/demo-provider'
@@ -621,22 +621,55 @@ export function ProductDetail({ slug }: { slug: string }) {
   })
 
   const product = detailQuery.data
+  const relatedIds =
+    product?.relatedIds?.filter((id) => id !== product.id) || []
   const relatedPath = product?.categoryId
     ? buildApiPath('/catalog/products', {
         category: product.categoryId,
         pageSize: 6,
       })
     : null
-  const relatedQuery = useLiveQuery(relatedPath, async () => {
-    if (!relatedPath) return []
-    return (await api<CatalogProduct[]>(relatedPath)).data
+  const relatedKey = product
+    ? `/catalog/products/related:${product.id}:${relatedIds.join(',')}:${relatedPath || ''}`
+    : null
+  const relatedQuery = useLiveQuery(relatedKey, async () => {
+    const selected: CatalogProduct[] = []
+    for (
+      let offset = 0;
+      offset < relatedIds.length && selected.length < 3;
+      offset += 3
+    ) {
+      const candidates = await Promise.allSettled(
+        relatedIds
+          .slice(offset, offset + 3)
+          .map(
+            async (id) =>
+              (await api<CatalogProduct>(`/catalog/products/${id}`)).data,
+          ),
+      )
+      for (const candidate of candidates)
+        if (candidate.status === 'fulfilled') selected.push(candidate.value)
+    }
+    if (selected.length >= 3 || !relatedPath) return selected.slice(0, 3)
+    try {
+      const { data } = await api<CatalogProduct[]>(relatedPath)
+      return [
+        ...selected,
+        ...data.filter(
+          (item) =>
+            item.id !== product?.id &&
+            !selected.some((row) => row.id === item.id),
+        ),
+      ].slice(0, 3)
+    } catch {
+      return selected
+    }
   })
 
   const [variantId, setVariantId] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
   const [zoom, setZoom] = useState(false)
-  const [tab, setTab] = useState('overview')
   const [selectedImage, setSelectedImage] = useState('')
 
   const variant =
@@ -724,11 +757,16 @@ export function ProductDetail({ slug }: { slug: string }) {
   const full =
     cart.length >= 30 && !cart.some((i) => i.variantId === variant.id)
 
-  const primaryImage = resolveProductImage(product)
+  const variantImage = variant.media?.find(
+    (item) => item.url && item.mime?.startsWith('image/'),
+  )?.url
+  const primaryImage = variantImage || resolveProductImage(product)
+  const displayedImage = selectedImage || primaryImage
   const galleryImages = Array.from(
     new Set(
       [
         primaryImage,
+        resolveProductImage(product),
         ...(product.media || [])
           .filter((m) => m.url && m.mime?.startsWith('image/'))
           .map((m) => m.url as string),
@@ -739,432 +777,428 @@ export function ProductDetail({ slug }: { slug: string }) {
     ),
   )
 
-  const documents = (product.media || []).filter(
-    (m) => m.url && m.mime === 'application/pdf',
-  )
-
+  const documentById = new Map<string, MediaItem>()
+  for (const media of [...(product.media || []), ...(variant.media || [])]) {
+    if (media.url && media.mime === 'application/pdf')
+      documentById.set(media.id, media)
+  }
+  const documents = [...documentById.values()]
   const allSpecs = [
     ...(product.specifications || []),
     ...(variant.specifications || []),
   ]
-
-  const relatedProducts = (relatedQuery.data || [])
-    .filter((p) => p.id !== product.id)
-    .slice(0, 3)
+  const standards = [...new Set(product.standards || [])]
+  const relatedProducts = relatedQuery.data || []
 
   return (
-    <>
-      <PageIntro
-        title={product.name[lang]}
-        eyebrow={brand?.name[lang] || 'M.A.S CATALOG'}
-        description={category?.description?.[lang]}
+    <div className="site-container page-section">
+      <nav
+        aria-label={c('مسار الصفحة', 'Breadcrumb')}
+        className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
       >
+        <Link className="hover:text-primary" href="/products">
+          {c('الكتالوج', 'Catalog')}
+        </Link>
         {category && (
-          <Link
-            href={`/categories/${category.slug || category.id}`}
-            className="btn-outline"
-          >
-            {category.name[lang]}
-            <DirectionArrow />
-          </Link>
+          <>
+            <span aria-hidden="true">/</span>
+            <Link
+              className="hover:text-primary"
+              href={`/categories/${category.slug || category.id}`}
+            >
+              {category.name[lang]}
+            </Link>
+          </>
         )}
-      </PageIntro>
-      <div className="site-container page-section">
-        <div className="grid gap-9 lg:grid-cols-2">
-          <div>
-            <button
-              type="button"
-              className="relative block aspect-square w-full overflow-hidden rounded-2xl bg-muted"
-              onClick={() => setZoom(true)}
-              aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
-            >
-              <Image
-                src={selectedImage || primaryImage}
-                alt={product.name[lang]}
-                fill
-                priority
-                sizes="(min-width: 1024px) 45vw, 90vw"
-                className="object-cover"
-              />
-              <span className="absolute bottom-4 start-4 rounded-full bg-white/95 px-4 py-2 text-sm">
-                {c('اضغط للتكبير', 'Click to enlarge')}
-              </span>
-            </button>
-            {galleryImages.length > 1 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {galleryImages.map((src, i) => (
-                  <button
-                    type="button"
-                    key={src}
-                    className={`relative size-16 overflow-hidden rounded-lg border-2 ${(selectedImage || primaryImage) === src ? 'border-primary' : 'border-transparent'}`}
-                    onClick={() => setSelectedImage(src)}
-                    aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
-                  >
-                    <Image
-                      src={src}
-                      alt=""
-                      fill
-                      sizes="64px"
-                      className="object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              {brand && (
-                <Link
-                  className="text-sm font-bold text-primary"
-                  href={`/brands/${brand.slug || brand.id}`}
+      </nav>
+      <div className="grid gap-9 lg:grid-cols-2">
+        <div>
+          <button
+            type="button"
+            className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-muted"
+            onClick={() => setZoom(true)}
+            aria-label={c('تكبير صورة المنتج', 'Enlarge product image')}
+          >
+            <Image
+              src={displayedImage}
+              alt={product.name[lang]}
+              fill
+              priority
+              sizes="(min-width: 1024px) 45vw, 90vw"
+              className="object-contain p-4 sm:p-7"
+            />
+          </button>
+          {galleryImages.length > 1 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {galleryImages.map((src, i) => (
+                <button
+                  type="button"
+                  key={src}
+                  className={`relative size-16 overflow-hidden rounded-lg border-2 ${displayedImage === src ? 'border-primary' : 'border-transparent'}`}
+                  onClick={() => setSelectedImage(src)}
+                  aria-label={`${c('عرض صورة', 'View image')} ${i + 1}`}
                 >
-                  {brand.name[lang]}
-                </Link>
-              )}
-              <Badge tone={unavailable ? 'neutral' : 'gold'}>
-                {unavailable
-                  ? c('غير متاح حاليًا', 'Currently unavailable')
-                  : variant.availability === 'available'
-                    ? c('متاح للتوريد', 'Available')
-                    : c('توريد حسب الطلب', 'Supply on request')}
-              </Badge>
+                  <Image
+                    src={src}
+                    alt=""
+                    fill
+                    sizes="64px"
+                    className="object-contain"
+                  />
+                </button>
+              ))}
             </div>
-            <h2 className="my-5 text-3xl font-bold">{product.name[lang]}</h2>
-            <p className="leading-8 text-muted-foreground">
-              {product.summary[lang]}
-            </p>
-            <p
-              dir="ltr"
-              className="my-6 text-start font-mono text-sm text-muted-foreground"
-            >
-              {variant.sku}
-            </p>
-            <div className="space-y-5 rounded-2xl border p-6">
-              <Field
-                label={c('اختر العبوة / المتغير', 'Choose pack / variant')}
+          )}
+        </div>
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            {brand && (
+              <Link
+                className="text-sm font-bold text-primary"
+                href={`/brands/${brand.slug || brand.id}`}
               >
-                <select
-                  className="control"
-                  value={variant.id}
-                  onChange={(e) => {
-                    setVariantId(e.target.value)
+                {brand.name[lang]}
+              </Link>
+            )}
+            <Badge tone={unavailable ? 'neutral' : 'gold'}>
+              {unavailable
+                ? c('غير متاح حاليًا', 'Currently unavailable')
+                : variant.availability === 'available'
+                  ? c('متاح للتوريد', 'Available')
+                  : c('توريد حسب الطلب', 'Supply on request')}
+            </Badge>
+          </div>
+          <h1 className="mt-3 text-3xl font-bold sm:text-4xl" dir="auto">
+            {product.name[lang]}
+          </h1>
+          {product.summary[lang] &&
+            product.summary[lang] !== product.description?.[lang] && (
+              <p className="mt-3 font-medium text-primary">
+                {product.summary[lang]}
+              </p>
+            )}
+          <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">
+            {product.description?.[lang] || product.summary[lang]}
+          </p>
+          {documents.length > 0 && (
+            <div className="mt-5">
+              <ProductDocuments documents={documents} />
+            </div>
+          )}
+          <div className="mt-6 space-y-4 border-t pt-5">
+            <fieldset>
+              <legend className="mb-2 text-sm font-bold">
+                {c('العبوات المتاحة', 'Available packs')}
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {product.variants.map((option) => {
+                  const measure = units.find(
+                    (item) => item.id === option.packUnitId,
+                  )
+                  const size =
+                    option.packQuantity && measure
+                      ? `${option.packQuantity} ${measure.name[lang]}`
+                      : ''
+                  const label = option.label[lang]
+                  return (
+                    <button
+                      type="button"
+                      key={option.id}
+                      aria-pressed={variant.id === option.id}
+                      className={
+                        variant.id === option.id ? 'btn-primary' : 'btn-outline'
+                      }
+                      onClick={() => {
+                        setVariantId(option.id)
+                        setSelectedImage('')
+                        setAdded(false)
+                      }}
+                    >
+                      <span dir="auto">{label || size}</span>
+                      {size && label !== size && (
+                        <span dir="auto" className="text-xs opacity-80">
+                          {size}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </fieldset>
+            <div>
+              <label
+                htmlFor="product-quantity"
+                className="mb-2 block text-sm font-bold"
+              >
+                {c('الكمية المطلوبة', 'Required quantity')} (
+                {unit?.name[lang] || c('وحدة', 'Unit')})
+              </label>
+              <div className="flex w-fit items-center rounded-lg border">
+                <button
+                  type="button"
+                  className="quantity-button"
+                  disabled={quantity <= minQty}
+                  onClick={() => {
+                    setQuantity((q) =>
+                      Math.max(minQty, Number((q - stepQty).toFixed(3))),
+                    )
                     setAdded(false)
                   }}
+                  aria-label={c('تقليل الكمية', 'Decrease quantity')}
                 >
-                  {product.variants.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label[lang]}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <div>
-                <label
-                  htmlFor="product-quantity"
-                  className="mb-2 block text-sm font-bold"
+                  <Minus className="size-4" />
+                </button>
+                <input
+                  id="product-quantity"
+                  className="w-24 bg-transparent text-center"
+                  type="number"
+                  min={minQty}
+                  step={stepQty}
+                  max={99999}
+                  value={Number.isNaN(quantity) ? '' : quantity}
+                  onChange={(e) => {
+                    setQuantity(e.target.valueAsNumber)
+                    setAdded(false)
+                  }}
+                />
+                <button
+                  type="button"
+                  className="quantity-button"
+                  disabled={quantity >= 99999}
+                  onClick={() => {
+                    setQuantity((q) =>
+                      Math.min(99999, Number((q + stepQty).toFixed(3))),
+                    )
+                    setAdded(false)
+                  }}
+                  aria-label={c('زيادة الكمية', 'Increase quantity')}
                 >
-                  {c('الكمية المطلوبة', 'Required quantity')} (
-                  {unit?.name[lang] || c('وحدة', 'Unit')})
-                </label>
-                <div className="flex w-fit items-center rounded-lg border">
-                  <button
-                    type="button"
-                    className="quantity-button"
-                    disabled={quantity <= minQty}
-                    onClick={() => {
-                      setQuantity((q) =>
-                        Math.max(minQty, Number((q - stepQty).toFixed(3))),
-                      )
-                      setAdded(false)
-                    }}
-                    aria-label={c('تقليل الكمية', 'Decrease quantity')}
-                  >
-                    <Minus className="size-4" />
-                  </button>
-                  <input
-                    id="product-quantity"
-                    className="w-24 bg-transparent text-center"
-                    type="number"
-                    min={minQty}
-                    step={stepQty}
-                    max={99999}
-                    value={Number.isNaN(quantity) ? '' : quantity}
-                    onChange={(e) => {
-                      setQuantity(e.target.valueAsNumber)
-                      setAdded(false)
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="quantity-button"
-                    disabled={quantity >= 99999}
-                    onClick={() => {
-                      setQuantity((q) =>
-                        Math.min(99999, Number((q + stepQty).toFixed(3))),
-                      )
-                      setAdded(false)
-                    }}
-                    aria-label={c('زيادة الكمية', 'Increase quantity')}
-                  >
-                    <Plus className="size-4" />
-                  </button>
-                </div>
-                {!validQuantity && (
-                  <p className="mt-2 text-sm text-red-700" role="alert">
-                    {c(
-                      `الحد الأدنى ${minQty} ومضاعفات ${stepQty} (حتى 99999).`,
-                      `Minimum ${minQty} in steps of ${stepQty} (up to 99999).`,
-                    )}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                className="btn-primary w-full"
-                disabled={!validQuantity || full || unavailable}
-                onClick={() => {
-                  addToCart(variant.id, quantity, {
-                    productId: product.id,
-                    productSlug: product.slug || product.id,
-                    productName: product.name,
-                    variantLabel: variant.label,
-                    sku: variant.sku,
-                    unitCode: unit?.code,
-                    unitName: unit?.name,
-                    precision,
-                    minQuantity: minQty,
-                    quantityStep: stepQty,
-                  })
-                  setAdded(true)
-                }}
-              >
-                {added ? (
-                  <Check className="size-4" />
-                ) : (
                   <Plus className="size-4" />
-                )}
-                {unavailable
-                  ? c('غير متاح للطلب حاليًا', 'Currently unavailable')
-                  : added
-                    ? c('أُضيف إلى الطلب', 'Added to request')
-                    : c('أضف لطلب عرض السعر', 'Add to quote request')}
-              </button>
-              <div aria-live="polite">
-                {added && (
-                  <Link
-                    className="text-sm font-bold text-primary underline"
-                    href="/request-quote"
-                  >
-                    {c('مراجعة طلب عرض السعر', 'Review quote request')}
-                  </Link>
-                )}
-                {full && (
-                  <p className="text-sm">
-                    {c(
-                      'وصلت إلى 30 بندًا. راجع طلبك أولًا.',
-                      'You have reached 30 items. Review your request first.',
-                    )}
-                  </p>
-                )}
+                </button>
               </div>
-              <p className="text-sm leading-7 text-muted-foreground">
-                {c(
-                  'السعر والتوفر النهائي بعد مراجعة الكمية والمواصفات. إضافة المنتج لا تحجز مخزونًا.',
-                  'Final pricing and availability depend on quantity and specification review. Adding a product does not reserve stock.',
-                )}
-              </p>
+              {!validQuantity && (
+                <p className="mt-2 text-sm text-red-700" role="alert">
+                  {c(
+                    `الحد الأدنى ${minQty} ومضاعفات ${stepQty} (حتى 99999).`,
+                    `Minimum ${minQty} in steps of ${stepQty} (up to 99999).`,
+                  )}
+                </p>
+              )}
             </div>
-            <div className="mt-6 flex gap-3 text-sm leading-7 text-muted-foreground">
-              <ShieldCheck
-                className="mt-1 size-5 shrink-0 text-primary"
-                aria-hidden
-              />
-              <p>
-                {c(
-                  'راجع متطلبات المعدة مع الفريق الفني قبل اعتماد البدائل أو المواصفات التشغيلية.',
-                  'Confirm equipment requirements with our technical team before finalizing specifications.',
-                )}
-              </p>
+            <button
+              type="button"
+              className="btn-primary w-full"
+              disabled={!validQuantity || full || unavailable}
+              onClick={() => {
+                addToCart(variant.id, quantity, {
+                  productId: product.id,
+                  productSlug: product.slug || product.id,
+                  productName: product.name,
+                  variantLabel: variant.label,
+                  sku: variant.sku,
+                  unitCode: unit?.code,
+                  unitName: unit?.name,
+                  precision,
+                  minQuantity: minQty,
+                  quantityStep: stepQty,
+                })
+                setAdded(true)
+              }}
+            >
+              {added ? (
+                <Check className="size-4" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              {unavailable
+                ? c('غير متاح للطلب حاليًا', 'Currently unavailable')
+                : added
+                  ? c('أُضيف إلى الطلب', 'Added to request')
+                  : c('أضف لطلب عرض السعر', 'Add to quote request')}
+            </button>
+            <div aria-live="polite">
+              {added && (
+                <Link
+                  className="text-sm font-bold text-primary underline"
+                  href="/request-quote"
+                >
+                  {c('مراجعة طلب عرض السعر', 'Review quote request')}
+                </Link>
+              )}
+              {full && (
+                <p className="text-sm">
+                  {c(
+                    'وصلت إلى 30 بندًا. راجع طلبك أولًا.',
+                    'You have reached 30 items. Review your request first.',
+                  )}
+                </p>
+              )}
             </div>
           </div>
         </div>
-        <section className="mt-14">
-          <div
-            className="flex gap-2 overflow-x-auto border-b pb-3"
-            role="tablist"
-            aria-label={c('معلومات المنتج', 'Product information')}
-          >
-            {[
-              ['overview', 'الوصف والاستخدام', 'Overview & applications'],
-              ['specs', 'المواصفات الفنية', 'Specifications'],
-              ['files', 'المستندات', 'Documents'],
-            ].map(([id, ar, en]) => (
-              <button
-                type="button"
-                key={id}
-                role="tab"
-                id={`tab-${id}`}
-                aria-selected={tab === id}
-                aria-controls={`panel-${id}`}
-                className={`rounded-lg px-5 py-3 text-sm whitespace-nowrap ${tab === id ? 'bg-primary text-white' : 'bg-muted'}`}
-                onClick={() => setTab(id)}
+      </div>
+
+      {(standards.length > 0 || allSpecs.length > 0) && (
+        <section className="mt-12" aria-labelledby="product-specifications">
+          <h2 id="product-specifications" className="mb-4 text-2xl font-bold">
+            {c('المواصفات', 'Specifications')}
+          </h2>
+          {standards.length > 0 && (
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {standards.map((standard) => (
+                <li
+                  key={standard}
+                  className="flex items-center gap-3 rounded-xl border bg-muted/45 p-4"
+                >
+                  <ListChecks
+                    className="size-5 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  <bdi className="min-w-0 break-words text-sm font-medium">
+                    {standard}
+                  </bdi>
+                </li>
+              ))}
+            </ul>
+          )}
+          {allSpecs.length > 0 && (
+            <dl className="spec-list mt-4">
+              {allSpecs.map((spec) => {
+                const attribute = attributes.find(
+                  (item) => item.id === spec.attributeId,
+                )
+                const specUnit = units.find(
+                  (item) => item.id === attribute?.unitId,
+                )
+                const formatted = formatSpecValue(
+                  spec,
+                  attribute,
+                  specUnit,
+                  lang,
+                )
+                return (
+                  <div key={spec.attributeId}>
+                    <dt>{formatted.label}</dt>
+                    <dd dir="auto">{formatted.value}</dd>
+                  </div>
+                )
+              })}
+            </dl>
+          )}
+        </section>
+      )}
+      {(product.applications?.[lang] || product.benefits?.[lang]) && (
+        <div className="mt-10 grid gap-6 sm:grid-cols-2">
+          {product.applications?.[lang] && (
+            <section>
+              <h2 className="text-xl font-bold">
+                {c('الاستخدامات', 'Applications')}
+              </h2>
+              <p className="mt-2 whitespace-pre-line leading-7 text-muted-foreground">
+                {product.applications[lang]}
+              </p>
+            </section>
+          )}
+          {product.benefits?.[lang] && (
+            <section>
+              <h2 className="text-xl font-bold">{c('المزايا', 'Benefits')}</h2>
+              <p className="mt-2 whitespace-pre-line leading-7 text-muted-foreground">
+                {product.benefits[lang]}
+              </p>
+            </section>
+          )}
+        </div>
+      )}
+      {!!product.sectorIds?.length && (
+        <div className="mt-6 flex flex-wrap gap-2">
+          {product.sectorIds.map((id) => {
+            const sector = sectors.find((item) => item.id === id)
+            return (
+              sector && (
+                <Link
+                  className="btn-outline"
+                  key={id}
+                  href={`/sectors/${sector.slug || sector.id}`}
+                >
+                  {sector.name[lang]}
+                </Link>
+              )
+            )
+          })}
+        </div>
+      )}
+      {relatedProducts.length > 0 && (
+        <section className="mt-16">
+          <h2 className="mb-6 text-2xl font-bold">
+            {c('منتجات مرتبطة', 'Related products')}
+          </h2>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {relatedProducts.map((related) => (
+              <Link
+                href={`/products/${related.slug || related.id}`}
+                key={related.id}
+                className="catalog-card group"
               >
-                {c(ar, en)}
-              </button>
+                <div className="relative aspect-[16/10] bg-muted">
+                  <Image
+                    src={resolveProductImage(related)}
+                    alt=""
+                    fill
+                    className="object-contain p-3"
+                    sizes="(min-width: 1024px) 30vw, (min-width: 640px) 46vw, 90vw"
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-2 p-4">
+                  <h3 className="font-bold group-hover:text-primary" dir="auto">
+                    {related.name[lang]}
+                  </h3>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {related.summary[lang]}
+                  </p>
+                  <span className="mt-auto inline-flex items-center gap-2 pt-2 text-sm font-semibold text-primary">
+                    {c('عرض المنتج', 'View product')}
+                    <DirectionArrow />
+                  </span>
+                </div>
+              </Link>
             ))}
           </div>
-          <div
-            role="tabpanel"
-            id={`panel-${tab}`}
-            aria-labelledby={`tab-${tab}`}
-            className="rounded-b-xl border-x border-b p-6 sm:p-8"
-          >
-            {tab === 'overview' ? (
-              <>
-                <h3 className="text-xl font-bold">
-                  {c('معلومات المنتج', 'Product overview')}
-                </h3>
-                <p className="my-4 max-w-3xl whitespace-pre-line leading-8 text-muted-foreground">
-                  {product.description?.[lang] || product.summary[lang]}
-                </p>
-                {product.applications?.[lang] && (
-                  <section className="mb-5">
-                    <h4 className="font-bold">
-                      {c('الاستخدامات', 'Applications')}
-                    </h4>
-                    <p className="mt-2 whitespace-pre-line leading-8 text-muted-foreground">
-                      {product.applications[lang]}
-                    </p>
-                  </section>
-                )}
-                {product.benefits?.[lang] && (
-                  <section className="mb-5">
-                    <h4 className="font-bold">
-                      {c('الخصائص والفوائد', 'Features & benefits')}
-                    </h4>
-                    <p className="mt-2 whitespace-pre-line leading-8 text-muted-foreground">
-                      {product.benefits[lang]}
-                    </p>
-                  </section>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {(product.sectorIds || []).map((id) => {
-                    const sector = sectors.find((s) => s.id === id)
-                    if (!sector) return null
-                    return (
-                      <Link
-                        className="rounded-full bg-muted px-4 py-2 text-sm hover:bg-surface-tint"
-                        key={id}
-                        href={`/sectors/${sector.slug || sector.id}`}
-                      >
-                        {sector.name[lang]}
-                      </Link>
-                    )
-                  })}
-                </div>
-              </>
-            ) : tab === 'specs' ? (
-              <dl className="spec-list">
-                {allSpecs.map((s) => {
-                  const attr = attributes.find((a) => a.id === s.attributeId)
-                  const specUnit = attr?.unitId
-                    ? units.find((u) => u.id === attr.unitId)
-                    : undefined
-                  const formatted = formatSpecValue(s, attr, specUnit, lang)
-                  return (
-                    <div key={`${s.attributeId}-${String(s.value)}`}>
-                      <dt>{formatted.label}</dt>
-                      <dd dir="auto">{formatted.value}</dd>
-                    </div>
-                  )
-                })}
-                <div>
-                  <dt>{c('العبوة / المتغير', 'Pack / variant')}</dt>
-                  <dd dir="auto">{variant.label[lang]}</dd>
-                </div>
-                <div>
-                  <dt>SKU</dt>
-                  <dd dir="ltr">{variant.sku}</dd>
-                </div>
-              </dl>
-            ) : (
-              <ProductDocuments documents={documents} />
-            )}
-          </div>
         </section>
-        {relatedProducts.length > 0 && (
-          <section className="mt-16">
-            <h2 className="mb-6 text-2xl font-bold">
-              {c('منتجات من نفس المجموعة', 'More from this category')}
-            </h2>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {relatedProducts.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  attributes={attributes}
-                  units={units}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-        {zoom && (
-          <ProductImageDialog
-            src={selectedImage || primaryImage}
-            alt={product.name[lang]}
-            onClose={() => setZoom(false)}
-          />
-        )}
-      </div>
-    </>
+      )}
+      {zoom && (
+        <ProductImageDialog
+          src={displayedImage}
+          alt={product.name[lang]}
+          onClose={() => setZoom(false)}
+        />
+      )}
+    </div>
   )
 }
 
 function ProductDocuments({ documents }: { documents: MediaItem[] }) {
   const c = useCopy()
-  return documents.length ? (
-    <ul className="space-y-3">
+  return (
+    <ul className="flex flex-wrap gap-2">
       {documents.map((file) => (
-        <li
-          key={file.id}
-          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
-        >
-          <span className="flex items-center gap-3">
-            <FileText className="size-5 text-primary" />
-            <span>
-              {file.name}
-              <span className="ms-2 text-xs text-muted-foreground">
-                ({file.kind})
-              </span>
-            </span>
-          </span>
+        <li key={file.id}>
           <a
             className="btn-outline"
             href={file.url}
             target="_blank"
             rel="noopener noreferrer"
+            title={file.name}
+            aria-label={`${file.kind}: ${file.name}`}
           >
-            {c('عرض / تنزيل المستند', 'Open / download PDF')}
+            <FileText className="size-4" aria-hidden="true" />
+            {file.kind === 'TDS'
+              ? c('النشرة الفنية', 'Technical data sheet')
+              : file.kind === 'SDS'
+                ? c('نشرة السلامة', 'Safety data sheet')
+                : c('تنزيل الكتالوج', 'Download catalog')}
           </a>
         </li>
       ))}
     </ul>
-  ) : (
-    <div className="flex items-start gap-4">
-      <FileText className="size-8 shrink-0 text-primary" />
-      <div>
-        <h3 className="font-bold">
-          {c('لا توجد مستندات مرتبطة', 'No linked documents')}
-        </h3>
-        <p className="mt-2 text-muted-foreground">
-          {c(
-            'اطلب النشرة الفنية (TDS / SDS) ضمن طلب عرض السعر عند الحاجة.',
-            'Request technical or safety data sheets (TDS / SDS) with your quote request.',
-          )}
-        </p>
-      </div>
-    </div>
   )
 }

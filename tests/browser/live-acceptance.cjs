@@ -3,7 +3,7 @@ const fs = require('node:fs'),
   assert = require('node:assert/strict'),
   crypto = require('node:crypto'),
   { chromium } = require('playwright')
-fs.mkdirSync('work/mvp-acceptance',{recursive:true})
+fs.mkdirSync('work/mvp-acceptance', { recursive: true })
 const base = process.env.E2E_URL || 'http://localhost:3100',
   creds = JSON.parse(
     fs.readFileSync(
@@ -42,7 +42,7 @@ function totp(s) {
     await ctx.addCookies([{ name: 'mas-lang', value: 'en', url: base }])
     const p = await ctx.newPage()
     p.setDefaultTimeout(20000)
-    p.on('dialog',dialog=>dialog.accept())
+    p.on('dialog', (dialog) => dialog.accept())
     await p.goto(base + '/admin/login', { waitUntil: 'networkidle' })
     await p.getByLabel('Email address', { exact: true }).fill(creds.email)
     await p.getByLabel('Password', { exact: true }).fill(creds.password)
@@ -117,7 +117,15 @@ function totp(s) {
     await p.goto(base + '/admin/products/' + product.id, {
       waitUntil: 'networkidle',
     })
-    await p.getByRole('tab').nth(4).click()
+    await p.getByRole('tab', { name: 'Specifications', exact: true }).click()
+    await p
+      .getByLabel('Specifications and standards')
+      .fill('TEST API SN/CF\nTEST ACEA A3/B4')
+    await p.getByRole('tab', { name: 'Packs & sizes', exact: true }).click()
+    await p.getByLabel('Pack size', { exact: true }).fill('4')
+    await p.getByRole('button', { name: 'Add size', exact: true }).click()
+    await p.getByRole('heading', { name: '4 Litre', exact: true }).waitFor()
+    await p.getByRole('tab', { name: 'Product details', exact: true }).click()
     const mediaResponse = p.waitForResponse(
       (r) => r.url().includes('/admin/media/') && r.url().endsWith('/complete'),
     )
@@ -146,6 +154,49 @@ function totp(s) {
     assert.equal(publicProduct.name.en, product.name.en)
     assert.ok(publicProduct.media[0].url)
     ok('Published product and processed image appear in public catalog')
+    assert.deepEqual(publicProduct.standards, [
+      'TEST API SN/CF',
+      'TEST ACEA A3/B4',
+    ])
+    const fourLitrePack = publicProduct.variants.find(
+      (variant) => variant.packQuantity === 4,
+    )
+    assert.equal(fourLitrePack.label.en, '4 Litre')
+    const productPage = await browser.newPage({
+      viewport: { width: 390, height: 844 },
+    })
+    await productPage.goto(base + '/en/products/' + product.slug, {
+      waitUntil: 'networkidle',
+    })
+    await productPage
+      .getByRole('heading', { name: 'Specifications', exact: true })
+      .waitFor()
+    await productPage.getByText('TEST API SN/CF', { exact: true }).waitFor()
+    await productPage
+      .getByRole('button', { name: '4 Litre', exact: true })
+      .click()
+    assert.equal(
+      await productPage
+        .getByRole('button', { name: '4 Litre', exact: true })
+        .getAttribute('aria-pressed'),
+      'true',
+    )
+    assert.equal(
+      await productPage.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+      false,
+    )
+    await productPage
+      .getByRole('button', { name: 'Add to quote request', exact: true })
+      .click()
+    await productPage
+      .getByRole('link', { name: 'Review quote request', exact: true })
+      .waitFor()
+    await productPage.close()
+    ok(
+      'Specifications and a generated pack round-trip from the editor to the public mobile product page and the RFQ cart',
+    )
     const oils = await api('/catalog/products?family=oils')
     assert.ok(!oils.some((x) => x.id === product.id))
     ok('Family filter excludes unrelated published product')

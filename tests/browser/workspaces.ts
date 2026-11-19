@@ -233,7 +233,9 @@ const writes: any[] = []
     await page.goto(`${base}/admin/products/${product.id}`, {
       waitUntil: 'networkidle',
     })
-    await page.getByRole('tab').nth(1).click()
+    await page
+      .getByText('Optional details and advanced settings', { exact: true })
+      .click()
     await page
       .getByLabel('Arabic applications (one per line)', { exact: true })
       .fill('تطبيق جديد')
@@ -243,7 +245,9 @@ const writes: any[] = []
     await page.getByText('Product saved successfully.').waitFor()
     assert.equal(product.applications.ar, 'تطبيق جديد')
     await page.reload({ waitUntil: 'networkidle' })
-    await page.getByRole('tab').nth(1).click()
+    await page
+      .getByText('Optional details and advanced settings', { exact: true })
+      .click()
     assert.equal(
       await page
         .getByLabel('Arabic applications (one per line)', { exact: true })
@@ -270,9 +274,15 @@ const writes: any[] = []
       'مدخلات محفوظة بعد التعارض',
     )
     conflict = false
-    await page.getByRole('button',{name:'Save changes',exact:true}).click()
-    await page.getByText('Product saved successfully.',{exact:true}).waitFor()
-    await page.goto(`${base}/admin/quote-requests/${request.id}`,{waitUntil:'networkidle'})
+    await page
+      .getByRole('button', { name: 'Save changes', exact: true })
+      .click()
+    await page
+      .getByText('Product saved successfully.', { exact: true })
+      .waitFor()
+    await page.goto(`${base}/admin/quote-requests/${request.id}`, {
+      waitUntil: 'networkidle',
+    })
     await page
       .getByPlaceholder(
         'Add an internal follow-up note persisted to the database…',

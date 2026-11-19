@@ -110,6 +110,7 @@ export type CatalogProduct = {
   modelCode?: string
   sectorIds: string[]
   variants: ProductVariant[]
+  standards?: string[]
   specifications: ProductSpec[]
   mediaIds?: string[]
   mainMediaId?: string | null
