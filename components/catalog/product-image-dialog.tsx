@@ -36,7 +36,7 @@ export function ProductImageDialog({
     >
       <button
         autoFocus
-        className="absolute end-3 top-3 z-10 rounded-full bg-white p-3 text-foreground"
+        className="absolute end-3 top-3 z-10 rounded-full bg-card p-3 text-foreground"
         onClick={() => dialog.current?.close()}
         aria-label={c('إغلاق الصورة', 'Close image')}
       >

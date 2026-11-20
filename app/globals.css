@@ -2,8 +2,12 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-/* Light-only site: keep `dark:` utilities tied to a class that is never set, so OS dark mode can't leak in. */
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark {
+  &:where(:root[data-theme='dark'] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]) *) { @slot; }
+  }
+}
 
 @theme inline {
   --font-sans: var(--site-font);
@@ -41,6 +45,28 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-surface-tint: var(--surface-tint);
+  --color-brand-dark: var(--brand-dark);
+  --color-on-brand: var(--on-brand);
+  --color-primary-hover: var(--primary-hover);
+  --color-logo-matte: var(--logo-matte);
+
+  --color-red-50: light-dark(#fef2f2, #3b242a);
+  --color-red-200: light-dark(#fecaca, #70424a);
+  --color-red-700: light-dark(#b91c1c, #ffa6a9);
+  --color-red-800: light-dark(#991b1b, #ffc0c0);
+  --color-amber-50: light-dark(#fffbeb, #352d20);
+  --color-amber-300: light-dark(#fcd34d, #766039);
+  --color-amber-700: light-dark(#b45309, #f6cf89);
+  --color-amber-800: light-dark(#92400e, #f6cf89);
+  --color-amber-900: light-dark(#78350f, #fbe1ab);
+  --color-amber-950: light-dark(#451a03, #ffebc0);
+  --color-emerald-50: light-dark(#ecfdf5, #19362e);
+  --color-emerald-200: light-dark(#a7f3d0, #356553);
+  --color-emerald-700: light-dark(#047857, #9de8c8);
+  --color-emerald-800: light-dark(#065f46, #aef1d5);
+  --color-emerald-900: light-dark(#064e3b, #cdf8e5);
+  --color-slate-100: light-dark(#f1f5f9, #253946);
+  --color-slate-700: light-dark(#334155, #c0d3df);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -53,18 +79,23 @@
 :root {
   --font-tajawal: 'Tajawal';
   --font-inter: 'Inter Variable';
-  color-scheme: light;
+  color-scheme: light dark;
   --site-font: var(--font-tajawal), sans-serif;
-  --background: #ffffff;
-  --foreground: #172f3a;
-  --primary: #267f92;
-  --accent: #bd9f58;
-  --muted: #f2f5f6;
-  --card: var(--background);
+  --background: light-dark(#ffffff, #101c23);
+  --foreground: light-dark(#172f3a, #edf4f6);
+  --primary: light-dark(#267f92, #6bcbdc);
+  --accent: light-dark(#bd9f58, #dfbd73);
+  --muted: light-dark(#f2f5f6, #233641);
+  --card: light-dark(#ffffff, #192b35);
+  --brand-dark: #172f3a;
+  --on-brand: #ffffff;
+  --primary-hover: light-dark(#172f3a, #a2e2ee);
+  --logo-matte: light-dark(transparent, #ecf1f3);
+  --admin-canvas: light-dark(#f5f7f8, #101c23);
   --card-foreground: var(--foreground);
-  --popover: var(--background);
+  --popover: var(--card);
   --popover-foreground: var(--foreground);
-  --primary-foreground: var(--background);
+  --primary-foreground: light-dark(#ffffff, #0b232a);
   --secondary: var(--muted);
   --secondary-foreground: var(--foreground);
   --muted-foreground: color-mix(
@@ -72,10 +103,10 @@
     var(--foreground) 70%,
     var(--background)
   );
-  --accent-foreground: var(--foreground);
-  --destructive: var(--foreground);
+  --accent-foreground: var(--brand-dark);
+  --destructive: light-dark(#b42318, #ffa6a9);
   --border: color-mix(in srgb, var(--foreground) 15%, var(--background));
-  --input: color-mix(in srgb, var(--foreground) 24%, var(--background));
+  --input: light-dark(#c7cdd0, #607782);
   --ring: var(--primary);
   --radius: 0.75rem;
   --surface-tint: color-mix(in srgb, var(--primary) 6%, var(--background));
@@ -87,11 +118,18 @@
   --sidebar: var(--muted);
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--background);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: var(--accent);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--primary);
+}
+
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+
+@media print {
+  :root, :root[data-theme] { color-scheme: light; }
 }
 
 html[lang='en'] {
@@ -276,14 +314,14 @@ html[dir='rtl'] .slide-progress {
   background:
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--foreground) 65%, transparent),
+      color-mix(in srgb, var(--brand-dark) 65%, transparent),
       transparent 35%
     ),
     linear-gradient(
       to left,
-      color-mix(in srgb, var(--foreground) 88%, transparent),
-      color-mix(in srgb, var(--foreground) 55%, transparent) 50%,
-      color-mix(in srgb, var(--foreground) 28%, transparent)
+      color-mix(in srgb, var(--brand-dark) 88%, transparent),
+      color-mix(in srgb, var(--brand-dark) 55%, transparent) 50%,
+      color-mix(in srgb, var(--brand-dark) 28%, transparent)
     );
 }
 
@@ -291,14 +329,14 @@ html[dir='ltr'] .hero-shade {
   background:
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--foreground) 65%, transparent),
+      color-mix(in srgb, var(--brand-dark) 65%, transparent),
       transparent 35%
     ),
     linear-gradient(
       to right,
-      color-mix(in srgb, var(--foreground) 88%, transparent),
-      color-mix(in srgb, var(--foreground) 55%, transparent) 50%,
-      color-mix(in srgb, var(--foreground) 28%, transparent)
+      color-mix(in srgb, var(--brand-dark) 88%, transparent),
+      color-mix(in srgb, var(--brand-dark) 55%, transparent) 50%,
+      color-mix(in srgb, var(--brand-dark) 28%, transparent)
     );
 }
 
@@ -432,8 +470,8 @@ html[dir='ltr'] .notched[data-notch='start'] .notched-media {
 .product-shade {
   background: linear-gradient(
     to top,
-    color-mix(in srgb, var(--foreground) 96%, transparent),
-    color-mix(in srgb, var(--foreground) 82%, transparent) 42%,
+    color-mix(in srgb, var(--brand-dark) 96%, transparent),
+    color-mix(in srgb, var(--brand-dark) 82%, transparent) 42%,
     transparent 80%
   );
 }
@@ -441,18 +479,18 @@ html[dir='ltr'] .notched[data-notch='start'] .notched-media {
 .industry-shade {
   background: linear-gradient(
     to left,
-    color-mix(in srgb, var(--foreground) 97%, transparent) 5%,
-    color-mix(in srgb, var(--foreground) 88%, transparent) 45%,
-    color-mix(in srgb, var(--foreground) 35%, transparent)
+    color-mix(in srgb, var(--brand-dark) 97%, transparent) 5%,
+    color-mix(in srgb, var(--brand-dark) 88%, transparent) 45%,
+    color-mix(in srgb, var(--brand-dark) 35%, transparent)
   );
 }
 
 html[dir='ltr'] .industry-shade {
   background: linear-gradient(
     to right,
-    color-mix(in srgb, var(--foreground) 97%, transparent) 5%,
-    color-mix(in srgb, var(--foreground) 88%, transparent) 45%,
-    color-mix(in srgb, var(--foreground) 35%, transparent)
+    color-mix(in srgb, var(--brand-dark) 97%, transparent) 5%,
+    color-mix(in srgb, var(--brand-dark) 88%, transparent) 45%,
+    color-mix(in srgb, var(--brand-dark) 35%, transparent)
   );
 }
 
@@ -553,7 +591,7 @@ html[dir='ltr'] .industry-shade {
   }
   .demo-notice svg {
     margin-top: 0.25rem;
-    color: #7b642a;
+    color: light-dark(#7b642a, #efcf8b);
   }
   .btn-primary,
   .btn-outline {
@@ -571,17 +609,17 @@ html[dir='ltr'] .industry-shade {
       color 0.15s;
   }
   .btn-primary {
-    color: white;
+    color: var(--primary-foreground);
     background: var(--primary);
     border: 1px solid var(--primary);
   }
   .btn-primary:hover {
-    background: var(--foreground);
-    border-color: var(--foreground);
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
   }
   .btn-outline {
     border: 1px solid var(--border);
-    background: white;
+    background: var(--card);
     color: var(--foreground);
   }
   .btn-outline:hover {
@@ -612,7 +650,7 @@ html[dir='ltr'] .industry-shade {
     min-height: 2.8rem;
     border: 1px solid var(--input);
     border-radius: 0.5rem;
-    background: white;
+    background: var(--card);
     padding: 0.6rem 0.8rem;
     font-size: 0.9rem;
     font-weight: 400;
@@ -623,7 +661,7 @@ html[dir='ltr'] .industry-shade {
     outline-offset: 2px;
   }
   .control[aria-invalid='true'] {
-    border-color: #b42318;
+    border-color: var(--destructive);
   }
   select.control {
     padding-inline-end: 2rem;
@@ -644,7 +682,7 @@ html[dir='ltr'] .industry-shade {
     border: 1px solid var(--border);
     border-radius: 0.75rem;
     margin-block: 1.5rem;
-    background: white;
+    background: var(--card);
   }
   .catalog-search:focus-within {
     outline: 2px solid var(--primary);
@@ -662,7 +700,7 @@ html[dir='ltr'] .industry-shade {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: white;
+    background: var(--card);
     transition: box-shadow 0.2s;
   }
   .catalog-card:hover {
@@ -689,12 +727,20 @@ html[dir='ltr'] .industry-shade {
     color: var(--foreground);
   }
   .status-gold {
-    background: #fbf5e8;
-    color: #775b1d;
+    background: light-dark(#fbf5e8, #352d20);
+    color: light-dark(#775b1d, #f6d49b);
   }
   .status-green {
-    background: #edf7f2;
-    color: #1c6849;
+    background: light-dark(#edf7f2, #19362e);
+    color: light-dark(#1c6849, #aef1d5);
+  }
+  .status-red {
+    background: var(--color-red-50);
+    color: var(--color-red-800);
+  }
+  .status-blue {
+    background: var(--surface-tint);
+    color: var(--primary);
   }
   .filter-panel,
   .panel {
@@ -761,7 +807,7 @@ html[dir='ltr'] .industry-shade {
     inset-inline-start: 1rem;
     top: -6rem;
     z-index: 100;
-    background: white;
+    background: var(--card);
     color: var(--foreground);
     padding: 0.75rem 1rem;
     border: 2px solid var(--primary);
@@ -772,7 +818,7 @@ html[dir='ltr'] .industry-shade {
 }
 @layer components {
   .admin-root {
-    background: #f5f7f8;
+    background: var(--admin-canvas);
     min-height: 100dvh;
   }
   .admin-sidebar {
@@ -785,8 +831,8 @@ html[dir='ltr'] .industry-shade {
     display: flex;
     flex-direction: column;
     padding: 1.5rem 1rem;
-    background: var(--foreground);
-    color: white;
+    background: var(--brand-dark);
+    color: var(--on-brand);
     overflow-y: auto;
     transition: transform 0.2s;
   }
@@ -806,7 +852,7 @@ html[dir='ltr'] .industry-shade {
   }
   .admin-nav-active {
     background: var(--primary);
-    color: white;
+    color: var(--primary-foreground);
   }
   .admin-workspace {
     margin-inline-start: 16rem;
@@ -814,7 +860,7 @@ html[dir='ltr'] .industry-shade {
   }
   .admin-topbar {
     height: 4.5rem;
-    background: white;
+    background: var(--card);
     border-bottom: 1px solid var(--border);
     padding-inline: clamp(1rem, 3vw, 2.5rem);
     display: flex;
@@ -872,7 +918,7 @@ html[dir='ltr'] .industry-shade {
     vertical-align: middle;
   }
   .data-table tbody tr:hover {
-    background: #267f9204;
+    background: var(--surface-tint);
   }
   .admin-tabs {
     display: flex;
@@ -904,8 +950,8 @@ html[dir='ltr'] .industry-shade {
     grid-template-columns: 1fr 1fr;
   }
   .login-story {
-    background: var(--foreground);
-    color: white;
+    background: var(--brand-dark);
+    color: var(--on-brand);
     padding: clamp(2rem, 6vw, 5rem);
     display: flex;
     flex-direction: column;
@@ -939,7 +985,7 @@ html[dir='ltr'] .industry-shade {
     align-items: center;
     flex-direction: column;
     text-align: center;
-    background: white;
+    background: var(--card);
   }
 }
 @media (max-width: 1023px) {
@@ -1112,7 +1158,7 @@ html[dir='ltr'] .page-intro::before {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: linear-gradient(135deg, #edf5f6, #f9f7f0);
+  background: linear-gradient(135deg, light-dark(#edf5f6, #19313e), light-dark(#f9f7f0, #252e31));
   border-color: #267f9229;
 }
 .directory-card::after {
@@ -1130,12 +1176,12 @@ html[dir='ltr'] .page-intro::before {
   z-index: -1;
 }
 .directory-card:hover {
-  background: linear-gradient(135deg, #e0eef0, #f4f0e5);
+  background: linear-gradient(135deg, light-dark(#e0eef0, #213e4c), light-dark(#f4f0e5, #343932));
   transform: translateY(-3px);
   box-shadow: 0 12px 32px #172f3a0a;
 }
 .directory-card .text-primary\/30 {
-  color: #267f927a;
+  color: color-mix(in srgb, var(--primary) 60%, transparent);
 }
 .sector-card {
   min-height: 17rem;
@@ -1189,8 +1235,8 @@ html[dir='ltr'] .page-intro::before {
   margin-inline: auto;
   max-width: 36rem;
   z-index: 100;
-  background: var(--foreground);
-  color: white;
+  background: var(--brand-dark);
+  color: var(--on-brand);
   border: 1px solid #ffffff25;
   border-radius: 0.8rem;
   padding: 1rem 1.2rem;
@@ -1208,7 +1254,7 @@ html[dir='ltr'] .page-intro::before {
   width: min(32rem, calc(100% - 2rem));
   margin: auto;
   color: var(--foreground);
-  background: white;
+  background: var(--card);
 }
 .confirm-dialog::backdrop {
   background: #172f3a99;
@@ -1258,7 +1304,7 @@ html[dir='ltr'] .page-intro::before {
   max-width: calc(100% - 7rem);
   margin-inline: auto;
   padding: 0.65rem 1rem;
-  background: white;
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 1rem;
   box-shadow: 0 6px 30px #172f3a24;
@@ -1291,7 +1337,7 @@ html[dir='ltr'] .page-intro::before {
 
 @layer components {
   .filter-pill { @apply inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors; }
-  .filter-pill-active { @apply border-primary bg-primary text-white; }
+  .filter-pill-active { @apply border-primary bg-primary text-primary-foreground; }
   .admin-content { min-width: 0; }
   .admin-content .panel { min-width: 0; }
   .table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }

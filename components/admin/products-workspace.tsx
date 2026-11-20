@@ -238,7 +238,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
         </p>
       )}
 
-      <div className="panel bg-white">
+      <div className="panel bg-card">
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_200px]">
           <input
             className="control"
@@ -1032,7 +1032,7 @@ function ProductEditor({ id }: { id: string }) {
         id={`product-panel-${tab}`}
         role="tabpanel"
         aria-labelledby={`product-tab-${tab}`}
-        className="panel space-y-6 bg-white"
+        className="panel space-y-6 bg-card"
       >
         {tab === 0 && (
           <div className="space-y-6">

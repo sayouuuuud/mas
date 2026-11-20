@@ -159,7 +159,7 @@ function QuotationsList() {
       </div>
 
       {(recentRequestsQuery.data || []).length > 0 && (
-        <details className="panel mb-6 bg-white">
+        <details className="panel mb-6 bg-card">
           <summary className="cursor-pointer font-bold">
             {c(
               'بدء مسودة عرض سعر من طلب قائم',
@@ -184,7 +184,7 @@ function QuotationsList() {
         </details>
       )}
 
-      <div className="panel bg-white">
+      <div className="panel bg-card">
         <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_220px]">
           <input
             className="control"
@@ -872,7 +872,7 @@ function QuotationEditor({ id }: { id: string }) {
         </div>
       )}
 
-      <div className="panel mb-5 grid gap-4 bg-white sm:grid-cols-2">
+      <div className="panel mb-5 grid gap-4 bg-card sm:grid-cols-2">
         <Field label={c('لغة المستند', 'Document language')}>
           <select
             disabled={frozen}
@@ -901,7 +901,7 @@ function QuotationEditor({ id }: { id: string }) {
       </div>
       <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(15rem,30%)]">
         <div className="space-y-6">
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-bold">
                 {c('بنود عرض السعر والتسعير', 'Quotation lines & pricing')}
@@ -1085,7 +1085,7 @@ function QuotationEditor({ id }: { id: string }) {
             </div>
           </section>
 
-          <section className="panel grid gap-4 bg-white sm:grid-cols-2">
+          <section className="panel grid gap-4 bg-card sm:grid-cols-2">
             <Field label={c('تاريخ انتهاء الصلاحية', 'Valid until')}>
               <input
                 type="date"
@@ -1165,7 +1165,7 @@ function QuotationEditor({ id }: { id: string }) {
         </div>
 
         <aside className="space-y-6">
-          <div className="panel space-y-3 bg-white text-sm">
+          <div className="panel space-y-3 bg-card text-sm">
             <h2 className="text-lg font-bold">
               {c('ملخص القيمة المالية', 'Financial summary')}
             </h2>
@@ -1208,7 +1208,7 @@ function QuotationEditor({ id }: { id: string }) {
           </div>
 
           {status === 'issued' && (
-            <div className="panel space-y-4 bg-white">
+            <div className="panel space-y-4 bg-card">
               <h2 className="text-lg font-bold">
                 {c(
                   'تسجيل قناة التسليم اليدوي للعميل',
@@ -1262,7 +1262,7 @@ function QuotationEditor({ id }: { id: string }) {
           )}
 
           {status === 'sent' && (
-            <div className="panel space-y-4 bg-white">
+            <div className="panel space-y-4 bg-card">
               <h2 className="text-lg font-bold">
                 {c('قرار العميل النهائي', 'Customer decision')}
               </h2>

@@ -725,7 +725,7 @@ export function ContactPanel() {
   const { lang } = useLanguage()
   const c = useCopy()
   return (
-    <div className="panel bg-foreground text-white">
+    <div className="panel bg-brand-dark text-on-brand">
       <h2 className="text-xl font-bold">
         {c('تواصل مباشر', 'Direct contact')}
       </h2>

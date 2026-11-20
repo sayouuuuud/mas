@@ -13,10 +13,10 @@ export const actionVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-primary ps-2 pe-6 text-primary-foreground hover:bg-foreground',
+          'bg-primary ps-2 pe-6 text-primary-foreground hover:bg-primary-hover',
         accent:
-          'bg-accent ps-2 pe-6 text-accent-foreground hover:bg-background',
-        light: 'text-background hover:text-accent',
+          'bg-accent ps-2 pe-6 text-accent-foreground hover:bg-on-brand',
+        light: 'text-on-brand hover:text-accent',
         plain: 'text-primary hover:text-foreground',
       },
     },

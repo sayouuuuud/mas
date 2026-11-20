@@ -158,7 +158,7 @@ export function PublicPage({ path }: { path: string[] }) {
                         alt={b.name[lang]}
                         fill
                         sizes="200px"
-                        className="object-contain"
+                        className="object-contain dark:rounded-lg dark:bg-logo-matte dark:p-3"
                       />
                     ) : (
                       <span className="text-3xl font-bold text-primary">

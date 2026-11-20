@@ -22,9 +22,9 @@ export function Hero() {
       footer={
         <a
           href="#products"
-          className="group inline-flex items-center gap-3 text-sm text-background/85 transition-colors hover:text-background"
+          className="group inline-flex items-center gap-3 text-sm text-on-brand/85 transition-colors hover:text-on-brand"
         >
-          <span className="flex size-8 items-center justify-center rounded-full border border-background/30 transition-transform duration-300 motion-safe:group-hover:translate-y-0.5">
+          <span className="flex size-8 items-center justify-center rounded-full border border-on-brand/30 transition-transform duration-300 motion-safe:group-hover:translate-y-0.5">
             <ArrowDown className="size-4" aria-hidden="true" />
           </span>
           {t.hero.explore}
@@ -32,7 +32,7 @@ export function Hero() {
       }
     >
       <div className="hero-copy pointer-events-auto flex max-w-xl flex-col gap-6 md:gap-7">
-        <p className="flex items-center gap-3 text-sm font-medium text-background/85 md:text-base">
+        <p className="flex items-center gap-3 text-sm font-medium text-on-brand/85 md:text-base">
           <span aria-hidden="true" className="h-px w-8 bg-accent" />
           {company.name[lang]}
         </p>
@@ -51,7 +51,7 @@ export function Hero() {
             </span>
           ) : null}
         </h1>
-        <p className="max-w-lg text-lg leading-relaxed text-pretty text-background/90">
+        <p className="max-w-lg text-lg leading-relaxed text-pretty text-on-brand/90">
           {content ? (lang === 'ar' ? content.bodyAr : content.bodyEn) : ''}
         </p>
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3">

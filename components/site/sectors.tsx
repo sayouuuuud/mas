@@ -27,7 +27,7 @@ export function Sectors() {
     <section
       id="sectors"
       aria-labelledby="sectors-title"
-      className="relative isolate overflow-hidden bg-foreground text-background"
+      className="relative isolate overflow-hidden bg-brand-dark text-on-brand"
     >
       {image && (
         <Image
@@ -57,11 +57,11 @@ export function Sectors() {
             {sectors.map((sector) => (
               <li
                 key={sector.id}
-                className="border-t border-background/20 py-6 transition-colors duration-300 hover:border-accent"
+                className="border-t border-on-brand/20 py-6 transition-colors duration-300 hover:border-accent"
               >
                 <div className="flex flex-col gap-2">
                   <h3 className="text-lg font-bold">{sector.name[lang]}</h3>
-                  <p className="text-sm leading-relaxed text-background/75">
+                  <p className="text-sm leading-relaxed text-on-brand/75">
                     {sector.description[lang]}
                   </p>
                 </div>

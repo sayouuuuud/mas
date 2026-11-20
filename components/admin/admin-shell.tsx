@@ -41,6 +41,7 @@ import {
 } from 'lucide-react'
 import { MfaVerificationPanel, PasswordUpdatePanel } from './auth-states'
 import { Logo } from '@/components/logo'
+import { ThemeToggle } from '@/components/theme-provider'
 import { useLanguage } from '@/components/language-provider'
 import { ErrorState, Field, LoadingState, useCopy } from '@/components/demo/ui'
 import { authApi, BackendError, formatApiError } from '@/lib/api-client'
@@ -444,7 +445,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 {active ? c(active.ar, active.en) : c('لوحة الإدارة', 'Administration')}
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-4">
+              <ThemeToggle />
               <button
                 type="button"
                 className="icon-button"
@@ -547,14 +549,17 @@ export function AdminLogin({ reset = false }: { reset?: boolean }) {
         </Link>
       </section>
       <section className="login-form">
-        <button
-          type="button"
-          onClick={toggle}
-          className="mb-8 flex items-center gap-2 self-end text-sm"
-        >
-          <Globe className="size-4" />
-          {c('English', 'العربية')}
-        </button>
+        <div className="mb-8 flex items-center gap-2 self-end">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex min-h-10 items-center gap-2 text-sm"
+          >
+            <Globe className="size-4" />
+            {c('English', 'العربية')}
+          </button>
+        </div>
         <div className="mx-auto w-full max-w-md">
           <p className="eyebrow">{c('لوحة الإدارة', 'ADMINISTRATION')}</p>
           <h2 className="text-3xl font-bold">

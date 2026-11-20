@@ -23,7 +23,7 @@ type Row = {
 
 function IconBadge({ icon: Icon }: { icon: Row['icon'] }) {
   return (
-    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-background/20 text-accent">
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-on-brand/20 text-accent">
       <Icon className="size-4" />
     </span>
   )
@@ -76,7 +76,7 @@ export function ContactInfo() {
   ]
 
   return (
-    <div className="flex flex-col gap-8 rounded-[1.125rem] bg-foreground p-6 text-background sm:p-8 lg:p-10">
+    <div className="flex flex-col gap-8 rounded-[1.125rem] bg-brand-dark p-6 text-on-brand sm:p-8 lg:p-10">
       <div id="contact-direct" className="flex flex-col gap-3">
         <h3 className="text-lg font-bold">{c.title}</h3>
         <ul className="flex flex-col divide-y divide-background/10">
@@ -85,7 +85,7 @@ export function ContactInfo() {
               <>
                 <IconBadge icon={row.icon} />
                 <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-sm text-background/60">
+                  <span className="text-sm text-on-brand/60">
                     {row.label}
                   </span>
                   <span dir="ltr" className="truncate text-start font-bold">
@@ -113,25 +113,25 @@ export function ContactInfo() {
             )
           })}
         </ul>
-        <p className="flex items-center gap-2 text-sm text-background/70">
+        <p className="flex items-center gap-2 text-sm text-on-brand/70">
           <Headset className="size-4 shrink-0 text-accent" aria-hidden="true" />
           <span>
             {c.support}:{' '}
-            <span className="font-bold text-background">
+            <span className="font-bold text-on-brand">
               {company.support[lang]}
             </span>
           </span>
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 border-t border-background/15 pt-8">
+      <div className="flex flex-col gap-4 border-t border-on-brand/15 pt-8">
         <h3 className="text-lg font-bold">{c.addressesTitle}</h3>
         <ul className="flex flex-col gap-4">
           {locations.map((location) => (
             <li key={location.label} className="flex items-start gap-4">
               <IconBadge icon={location.icon} />
               <span className="flex flex-col gap-0.5">
-                <span className="text-sm text-background/60">
+                <span className="text-sm text-on-brand/60">
                   {location.label}
                 </span>
                 <span className="leading-relaxed font-medium">

@@ -51,7 +51,7 @@ export function StartupScreen() {
   return (
     <>
       <div
-        className="site-startup-screen fixed inset-0 z-[200] grid place-items-center bg-foreground px-6 text-background"
+        className="site-startup-screen fixed inset-0 z-[200] grid place-items-center bg-brand-dark px-6 text-on-brand"
         data-ready={ready ? '' : undefined}
         role="status"
         aria-hidden={ready ? true : undefined}
@@ -61,12 +61,12 @@ export function StartupScreen() {
             <span className="text-5xl leading-none font-bold tracking-wide sm:text-6xl">
               M.A.S
             </span>
-            <span className="text-sm text-background/85 sm:text-base">
+            <span className="text-sm text-on-brand/85 sm:text-base">
               Engineering For Trade
             </span>
           </div>
           <span
-            className="size-9 rounded-full border-2 border-background/20 border-t-background motion-safe:animate-spin"
+            className="size-9 rounded-full border-2 border-on-brand/20 border-t-on-brand motion-safe:animate-spin"
             aria-hidden="true"
           />
           <span className="sr-only">

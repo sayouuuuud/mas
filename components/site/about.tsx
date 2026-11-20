@@ -76,7 +76,7 @@ export function About() {
             href={phones.mobile.href}
             className="group flex w-fit items-center gap-4"
           >
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors duration-300 group-hover:bg-foreground">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors duration-300 group-hover:bg-primary-hover">
               <PhoneCall className="size-5" aria-hidden="true" />
             </span>
             <span className="flex flex-col">
@@ -105,13 +105,13 @@ export function About() {
               />
             )}
           </div>
-          <figcaption className="notched-tab flex items-center gap-3 bg-foreground px-4 text-background">
+          <figcaption className="notched-tab flex items-center gap-3 bg-brand-dark px-4 text-on-brand">
             <MapPin
               className="size-4 shrink-0 text-accent"
               aria-hidden="true"
             />
             <span className="flex flex-col leading-tight">
-              <span className="text-xs text-background/70">
+              <span className="text-xs text-on-brand/70">
                 {addresses.stores[lang]}
               </span>
               <span className="text-sm font-bold">{t.hero.stockNote}</span>

@@ -7,6 +7,8 @@ import { LANG_COOKIE, type Lang } from '@/lib/i18n'
 import './globals.css'
 import { DemoProvider } from '@/components/demo/demo-provider'
 import { StartupScreen } from '@/components/site/startup-screen'
+import { ThemeProvider } from '@/components/theme-provider'
+import { THEME_COOKIE } from '@/lib/theme'
 
 const siteOrigin = (() => {
   try {
@@ -47,8 +49,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light',
-  themeColor: '#267F92',
+  colorScheme: 'light dark',
   width: 'device-width',
   initialScale: 1,
 }
@@ -61,8 +62,12 @@ export default async function RootLayout({
   const cookieStore = await cookies()
   const lang: Lang = cookieStore.get(LANG_COOKIE)?.value === 'en' ? 'en' : 'ar'
 
+  const storedTheme = cookieStore.get(THEME_COOKIE)?.value
+  const theme = storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : undefined
+
   return (
     <html
+      data-theme={theme}
       data-scroll-behavior="smooth"
       lang={lang}
       dir={lang === 'ar' ? 'rtl' : 'ltr'}
@@ -70,10 +75,12 @@ export default async function RootLayout({
     >
       <body className="font-sans antialiased">
         <LanguageProvider initialLang={lang}>
-          <DemoProvider>
-            <StartupScreen />
-            {children}
-          </DemoProvider>
+          <ThemeProvider initialTheme={theme}>
+            <DemoProvider>
+              <StartupScreen />
+              {children}
+            </DemoProvider>
+          </ThemeProvider>
         </LanguageProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

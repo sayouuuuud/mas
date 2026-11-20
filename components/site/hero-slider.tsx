@@ -43,7 +43,7 @@ export function HeroSlider(props: HeroProps) {
       <section
         id="top"
         aria-labelledby="hero-title"
-        className="bg-foreground text-background"
+        className="bg-brand-dark text-on-brand"
       >
         <div className="site-container py-40">{props.children}</div>
       </section>
@@ -140,7 +140,7 @@ function LoadedHeroSlider({
         data-current-slide={current + 1}
         data-autoplay={running}
         style={{ '--slide-delay': `${SLIDE_DELAY}ms` } as CSSProperties}
-        className="isolate flex min-h-160 overflow-hidden bg-foreground text-background md:min-h-176 lg:min-h-192"
+        className="isolate flex min-h-160 overflow-hidden bg-brand-dark text-on-brand md:min-h-176 lg:min-h-192"
       >
         <div className="absolute inset-0 -z-20 [&_[data-slot=carousel-content]]:h-full">
           <CarouselContent className="ml-0 h-full">
@@ -171,7 +171,7 @@ function LoadedHeroSlider({
         />
         <div className="site-container pointer-events-none flex flex-col justify-end gap-12 pt-44 pb-6 md:gap-16 md:pt-52 md:pb-8">
           {children}
-          <div className="pointer-events-auto flex flex-col gap-4 border-t border-background/25 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="pointer-events-auto flex flex-col gap-4 border-t border-on-brand/25 pt-4 sm:flex-row sm:items-center sm:justify-between">
             {footer}
             <div className="flex items-center gap-4 md:gap-6">
               <p
@@ -179,12 +179,12 @@ function LoadedHeroSlider({
                 className="hidden items-baseline gap-3 text-sm lg:flex"
               >
                 <span dir="ltr" className="tabular-nums">
-                  <span className="font-bold text-background">
+                  <span className="font-bold text-on-brand">
                     {pad(current + 1)}
                   </span>
-                  <span className="text-background/60">{` / ${pad(images.length)}`}</span>
+                  <span className="text-on-brand/60">{` / ${pad(images.length)}`}</span>
                 </span>
-                <span className="text-background/85">
+                <span className="text-on-brand/85">
                   {slides[current]?.title[lang] || ''}
                 </span>
               </p>
@@ -204,7 +204,7 @@ function LoadedHeroSlider({
                       aria-current={active ? 'true' : undefined}
                       className="group/dot flex h-10 w-10 items-center md:w-14"
                     >
-                      <span className="relative h-0.5 w-full overflow-hidden rounded-full bg-background/30 transition-colors group-hover/dot:bg-background/60">
+                      <span className="relative h-0.5 w-full overflow-hidden rounded-full bg-on-brand/30 transition-colors group-hover/dot:bg-on-brand/60">
                         {active ? (
                           <span
                             key={running ? timerRun : 'static'}
@@ -223,7 +223,7 @@ function LoadedHeroSlider({
                 type="button"
                 onClick={() => setPaused((value) => !value)}
                 aria-label={paused ? t.hero.playSlides : t.hero.pauseSlides}
-                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-background/30 transition-colors hover:bg-background hover:text-foreground"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-on-brand/30 transition-colors hover:bg-on-brand hover:text-brand-dark"
               >
                 {paused ? (
                   <Play
