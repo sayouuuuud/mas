@@ -315,12 +315,21 @@ export function ProductWorkspace({ id }: { id?: string }) {
           />
         ) : (
           <div className="table-wrap">
+            <label className="mb-3 flex min-h-11 items-center gap-2 text-sm md:hidden">
+              <input
+                type="checkbox"
+                checked={rows.every((row) => selected.includes(row.id))}
+                onChange={(e) => setSelected(e.target.checked ? rows.map((row) => row.id) : [])}
+              />
+              {c('تحديد كل منتجات الصفحة', 'Select all products on this page')}
+            </label>
             <table className="data-table admin-responsive-table" role="table">
               <thead role="rowgroup">
                 <tr role="row">
                   <th role="columnheader" className="w-10">
                     <input
                       type="checkbox"
+                      className="hidden md:inline-block"
                       aria-label={c('تحديد الكل', 'Select all')}
                       checked={
                         rows.length > 0 &&

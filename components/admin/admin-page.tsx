@@ -8,6 +8,7 @@ import {
   ErrorState,
   Field,
   LoadingState,
+  REQUEST_STATUS_LABELS,
   useCopy,
 } from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
@@ -265,7 +266,7 @@ function Reports() {
                 return (
                   <div className="mb-4" key={status}>
                     <div className="mb-1.5 flex justify-between text-sm">
-                      <span className="font-mono">{status}</span>
+                      <span>{REQUEST_STATUS_LABELS[status] ? c(...REQUEST_STATUS_LABELS[status]) : status}</span>
                       <span className="font-semibold">{count}</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
