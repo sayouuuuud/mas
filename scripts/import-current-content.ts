@@ -9,6 +9,7 @@ import { configuration } from '../lib/server/environment'
 import { resourceSchemas, mediaInput } from '../lib/server/contracts'
 import { SupabaseRepository } from '../lib/server/supabase-repository'
 import { drainJobs } from '../lib/server/jobs'
+import catalogSubcategories from '../content/catalog-subcategories.json'
 
 const config = configuration()
 if (!config.serviceKey) throw new Error('Server credential required')
@@ -192,24 +193,14 @@ async function main() {
       },
       `category:${family}`,
     )
-    for (const [j, title] of a.types.entries())
+    for (const [j, [slug, titleAr, titleEn]] of catalogSubcategories[family].entries())
       await insert(
         'categories',
         {
-          slug: `${family}-${['engine', 'hydraulic', 'gear', 'industrial', 'transformer'][j] || j}`,
-          ...(family === 'grease'
-            ? {
-                slug: `grease-${['lithium', 'high-temperature', 'ep-heavy-duty'][j]}`,
-              }
-            : {}),
-          ...(family === 'bearings'
-            ? {
-                slug: `bearings-${['ball', 'cylindrical', 'tapered', 'needle'][j]}`,
-              }
-            : {}),
+          slug: `${family}-${slug}`,
           family,
           parentId: parent.id,
-          name: l(title, b.types[j]),
+          name: l(titleAr, titleEn),
           description: l('', ''),
           order: j,
           status: 'published',

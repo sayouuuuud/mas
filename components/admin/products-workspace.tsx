@@ -483,7 +483,7 @@ function ProductEditor({ id }: { id: string }) {
   const [nameAr, setNameAr] = useState('')
   const [nameEn, setNameEn] = useState('')
   const [slug, setSlug] = useState('')
-  const [family, setFamily] = useState<ProductFamily>('oils')
+  const [draftFamily, setFamily] = useState<ProductFamily>('oils')
   const [categoryId, setCategoryId] = useState('')
   const [brandId, setBrandId] = useState('')
   useEffect(() => {
@@ -493,11 +493,6 @@ function ProductEditor({ id }: { id: string }) {
       setBrandId(query.get('brandId') || '')
       const sector = query.get('sectorId')
       if (sector) setSectorIds([sector])
-      const category = query.get('categoryId')
-      if (category)
-        api<CategoryRecord>(`/admin/categories/${category}`)
-          .then((r) => setFamily(r.data.family as ProductFamily))
-          .catch(() => {})
     }
   }, [isNew])
   const [modelCode, setModelCode] = useState('')
@@ -591,14 +586,38 @@ function ProductEditor({ id }: { id: string }) {
     }
   }, [isNew, product, initializedKey])
 
+  const categories = [...(categoriesQuery.data || [])].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name[lang].localeCompare(b.name[lang], lang),
+  )
+  const categoriesById = new Map(categories.map((category) => [category.id, category]))
+  const selectedCategory = categoriesById.get(categoryId)
+  const family = selectedCategory?.family || draftFamily
+  const mainCategories = categories.filter((category) => !category.parentId)
   const categoryIds = new Set<string>()
+  let mainCategoryId = ''
   let currentCategory = categoryId
   while (currentCategory && !categoryIds.has(currentCategory)) {
     categoryIds.add(currentCategory)
-    currentCategory =
-      categoriesQuery.data?.find((category) => category.id === currentCategory)
-        ?.parentId || ''
+    const category = categoriesById.get(currentCategory)
+    if (category && !category.parentId) mainCategoryId = category.id
+    currentCategory = category?.parentId || ''
   }
+  const subcategories = mainCategoryId
+    ? categories.filter(
+        (category) => category.parentId === mainCategoryId ||
+          (category.id === categoryId && category.id !== mainCategoryId),
+      )
+    : []
+
+  function selectCategory(id: string) {
+    const nextFamily = categoriesById.get(id)?.family
+    setCategoryId(id)
+    if (nextFamily) {
+      setFamily(nextFamily)
+      if (nextFamily !== family) setPackMeasureId('')
+    }
+  }
+
   const applicableAttributes = (attributesQuery.data || []).filter(
     (attribute) =>
       !attribute.categories?.length ||
@@ -1021,38 +1040,46 @@ function ProductEditor({ id }: { id: string }) {
                   onChange={(event) => setNameEn(event.target.value)}
                 />
               </Field>
-              <Field label={c('التصنيف', 'Category')}>
+              <Field label={c('التصنيف الرئيسي', 'Main category')}>
                 <select
                   className="control"
-                  value={categoryId}
-                  onChange={(event) => {
-                    const category = categoriesQuery.data?.find(
-                      (row) => row.id === event.target.value,
-                    )
-                    setCategoryId(event.target.value)
-                    if (category?.family && category.family !== family) {
-                      setFamily(category.family)
-                      setPackMeasureId('')
-                    }
-                  }}
+                  disabled={categoriesQuery.isLoading}
+                  value={mainCategoryId}
+                  onChange={(event) => selectCategory(event.target.value)}
                 >
                   <option value="">
-                    {c('اختر تصنيفًا', 'Choose a category')}
+                    {c('اختر التصنيف الرئيسي', 'Choose a main category')}
                   </option>
-                  {(categoriesQuery.data || []).map((category) => {
-                    const parent = categoriesQuery.data?.find(
-                      (row) => row.id === category.parentId,
-                    )
-                    return (
-                      <option key={category.id} value={category.id}>
-                        {parent ? `${parent.name[lang]} / ` : ''}
-                        {category.name[lang]}
-                        {category.status !== 'published'
-                          ? c(' (مسودة أو مؤرشف)', ' (unpublished)')
-                          : ''}
-                      </option>
-                    )
-                  })}
+                  {mainCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name[lang]}
+                      {category.status !== 'published'
+                        ? c(' (غير منشور)', ' (unpublished)')
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={c('التصنيف الفرعي', 'Subcategory')}>
+                <select
+                  className="control"
+                  disabled={!mainCategoryId}
+                  value={mainCategoryId && categoryId !== mainCategoryId ? categoryId : ''}
+                  onChange={(event) => selectCategory(event.target.value || mainCategoryId)}
+                >
+                  <option value="">
+                    {mainCategoryId
+                      ? c('بدون تصنيف فرعي', 'No subcategory')
+                      : c('اختر التصنيف الرئيسي أولًا', 'Choose the main category first')}
+                  </option>
+                  {subcategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name[lang]}
+                      {category.status !== 'published'
+                        ? c(' (غير منشور)', ' (unpublished)')
+                        : ''}
+                    </option>
+                  ))}
                 </select>
               </Field>
               <Field label={c('العلامة التجارية', 'Brand')}>
@@ -1076,18 +1103,24 @@ function ProductEditor({ id }: { id: string }) {
                 <summary className="cursor-pointer text-sm text-primary">
                   {c('إضافة تصنيف أو علامة', 'Add a category or brand')}
                 </summary>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <RemoteSelect
-                    resource="categories"
-                    value={categoryId}
-                    label={c('التصنيف', 'Category')}
-                    filters={{ family }}
-                    onChange={(id: string) => {
-                      markDirty()
-                      setCategoryId(id)
-                      void categoriesQuery.refresh()
-                    }}
-                  />
+                <div className="mt-3 grid items-start gap-4 sm:grid-cols-2">
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    <Link
+                      href={mainCategoryId ? `/admin/categories/new?parentId=${mainCategoryId}` : '/admin/categories/new'}
+                      target="_blank"
+                      rel="noopener"
+                      className="text-primary underline"
+                    >
+                      {c('إضافة تصنيف فرعي', 'Add a subcategory')}
+                    </Link>
+                    <button
+                      type="button"
+                      className="text-primary underline"
+                      onClick={() => void categoriesQuery.refresh().catch(() => {})}
+                    >
+                      {c('تحديث التصنيفات', 'Refresh categories')}
+                    </button>
+                  </div>
                   <RemoteSelect
                     resource="brands"
                     value={brandId}
@@ -1153,13 +1186,11 @@ function ProductEditor({ id }: { id: string }) {
                     onChange={(event) => setModelCode(event.target.value)}
                   />
                 </Field>
-                {(!categoryId ||
-                  !categoriesQuery.data?.find((row) => row.id === categoryId)
-                    ?.family) && (
+                {!selectedCategory?.family && (
                   <Field label={c('عائلة المنتج', 'Product family')}>
                     <select
                       className="control"
-                      value={family}
+                      value={draftFamily}
                       onChange={(event) =>
                         setFamily(event.target.value as ProductFamily)
                       }

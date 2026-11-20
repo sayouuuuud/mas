@@ -27,7 +27,7 @@ function ProductCard({
   const item = {
     title: category.name[lang],
     body: category.description?.[lang] || '',
-    types: children.map((row) => row.name[lang]),
+    types: children.slice(0, 5).map((row) => row.name[lang]),
     imageAlt: category.name[lang],
   }
   const Arrow = lang === 'ar' ? ArrowLeft : ArrowRight
