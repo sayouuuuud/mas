@@ -41,7 +41,7 @@ import {
 
 const familyIcons = {
   oils: { icon: Droplet, color: 'bg-primary/10 text-primary' },
-  grease: { icon: Layers, color: 'bg-accent/20 text-[#735919]' },
+  grease: { icon: Layers, color: 'bg-accent/20 text-amber-900' },
   bearings: { icon: CircleDot, color: 'bg-slate-100 text-slate-700' },
 } satisfies Record<ProductFamily, { icon: typeof Layers; color: string }>
 

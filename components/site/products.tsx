@@ -27,7 +27,6 @@ function ProductCard({
   const item = {
     title: category.name[lang],
     body: category.description?.[lang] || '',
-    types: children.slice(0, 5).map((row) => row.name[lang]),
     imageAlt: category.name[lang],
   }
   const Arrow = lang === 'ar' ? ArrowLeft : ArrowRight
@@ -41,7 +40,7 @@ function ProductCard({
     >
       <div
         className={cn(
-          'notched-media flex flex-col justify-end self-stretch bg-foreground text-background',
+          'notched-media flex flex-col justify-end self-stretch bg-brand-dark text-on-brand',
           wide
             ? 'aspect-[4/5] sm:aspect-[2/1] lg:aspect-[3/4]'
             : 'aspect-[4/5] lg:aspect-[3/4]',
@@ -62,16 +61,16 @@ function ProductCard({
         />
         <div className="flex max-w-md flex-col gap-4 p-6 pt-32 lg:p-7 lg:pt-32">
           <h3 className="font-sans text-3xl font-bold">{item.title}</h3>
-          <p className="leading-relaxed text-pretty text-background/85">
+          <p className="leading-relaxed text-pretty text-on-brand/85">
             {item.body}
           </p>
           <ul className="flex flex-wrap gap-2">
-            {item.types.map((type) => (
+            {children.slice(0, 5).map((subCategory) => (
               <li
-                key={type}
-                className="rounded-full border border-background/30 px-3 py-1 text-sm text-background/90"
+                key={subCategory.id}
+                className="rounded-full border border-on-brand/30 px-3 py-1 text-sm text-on-brand/90"
               >
-                {type}
+                {subCategory.name[lang]}
               </li>
             ))}
           </ul>

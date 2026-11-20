@@ -287,7 +287,7 @@ export function ResourceWorkspace({
         </p>
       )}
 
-      <div className="panel bg-white">
+      <div className="panel bg-card">
         {section !== 'team' && (
           <div className="mb-4">
             <input
@@ -1015,7 +1015,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         </p>
       )}
 
-      <div className="panel grid gap-5 bg-white md:grid-cols-2">
+      <div className="panel grid gap-5 bg-card md:grid-cols-2">
         {section === 'team' ? (
           <>
             {isNew && (
@@ -2158,7 +2158,7 @@ export function MediaWorkspace() {
         </div>
       )}
 
-      <div className="panel mb-6 grid gap-4 bg-white md:grid-cols-3">
+      <div className="panel mb-6 grid gap-4 bg-card md:grid-cols-3">
         <Field
           label={c('مستوى ظهور الملف الجديد', 'Visibility for next upload')}
         >
@@ -2279,7 +2279,7 @@ export function MediaWorkspace() {
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="panel grid gap-4 bg-white sm:grid-cols-2 xl:grid-cols-3">
+          <div className="panel grid gap-4 bg-card sm:grid-cols-2 xl:grid-cols-3">
             {files.map((f) => {
               const activeCard = selected?.id === f.id
               return (
@@ -2323,7 +2323,7 @@ export function MediaWorkspace() {
           </div>
 
           {selected && (
-            <div className="panel space-y-4 bg-white">
+            <div className="panel space-y-4 bg-card">
               <h2 className="text-lg font-bold">
                 {c('خصائص الملف المحدد', 'Selected asset metadata')}
               </h2>
@@ -2666,7 +2666,7 @@ export function SettingsWorkspace() {
         </p>
       )}
 
-      <div className="panel grid gap-5 bg-white md:grid-cols-2">
+      <div className="panel grid gap-5 bg-card md:grid-cols-2">
         {' '}
         <div className="md:col-span-2">
           <MediaPicker

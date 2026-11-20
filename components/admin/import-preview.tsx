@@ -94,7 +94,7 @@ export function ImportPreview({
   }
 
   return (
-    <div className="panel mb-5 space-y-4 bg-white">
+    <div className="panel mb-5 space-y-4 bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-bold">

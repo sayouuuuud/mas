@@ -48,7 +48,7 @@ export function SectionHeading({
         <Emphasis text={title} />
       </h2>
       {subtitle ? (
-        <p className={cn('text-lg leading-relaxed text-pretty', tone === 'dark' ? 'text-background/85' : 'text-muted-foreground')}>
+        <p className={cn('text-lg leading-relaxed text-pretty', tone === 'dark' ? 'text-on-brand/85' : 'text-muted-foreground')}>
           {subtitle}
         </p>
       ) : null}

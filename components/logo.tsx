@@ -4,9 +4,11 @@ import { cn } from '@/lib/utils'
 
 export function Logo({
   inverted = false,
+  compact = false,
   className,
 }: {
   inverted?: boolean
+  compact?: boolean
   className?: string
 }) {
   const { logo, company } = useSiteInfo()
@@ -15,7 +17,7 @@ export function Logo({
       <img
         src={logo}
         alt={company.name.en || 'M.A.S Engineering For Trade'}
-        className={cn('h-16 w-auto max-w-52 object-contain', className)}
+        className={cn('h-16 w-auto max-w-52 object-contain', compact && 'max-sm:h-12 max-sm:max-w-28', className)}
       />
     )
   return (
@@ -23,7 +25,8 @@ export function Logo({
       <span
         className={cn(
           'text-4xl leading-none font-bold tracking-wide md:text-5xl',
-          inverted ? 'text-background' : 'text-primary',
+          compact && 'max-sm:text-3xl',
+          inverted ? 'text-on-brand' : 'text-primary',
         )}
       >
         M.A.S
@@ -31,7 +34,8 @@ export function Logo({
       <span
         className={cn(
           'text-sm leading-snug whitespace-nowrap',
-          inverted ? 'text-background/85' : 'text-muted-foreground',
+          compact && 'max-sm:text-xs',
+          inverted ? 'text-on-brand/85' : 'text-muted-foreground',
         )}
       >
         Engineering For Trade

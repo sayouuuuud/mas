@@ -182,7 +182,7 @@ export function AccountSecurityWorkspace() {
         </div>
         <Shield className="size-7 text-primary" />
       </div>
-      <section className="panel space-y-5 bg-white">
+      <section className="panel space-y-5 bg-card">
         <div>
           <h2 className="text-xl font-bold">
             {c('المصادقة الثنائية (MFA)', 'Two-factor authentication (MFA)')}
@@ -290,7 +290,7 @@ export function AccountSecurityWorkspace() {
                     'رمز QR لمفتاح الربط الجديد',
                     'QR code for the new binding key',
                   )}
-                  className="mx-auto size-48 rounded-lg bg-white p-2"
+                  className="mx-auto size-48 rounded-lg bg-card p-2"
                 />
                 <div>
                   <p className="mb-2 text-sm font-medium">
@@ -298,7 +298,7 @@ export function AccountSecurityWorkspace() {
                   </p>
                   <code
                     dir="ltr"
-                    className="block select-all break-all rounded bg-white p-3 text-center font-mono text-sm"
+                    className="block select-all break-all rounded bg-card p-3 text-center font-mono text-sm"
                   >
                     {enrollment.secret}
                   </code>

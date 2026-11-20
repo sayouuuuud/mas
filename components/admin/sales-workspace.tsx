@@ -184,7 +184,7 @@ export function Dashboard() {
       </div>
 
       {needsBootstrap && (
-        <section className="panel mb-6 border-accent/40 bg-white">
+        <section className="panel mb-6 border-accent/40 bg-card">
           <h2 className="text-lg font-bold">
             {c(
               'قائمة تهيئة الجاهزية التشغيلية للموقع العام',
@@ -268,7 +268,7 @@ export function Dashboard() {
             c('كل عروض الأسعار', 'All quotations'),
           ],
         ].map(([label, val, note]) => (
-          <div className="panel bg-white" key={String(label)}>
+          <div className="panel bg-card" key={String(label)}>
             <span className="text-sm text-muted-foreground">{label}</span>
             <strong className="my-3 block text-4xl font-bold">{val}</strong>
             <small className="text-xs text-muted-foreground">{note}</small>
@@ -276,7 +276,7 @@ export function Dashboard() {
         ))}
       </div>
 
-      <section className="panel mt-6 bg-white">
+      <section className="panel mt-6 bg-card">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-bold">
             {c('أحدث طلبات عروض الأسعار', 'Recent quote requests')}
@@ -572,7 +572,7 @@ export function RequestsPage({ id }: { id?: string }) {
             </p>
           </div>
         </div>
-        <div className="panel bg-white">
+        <div className="panel bg-card">
           <RequestTable />
         </div>
       </>
@@ -793,7 +793,7 @@ export function RequestsPage({ id }: { id?: string }) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <h2 className="mb-4 text-xl font-bold">
               {c(
                 'البنود المطلوبة (لقطة العميل المحفوظة)',
@@ -858,7 +858,7 @@ export function RequestsPage({ id }: { id?: string }) {
             )}
           </section>
 
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-xl font-bold">
                 {c('عروض الأسعار المرتبطة', 'Linked quotations')}
@@ -901,7 +901,7 @@ export function RequestsPage({ id }: { id?: string }) {
             )}
           </section>
 
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <h2 className="mb-4 text-xl font-bold">
               {c(
                 'السجل الزمني والملاحظات الداخلية',
@@ -959,7 +959,7 @@ export function RequestsPage({ id }: { id?: string }) {
         </div>
 
         <aside className="space-y-6">
-          <div className="panel space-y-2 bg-white text-sm">
+          <div className="panel space-y-2 bg-card text-sm">
             <h2 className="text-lg font-bold">
               {c('بيانات العميل وقت الطلب', 'Customer snapshot')}
             </h2>
@@ -987,7 +987,7 @@ export function RequestsPage({ id }: { id?: string }) {
             </p>
           </div>
 
-          <div className="panel space-y-4 bg-white">
+          <div className="panel space-y-4 bg-card">
             <h2 className="text-lg font-bold">
               {c('التعيين وانتقال الحالة', 'Assignment & transition')}
             </h2>
@@ -1068,7 +1068,7 @@ export function RequestsPage({ id }: { id?: string }) {
             )}
           </div>
 
-          <form className="panel space-y-4 bg-white" onSubmit={saveMetadata}>
+          <form className="panel space-y-4 bg-card" onSubmit={saveMetadata}>
             <h2 className="text-lg font-bold">
               {c(
                 'الأولوية وموعد المتابعة والربط',
@@ -1308,7 +1308,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
           </button>
         </div>
 
-        <div className="panel bg-white">
+        <div className="panel bg-card">
           <div className="mb-5 grid gap-3 md:grid-cols-[1fr_220px]">
             <input
               className="control"
@@ -1532,14 +1532,14 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <h2 className="text-xl font-bold">{inquiry.message}</h2>
             <p className="mt-3 whitespace-pre-line text-sm leading-8 text-foreground/90">
               {inquiry.message}
             </p>
           </section>
 
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <div className="mb-4 flex items-center gap-2">
               <ArrowRightLeft className="size-5 text-primary" />
               <h2 className="text-xl font-bold">
@@ -1685,7 +1685,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
             )}
           </section>
 
-          <section className="panel bg-white">
+          <section className="panel bg-card">
             <h2 className="mb-4 text-xl font-bold">
               {c('الملاحظات الداخلية والسجل', 'Internal notes & timeline')}
             </h2>
@@ -1757,7 +1757,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
         </div>
 
         <aside className="space-y-6">
-          <div className="panel space-y-2 bg-white text-sm">
+          <div className="panel space-y-2 bg-card text-sm">
             <h2 className="text-lg font-bold">
               {c('بيانات المرسل', 'Sender snapshot')}
             </h2>
@@ -1772,7 +1772,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
             )}
           </div>
 
-          <div className="panel space-y-4 bg-white">
+          <div className="panel space-y-4 bg-card">
             <h2 className="text-lg font-bold">
               {c('التعيين وتحديث الحالة', 'Assignment & status')}
             </h2>

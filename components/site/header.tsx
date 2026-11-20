@@ -7,6 +7,7 @@ import { Globe, Menu, Phone, ShoppingBag, X } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
 import { useDemo } from '@/components/demo/demo-provider'
 import { Logo } from '@/components/logo'
+import { ThemeToggle } from '@/components/theme-provider'
 import {
   usePublicNavigation,
   useSiteInfo,
@@ -72,15 +73,15 @@ export function Header() {
           'fixed inset-x-0 top-0 z-40 transition-colors',
           solid
             ? 'border-b bg-background/95 text-foreground backdrop-blur-lg'
-            : 'text-background',
+            : 'text-on-brand',
         )}
       >
-        <div className="site-container flex min-h-24 items-center justify-between gap-4 py-4">
+        <div className="site-container flex min-h-24 items-center justify-between gap-2 py-4 max-sm:px-3 sm:gap-4">
           <Link href="/" aria-label={c('إم إيه إس — الرئيسية', 'M.A.S — Home')}>
-            <Logo inverted={!solid} />
+            <Logo inverted={!solid} compact />
           </Link>
           <div className="flex flex-col items-end gap-3">
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-0.5 text-sm sm:gap-3 lg:gap-4">
               <a
                 href={phones.mobile.href}
                 className="hidden items-center gap-2 lg:flex"
@@ -90,11 +91,11 @@ export function Header() {
               </a>
               <button
                 onClick={toggle}
-                className="flex min-h-10 items-center gap-2"
+                className="flex min-h-10 min-w-9 items-center justify-center gap-2"
                 aria-label={c('Switch to English', 'التبديل للعربية')}
               >
                 <Globe className="size-4" aria-hidden />
-                {c('English', 'العربية')}
+                <span className="hidden sm:inline">{c('English', 'العربية')}</span>
               </button>
               <Link
                 href="/request-quote"
@@ -105,10 +106,11 @@ export function Header() {
                 <span className="hidden sm:inline">
                   {c('طلب عرض سعر', 'Request a quote')}
                 </span>
-                <span className="flex size-6 items-center justify-center rounded-full bg-accent text-xs text-foreground">
+                <span className="flex size-6 items-center justify-center rounded-full bg-accent text-xs text-accent-foreground">
                   {cart.length}
                 </span>
               </Link>
+              <ThemeToggle />
               <button
                 className="flex size-10 items-center justify-center md:hidden"
                 onClick={() => setOpen(!open)}

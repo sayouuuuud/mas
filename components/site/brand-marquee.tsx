@@ -37,7 +37,7 @@ export function BrandMarquee() {
                       width={160}
                       height={80}
                       sizes="150px"
-                      className="h-16 w-auto max-w-36 object-contain"
+                      className="h-16 w-auto max-w-36 object-contain dark:rounded-md dark:bg-logo-matte dark:p-1.5"
                     />
                   ) : (
                     <span className="font-sans text-3xl font-bold text-foreground">

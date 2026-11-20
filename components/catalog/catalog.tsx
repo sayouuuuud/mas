@@ -571,7 +571,7 @@ export function Catalog({
                     {Array.from({ length: totalPages }, (_, i) => (
                       <button
                         type="button"
-                        className={`pagination-button ${page === i + 1 ? 'bg-primary text-white' : ''}`}
+                        className={`pagination-button ${page === i + 1 ? 'bg-primary text-primary-foreground' : ''}`}
                         aria-current={page === i + 1 ? 'page' : undefined}
                         key={i}
                         onClick={() => {

@@ -35,15 +35,15 @@ export function Footer() {
       : DEFAULT_FOOTER_LINKS
 
   return (
-    <footer className="bg-foreground text-background">
+    <footer className="bg-brand-dark text-on-brand">
       <div className="site-container grid gap-12 py-16 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1.3fr] lg:py-20">
         <div className="flex flex-col gap-5">
           <Logo inverted />
-          <p className="max-w-sm leading-relaxed text-background/70">
+          <p className="max-w-sm leading-relaxed text-on-brand/70">
             {content ? (lang === 'ar' ? content.bodyAr : content.bodyEn) : ''}
           </p>
           {lang === 'ar' ? (
-            <p className="text-sm text-background/60">{company.name.ar}</p>
+            <p className="text-sm text-on-brand/60">{company.name.ar}</p>
           ) : null}
         </div>
 
@@ -57,7 +57,7 @@ export function Footer() {
               <li key={`${href}-${en}`}>
                 <Link
                   href={href}
-                  className="text-background/75 transition-colors hover:text-background"
+                  className="text-on-brand/75 transition-colors hover:text-on-brand"
                 >
                   {lang === 'ar' ? ar : en}
                 </Link>
@@ -71,11 +71,11 @@ export function Footer() {
             <span aria-hidden="true" className="h-px w-6 bg-current" />
             {t.footer.contactTitle}
           </h2>
-          <ul className="flex flex-col gap-4 text-background/75">
+          <ul className="flex flex-col gap-4 text-on-brand/75">
             <li>
               <a
                 href={phones.mobile.href}
-                className="flex items-center gap-3 transition-colors hover:text-background"
+                className="flex items-center gap-3 transition-colors hover:text-on-brand"
               >
                 <Phone
                   className="size-4 shrink-0 text-accent"
@@ -87,7 +87,7 @@ export function Footer() {
             <li>
               <a
                 href={`mailto:${company.email}`}
-                className="flex items-center gap-3 transition-colors hover:text-background"
+                className="flex items-center gap-3 transition-colors hover:text-on-brand"
               >
                 <Mail
                   className="size-4 shrink-0 text-accent"
@@ -106,8 +106,8 @@ export function Footer() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-background/15">
-        <div className="site-container flex items-center justify-between gap-6 py-6 text-sm text-background/60">
+      <div className="border-t border-on-brand/15">
+        <div className="site-container flex items-center justify-between gap-6 py-6 text-sm text-on-brand/60">
           <div className="flex flex-wrap gap-4">
             <Link href="/privacy">
               {lang === 'ar' ? 'الخصوصية' : 'Privacy'}
@@ -119,10 +119,10 @@ export function Footer() {
           </p>
           <a
             href="#main-content"
-            className="group flex shrink-0 items-center gap-3 transition-colors hover:text-background"
+            className="group flex shrink-0 items-center gap-3 transition-colors hover:text-on-brand"
           >
             <span className="hidden sm:inline">{t.footer.backToTop}</span>
-            <span className="flex size-9 items-center justify-center rounded-full border border-background/25 transition-transform duration-300 motion-safe:group-hover:-translate-y-0.5">
+            <span className="flex size-9 items-center justify-center rounded-full border border-on-brand/25 transition-transform duration-300 motion-safe:group-hover:-translate-y-0.5">
               <ArrowUp className="size-4" aria-hidden="true" />
             </span>
             <span className="sr-only sm:hidden">{t.footer.backToTop}</span>

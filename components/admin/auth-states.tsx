@@ -122,7 +122,7 @@ export function MfaVerificationPanel({
     : null
 
   return (
-    <section className="panel mt-6 space-y-5 bg-white">
+    <section className="panel mt-6 space-y-5 bg-card">
       <div className="flex items-center gap-3">
         <ShieldCheck className="size-5 text-primary" />
         <h2 className="text-lg font-bold">
@@ -166,7 +166,7 @@ export function MfaVerificationPanel({
               <img
                 src={qrSrc}
                 alt={c('رمز QR للمصادقة الثنائية', 'TOTP QR code')}
-                className="mx-auto size-44 rounded-lg bg-white p-2"
+                className="mx-auto size-44 rounded-lg bg-card p-2"
               />
               <div className="text-center">
                 <p className="text-xs text-muted-foreground">
@@ -174,7 +174,7 @@ export function MfaVerificationPanel({
                 </p>
                 <code
                   dir="ltr"
-                  className="mt-1 inline-block select-all rounded bg-white px-2 py-1 font-mono text-xs"
+                  className="mt-1 inline-block select-all rounded bg-card px-2 py-1 font-mono text-xs"
                 >
                   {enrollData.secret}
                 </code>
@@ -308,7 +308,7 @@ export function PasswordUpdatePanel({
   }
 
   return (
-    <section className="panel mt-6 space-y-4 bg-white">
+    <section className="panel mt-6 space-y-4 bg-card">
       <div className="flex items-center gap-3">
         <KeyRound className="size-5 text-primary" />
         <h2 className="font-bold">

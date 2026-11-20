@@ -455,7 +455,7 @@ export function RelationsPanel({
     products: 'المنتجات المرتبطة',
   }
   return (
-    <section className="panel mt-6 bg-white">
+    <section className="panel mt-6 bg-card">
       <h2 className="mb-4 text-xl font-bold">
         {lang === 'ar' ? 'السجلات المرتبطة' : 'Related records'}
       </h2>

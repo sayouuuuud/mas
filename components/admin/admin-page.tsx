@@ -180,7 +180,7 @@ function Reports() {
         </div>
       </div>
 
-      <div className="panel mb-6 grid gap-5 bg-white sm:grid-cols-2">
+      <div className="panel mb-6 grid gap-5 bg-card sm:grid-cols-2">
         <Field label={c('من تاريخ', 'From date')}>
           <input
             type="date"
@@ -240,7 +240,7 @@ function Reports() {
                 summary?.overdueFollowUps ?? 0,
               ],
             ].map(([label, value]) => (
-              <div className="panel bg-white" key={String(label)}>
+              <div className="panel bg-card" key={String(label)}>
                 <h2 className="text-sm text-muted-foreground">{label}</h2>
                 <strong className="mt-5 block text-4xl">{value}</strong>
               </div>
@@ -248,7 +248,7 @@ function Reports() {
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <section className="panel bg-white">
+            <section className="panel bg-card">
               <h2 className="mb-6 text-xl font-bold">
                 {c('توزيع حالات الطلبات', 'Request status breakdown')}
               </h2>
@@ -282,7 +282,7 @@ function Reports() {
               })}
             </section>
 
-            <section className="panel bg-white">
+            <section className="panel bg-card">
               <h2 className="mb-6 text-xl font-bold">
                 {c('مصادر الطلبات وتصدير البيانات', 'Sources & CSV exports')}
               </h2>
@@ -394,7 +394,7 @@ function ActivityLog() {
           </p>
         </div>
       </div>
-      <div className="panel bg-white">
+      <div className="panel bg-card">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem_10rem]">
           <Field
             label={c(

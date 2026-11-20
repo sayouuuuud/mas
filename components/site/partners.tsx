@@ -19,7 +19,7 @@ function PartnerLogo({ partner, lang }: { partner: Partner; lang: Lang }) {
           width={partner.width || 160}
           height={partner.height || 80}
           sizes="140px"
-          className="h-14 w-auto max-w-full object-contain"
+          className="h-14 w-auto max-w-full object-contain dark:rounded-md dark:bg-logo-matte dark:p-1.5"
         />
       ) : (
         <span
@@ -113,7 +113,7 @@ export function Partners() {
                 </ul>
               </div>
             </div>
-            <p className="notched-tab flex items-center justify-center gap-2 bg-foreground text-sm font-medium text-background">
+            <p className="notched-tab flex items-center justify-center gap-2 bg-brand-dark text-sm font-medium text-on-brand">
               <Award className="size-4 text-accent" aria-hidden="true" />
               {t.partners.featuredLabel}
             </p>
