@@ -1,5 +1,7 @@
 'use client'
 import { useUnsavedForm } from './form-state'
+import { PublicationPill } from './workspace-ui'
+import { usePublicContentBlock } from '@/components/demo/content-preview'
 import { ContentLayoutEditor } from './layout-editor'
 import { MediaPicker, RemoteSelect, RelationsPanel } from './entity-tools'
 
@@ -205,15 +207,8 @@ export function ResourceWorkspace({
   }
 
   function displayRowBadge(row: any) {
-    if (row.status) {
-      const tone =
-        row.status === 'published'
-          ? 'green'
-          : row.status === 'draft'
-            ? 'gold'
-            : 'muted'
-      return <Badge tone={tone}>{row.status}</Badge>
-    }
+    if (row.status === 'published' || row.status === 'draft' || row.status === 'archived')
+      return <PublicationPill status={row.status} lang={lang} />
     if (typeof row.active === 'boolean') {
       return (
         <Badge tone={row.active ? 'green' : 'muted'}>
@@ -330,29 +325,29 @@ export function ResourceWorkspace({
           />
         ) : (
           <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{c('الاسم / البيان', 'Name')}</th>
-                  <th>{c('التفاصيل', 'Details')}</th>
-                  <th>{c('الحالة', 'Status')}</th>
-                  <th />
+            <table className="data-table admin-responsive-table" role="table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader">{c('الاسم / البيان', 'Name')}</th>
+                  <th role="columnheader">{c('التفاصيل', 'Details')}</th>
+                  <th role="columnheader">{c('الحالة', 'Status')}</th>
+                  <th role="columnheader" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {rows.map((row) => {
                   const rowId = row.id
                   return (
-                    <tr key={rowId}>
-                      <td className="font-semibold">{displayRowTitle(row)}</td>
-                      <td
+                    <tr role="row" key={rowId}>
+                      <td role="cell" data-label={c('الاسم / البيان', 'Name')} className="font-semibold">{displayRowTitle(row)}</td>
+                      <td role="cell" data-label={c('التفاصيل', 'Details')}
                         dir="ltr"
                         className="font-mono text-xs text-muted-foreground"
                       >
                         {displayRowSub(row)}
                       </td>
-                      <td>{displayRowBadge(row)}</td>
-                      <td className="text-end">
+                      <td role="cell" data-label={c('الحالة', 'Status')}>{displayRowBadge(row)}</td>
+                      <td role="cell" data-label={c('الإجراءات', 'Actions')} className="text-end">
                         <div className="flex items-center justify-end gap-3">
                           <Link
                             href={`/admin/${section}/${rowId}`}
@@ -428,6 +423,10 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
     section === 'team'
       ? (teamListQuery.data || []).find((m) => m.id === id)
       : detailQuery.data
+
+  const publishedContent = usePublicContentBlock(
+    section === 'content' && !isNew ? record?.key || null : null,
+  )
 
   const [form, setForm] = useState<Record<string, any>>({})
   const [attrOptions, setAttrOptions] = useState<
@@ -948,7 +947,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
             )}
             {section === 'team' && isNew
               ? c('إرسال دعوة الأدمن', 'Send Admin Invitation')
-              : c('حفظ', 'Save')}
+              : section === 'content' ? c('حفظ المسودة', 'Save draft') : c('حفظ', 'Save')}
           </button>
           {meta.publishable && record?.status !== 'published' && (
             <button
@@ -985,6 +984,21 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
           )}
         </div>
       </div>
+
+      {section === 'content' && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
+          <PublicationPill status={record?.status} lang={lang} />
+          {publishedContent.data && (
+            <span className="text-muted-foreground">
+              {c('توجد نسخة متاحة للزوار', 'A version is live')}
+              {publishedContent.data.policyVersion && <> · <bdi>{publishedContent.data.policyVersion}</bdi></>}
+            </span>
+          )}
+          <span className="text-muted-foreground">
+            {c('الحفظ يجهّز مسودة. استخدم نشر لإتاحتها للزوار.', 'Saving prepares a draft. Publish it to make it live.')}
+          </span>
+        </div>
+      )}
 
       {feedback && (
         <p
@@ -2118,35 +2132,7 @@ export function MediaWorkspace() {
             )}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            className="sr-only"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || [])
-              void (async () => {
-                for (const file of files) await handleFileSelect(file)
-              })()
-              e.target.value = ''
-            }}
-          />
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-          >
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Upload className="size-4" />
-            )}
-            {c('رفع صورة أو PDF', 'Upload image or PDF')}
-          </button>
-        </div>
+
       </div>
 
       {session && session.mediaScannerConfigured === false && (
@@ -2214,6 +2200,35 @@ export function MediaWorkspace() {
             onChange={(e) => setUploadAltEn(e.target.value)}
           />
         </Field>
+        <div className="flex flex-wrap gap-2 md:col-span-3">
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            className="sr-only"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || [])
+              void (async () => {
+                for (const file of files) await handleFileSelect(file)
+              })()
+              e.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
+            {busy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
+            {c('رفع صورة أو PDF', 'Upload image or PDF')}
+          </button>
+        </div>
       </div>
 
       {feedback && (

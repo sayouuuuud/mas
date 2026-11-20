@@ -246,6 +246,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
             onChange={(e) => {
               setQ(e.target.value)
               setPage(1)
+              setSelected([])
             }}
             placeholder={c('بحث بالاسم أو الرمز…', 'Search name or slug…')}
           />
@@ -255,6 +256,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
             onChange={(e) => {
               setStatus(e.target.value)
               setPage(1)
+              setSelected([])
             }}
           >
             <option value="">{c('كل الحالات', 'All statuses')}</option>
@@ -299,8 +301,8 @@ export function ProductWorkspace({ id }: { id?: string }) {
           />
         ) : rows.length === 0 ? (
           <EmptyState
-            title={c('لا توجد منتجات في الكتالوج', 'No products found')}
-            description={c(
+            title={q.trim() || status ? c('لا توجد نتائج مطابقة', 'No matching products') : c('لا توجد منتجات في الكتالوج', 'No products found')}
+            description={q.trim() || status ? c('غيّر البحث أو حالة النشر.', 'Change the search or publication status.') : c(
               'أضف منتجًا جديدًا أو استورد منتجاتك عبر CSV لبدء بناء الكتالوج.',
               'Create a new product or import via CSV to populate your catalog.',
             )}
@@ -313,12 +315,21 @@ export function ProductWorkspace({ id }: { id?: string }) {
           />
         ) : (
           <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th className="w-10">
+            <label className="mb-3 flex min-h-11 items-center gap-2 text-sm md:hidden">
+              <input
+                type="checkbox"
+                checked={rows.every((row) => selected.includes(row.id))}
+                onChange={(e) => setSelected(e.target.checked ? rows.map((row) => row.id) : [])}
+              />
+              {c('تحديد كل منتجات الصفحة', 'Select all products on this page')}
+            </label>
+            <table className="data-table admin-responsive-table" role="table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" className="w-10">
                     <input
                       type="checkbox"
+                      className="hidden md:inline-block"
                       aria-label={c('تحديد الكل', 'Select all')}
                       checked={
                         rows.length > 0 &&
@@ -331,14 +342,14 @@ export function ProductWorkspace({ id }: { id?: string }) {
                       }
                     />
                   </th>
-                  <th>{c('المنتج', 'Product')}</th>
-                  <th>{c('التصنيف', 'Category')}</th>
-                  <th>{c('العلامة', 'Brand')}</th>
-                  <th>{c('الحالة', 'Status')}</th>
-                  <th />
+                  <th role="columnheader">{c('المنتج', 'Product')}</th>
+                  <th role="columnheader">{c('التصنيف', 'Category')}</th>
+                  <th role="columnheader">{c('العلامة', 'Brand')}</th>
+                  <th role="columnheader">{c('الحالة', 'Status')}</th>
+                  <th role="columnheader" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {rows.map((p) => {
                   const cat = (p as any).categoryName
                     ? { name: (p as any).categoryName }
@@ -349,8 +360,8 @@ export function ProductWorkspace({ id }: { id?: string }) {
                   const badge =
                     STATUS_BADGE[p.status || 'draft'] || STATUS_BADGE.draft
                   return (
-                    <tr key={p.id}>
-                      <td>
+                    <tr role="row" key={p.id}>
+                      <td role="cell" data-label={c('تحديد الكل', 'Select all')}>
                         <input
                           type="checkbox"
                           checked={selected.includes(p.id)}
@@ -364,7 +375,7 @@ export function ProductWorkspace({ id }: { id?: string }) {
                           }
                         />
                       </td>
-                      <td>
+                      <td role="cell" data-label={c('المنتج', 'Product')}>
                         <strong>{lang === 'ar' ? p.name.ar : p.name.en}</strong>
                         <small
                           dir="ltr"
@@ -373,20 +384,20 @@ export function ProductWorkspace({ id }: { id?: string }) {
                           /{p.slug}
                         </small>
                       </td>
-                      <td>
+                      <td role="cell" data-label={c('التصنيف', 'Category')}>
                         {cat
                           ? lang === 'ar'
                             ? cat.name.ar
                             : cat.name.en
                           : '—'}
                       </td>
-                      <td>
+                      <td role="cell" data-label={c('العلامة', 'Brand')}>
                         {br ? (lang === 'ar' ? br.name.ar : br.name.en) : '—'}
                       </td>
-                      <td>
+                      <td role="cell" data-label={c('الحالة', 'Status')}>
                         <Badge tone={badge.tone}>{c(badge.ar, badge.en)}</Badge>
                       </td>
-                      <td className="text-end">
+                      <td role="cell" data-label={c('الإجراءات', 'Actions')} className="text-end">
                         <div className="flex items-center justify-end gap-3">
                           <Link
                             href={`/admin/products/${p.id}`}
@@ -419,7 +430,10 @@ export function ProductWorkspace({ id }: { id?: string }) {
             page={meta.page}
             pages={Math.max(1, meta.totalPages)}
             total={meta.total}
-            onChange={setPage}
+            onChange={(nextPage) => {
+              setSelected([])
+              setPage(nextPage)
+            }}
           />
         )}
       </div>
@@ -933,49 +947,49 @@ function ProductEditor({ id }: { id: string }) {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={busy} className="btn-outline">
-            {busy ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Check className="size-4" />
-            )}
-            {c('حفظ التغييرات', 'Save changes')}
+      </div>
+      <div className="admin-editor-actions flex flex-wrap gap-2">
+        <button type="submit" disabled={busy} className="btn-outline">
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Check className="size-4" />
+          )}
+          {c('حفظ التغييرات', 'Save changes')}
+        </button>
+        {currentStatus !== 'published' && (
+          <button
+            type="button"
+            disabled={busy}
+            className="btn-primary"
+            onClick={() => void runPublicationAction('publish')}
+          >
+            <Send className="size-4" />
+            {c('نشر في الكتالوج', 'Publish')}
           </button>
-          {currentStatus !== 'published' && (
-            <button
-              type="button"
-              disabled={busy}
-              className="btn-primary"
-              onClick={() => void runPublicationAction('publish')}
-            >
-              <Send className="size-4" />
-              {c('نشر في الكتالوج', 'Publish')}
-            </button>
-          )}
-          {currentStatus === 'published' && (
-            <button
-              type="button"
-              disabled={busy}
-              className="btn-outline"
-              onClick={() => void runPublicationAction('unpublish')}
-            >
-              <EyeOff className="size-4" />
-              {c('إلغاء النشر', 'Unpublish')}
-            </button>
-          )}
-          {!isNew && currentStatus !== 'archived' && (
-            <button
-              type="button"
-              disabled={busy}
-              className="btn-outline"
-              onClick={() => void runPublicationAction('archive')}
-            >
-              <Archive className="size-4" />
-              {c('أرشفة', 'Archive')}
-            </button>
-          )}
-        </div>
+        )}
+        {currentStatus === 'published' && (
+          <button
+            type="button"
+            disabled={busy}
+            className="btn-outline"
+            onClick={() => void runPublicationAction('unpublish')}
+          >
+            <EyeOff className="size-4" />
+            {c('إلغاء النشر', 'Unpublish')}
+          </button>
+        )}
+        {!isNew && currentStatus !== 'archived' && (
+          <button
+            type="button"
+            disabled={busy}
+            className="btn-outline"
+            onClick={() => void runPublicationAction('archive')}
+          >
+            <Archive className="size-4" />
+            {c('أرشفة', 'Archive')}
+          </button>
+        )}
       </div>
 
       {feedback && (

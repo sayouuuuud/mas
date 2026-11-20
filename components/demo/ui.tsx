@@ -240,13 +240,13 @@ export function Field({
   )
 }
 
-export function RequestStatusBadge({ status }: { status: string }) {
-  const c = useCopy()
-  const labels: Record<string, [string, string]> = {
+export const REQUEST_STATUS_LABELS: Record<string, [string, string]> = {
     new: ['جديد', 'New'], assigned: ['معيّن', 'Assigned'],
     in_progress: ['قيد المتابعة', 'In progress'], awaiting_customer: ['بانتظار العميل', 'Awaiting customer'],
     quoted: ['تم تقديم عرض', 'Quoted'], won: ['ناجح', 'Won'], lost: ['غير ناجح', 'Lost'], cancelled: ['ملغى', 'Cancelled'],
   }
-  const label = labels[status]
+export function RequestStatusBadge({ status }: { status: string }) {
+  const c = useCopy()
+  const label = REQUEST_STATUS_LABELS[status]
   return <Badge tone={status === 'won' ? 'green' : status === 'new' ? 'gold' : 'neutral'}>{label ? c(...label) : status}</Badge>
 }

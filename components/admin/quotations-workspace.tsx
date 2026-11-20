@@ -23,6 +23,7 @@ import {
 } from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
 import { Pagination } from './frontend-tools'
+import { PDF_STATUS_LABELS, QUOTATION_STATUS_LABELS } from './workspace-ui'
 import {
   api,
   BackendError,
@@ -40,18 +41,10 @@ import type {
   QuotationStatus,
 } from '@/lib/types'
 
-const STATUS_META: Record<
-  QuotationStatus,
-  { ar: string; en: string; tone: 'gold' | 'green' | 'blue' | 'muted' | 'red' }
-> = {
-  draft: { ar: 'مسودة', en: 'Draft', tone: 'muted' },
-  issued: { ar: 'صادر رسميًا', en: 'Issued', tone: 'blue' },
-  sent: { ar: 'سُجّل تسليمه للعميل', en: 'Delivery logged', tone: 'gold' },
-  accepted: { ar: 'مقبول من العميل', en: 'Accepted', tone: 'green' },
-  rejected: { ar: 'مرفوض', en: 'Rejected', tone: 'red' },
-  expired: { ar: 'منتهي الصلاحية', en: 'Expired', tone: 'muted' },
-  superseded: { ar: 'مستبدل بمراجعة أحدث', en: 'Superseded', tone: 'muted' },
-}
+const STATUS_TONES = {
+  draft: 'muted', issued: 'blue', sent: 'gold', accepted: 'green',
+  rejected: 'red', expired: 'muted', superseded: 'muted',
+} as const satisfies Record<QuotationStatus, string>
 
 type EditableLine = {
   key: string
@@ -166,14 +159,14 @@ function QuotationsList() {
       </div>
 
       {(recentRequestsQuery.data || []).length > 0 && (
-        <section className="panel mb-6 bg-white">
-          <h2 className="mb-3 font-bold">
+        <details className="panel mb-6 bg-white">
+          <summary className="cursor-pointer font-bold">
             {c(
               'بدء مسودة عرض سعر من طلب قائم',
               'Start a quotation draft from a request',
             )}
-          </h2>
-          <div className="flex flex-wrap gap-2">
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-2">
             {(recentRequestsQuery.data || []).slice(0, 6).map((r) => (
               <Link
                 key={r.id}
@@ -188,7 +181,7 @@ function QuotationsList() {
               </Link>
             ))}
           </div>
-        </section>
+        </details>
       )}
 
       <div className="panel bg-white">
@@ -211,9 +204,9 @@ function QuotationsList() {
             }}
           >
             <option value="">{c('كل الحالات', 'All statuses')}</option>
-            {Object.entries(STATUS_META).map(([key, item]) => (
+            {Object.entries(QUOTATION_STATUS_LABELS).map(([key, item]) => (
               <option key={key} value={key}>
-                {c(item.ar, item.en)}
+                {c(...item)}
               </option>
             ))}
           </select>
@@ -228,23 +221,23 @@ function QuotationsList() {
           />
         ) : rows.length ? (
           <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{c('رقم العرض', 'Quotation #')}</th>
-                  <th>{c('المراجعة', 'Revision')}</th>
-                  <th>{c('الإجمالي', 'Total')}</th>
-                  <th>{c('حالة العرض', 'Status')}</th>
-                  <th>{c('حالة PDF', 'PDF status')}</th>
-                  <th>{c('تاريخ الصلاحية', 'Valid until')}</th>
+            <table className="data-table admin-responsive-table" role="table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader">{c('رقم العرض', 'Quotation #')}</th>
+                  <th role="columnheader">{c('المراجعة', 'Revision')}</th>
+                  <th role="columnheader">{c('الإجمالي', 'Total')}</th>
+                  <th role="columnheader">{c('حالة العرض', 'Status')}</th>
+                  <th role="columnheader">{c('حالة PDF', 'PDF status')}</th>
+                  <th role="columnheader">{c('تاريخ الصلاحية', 'Valid until')}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {rows.map((row) => {
-                  const st = STATUS_META[row.status] || STATUS_META.draft
+                  const st = QUOTATION_STATUS_LABELS[row.status] || QUOTATION_STATUS_LABELS.draft
                   return (
-                    <tr key={row.id}>
-                      <td>
+                    <tr role="row" key={row.id}>
+                      <td role="cell" data-label={c('رقم العرض', 'Quotation #')}>
                         <Link
                           href={`/admin/quotations/${row.id}`}
                           dir="ltr"
@@ -253,17 +246,17 @@ function QuotationsList() {
                           {row.number || c('مسودة (Draft)', 'Draft')}
                         </Link>
                       </td>
-                      <td className="font-mono">R{row.revision}</td>
-                      <td dir="ltr" className="font-mono">
+                      <td role="cell" data-label={c('المراجعة', 'Revision')} className="font-mono">R{row.revision}</td>
+                      <td role="cell" data-label={c('الإجمالي', 'Total')} dir="ltr" className="font-mono">
                         {(Number(row.totals?.total || 0) / 100).toLocaleString(
                           'en-EG',
                         )}{' '}
                         {row.currency}
                       </td>
-                      <td>
-                        <Badge tone={st.tone}>{c(st.ar, st.en)}</Badge>
+                      <td role="cell" data-label={c('حالة العرض', 'Status')}>
+                        <Badge tone={STATUS_TONES[row.status] || 'muted'}>{c(...st)}</Badge>
                       </td>
-                      <td>
+                      <td role="cell" data-label={c('حالة PDF', 'PDF status')}>
                         <Badge
                           tone={
                             row.pdfStatus === 'ready'
@@ -275,10 +268,10 @@ function QuotationsList() {
                                   : 'muted'
                           }
                         >
-                          {row.pdfStatus}
+                          {c(...(PDF_STATUS_LABELS[row.pdfStatus || 'none'] || PDF_STATUS_LABELS.none))}
                         </Badge>
                       </td>
-                      <td className="text-muted-foreground">
+                      <td role="cell" data-label={c('تاريخ الصلاحية', 'Valid until')} className="text-muted-foreground">
                         {row.validUntil || '—'}
                       </td>
                     </tr>
@@ -465,7 +458,7 @@ function QuotationEditor({ id }: { id: string }) {
 
   const status: QuotationStatus = isNew ? 'draft' : quotation?.status || 'draft'
   const frozen = status !== 'draft'
-  const statusBadge = STATUS_META[status] || STATUS_META.draft
+  const statusBadge = QUOTATION_STATUS_LABELS[status] || QUOTATION_STATUS_LABELS.draft
 
   const totals = useMemo(() => {
     const calculated = quoteTotals(
@@ -756,8 +749,8 @@ function QuotationEditor({ id }: { id: string }) {
               {quotation?.number ||
                 c('مسودة عرض سعر جديد', 'New Quotation Draft')}
             </h1>
-            <Badge tone={statusBadge.tone}>
-              {c(statusBadge.ar, statusBadge.en)}
+            <Badge tone={STATUS_TONES[status]}>
+              {c(...statusBadge)}
             </Badge>
             <span className="font-mono text-sm text-muted-foreground">
               R{quotation?.revision ?? 1}
@@ -906,7 +899,7 @@ function QuotationEditor({ id }: { id: string }) {
           </select>
         </Field>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(15rem,30%)]">
         <div className="space-y-6">
           <section className="panel bg-white">
             <div className="mb-4 flex items-center justify-between">
@@ -983,7 +976,7 @@ function QuotationEditor({ id }: { id: string }) {
                     </Field>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-[120px_110px_120px_1fr_auto] sm:items-end">
+                  <div className="grid min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-4">
                     <Field label={c('الكمية', 'Qty')}>
                       <input
                         type="number"
@@ -1102,7 +1095,7 @@ function QuotationEditor({ id }: { id: string }) {
                 onChange={(e) => setValidUntil(e.target.value)}
               />
             </Field>
-            <Field label={c('الخصم (ج.م)', 'Discount (EGP)')}>
+            <Field label={c(`الخصم (${quoteCurrency})`, `Discount (${quoteCurrency})`)}>
               <input
                 type="number"
                 min={0}
