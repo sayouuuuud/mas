@@ -76,7 +76,9 @@ function ConfirmDialog({
   return (
     <dialog
       ref={ref}
-      onClose={close}
+      onClose={(event) => {
+        if (!event.currentTarget.open) close()
+      }}
       className="confirm-dialog"
       aria-labelledby="confirm-title"
     >

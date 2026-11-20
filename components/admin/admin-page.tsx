@@ -13,6 +13,7 @@ import {
 import { useLanguage } from '@/components/language-provider'
 import { AccountSecurityWorkspace } from './security-workspace'
 import { AdminLogin, AdminShell } from './admin-shell'
+import { CategoriesWorkspace } from './categories-workspace'
 import { ProductWorkspace } from './products-workspace'
 import { Dashboard, InquiriesWorkspace, RequestsPage } from './sales-workspace'
 import { QuotationsWorkspace } from './quotations-workspace'
@@ -39,6 +40,7 @@ export function AdminPage({ path }: { path: string[] }) {
   let body
   if (!section) body = <Dashboard />
   else if (section === 'products') body = <ProductWorkspace id={id} />
+  else if (section === 'categories' && !id) body = <CategoriesWorkspace />
   else if (section === 'quote-requests') body = <RequestsPage id={id} />
   else if (section === 'inquiries') body = <InquiriesWorkspace id={id} />
   else if (section === 'quotations') body = <QuotationsWorkspace id={id} />
