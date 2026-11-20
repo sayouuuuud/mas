@@ -208,11 +208,8 @@ function CategoryRows({
               >
                 {category.name[lang]}
               </Link>
-              <span
-                dir="auto"
-                className="mt-0.5 block break-words text-start text-xs text-muted-foreground"
-              >
-                {category.name[otherLanguage]}
+              <span className="mt-0.5 block break-words text-start text-xs text-muted-foreground">
+                <bdi>{category.name[otherLanguage]}</bdi>
               </span>
             </div>
           </div>
