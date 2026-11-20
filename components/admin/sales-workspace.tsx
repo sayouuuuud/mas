@@ -19,6 +19,7 @@ import {
   Field,
   LoadingState,
   RequestStatusBadge,
+  REQUEST_STATUS_LABELS,
   useCopy,
 } from '@/components/demo/ui'
 import { useLanguage } from '@/components/language-provider'
@@ -42,6 +43,8 @@ import type {
   ReportsSummary,
   UnitRecord,
 } from '@/lib/types'
+
+import { PDF_STATUS_LABELS, QUOTATION_STATUS_LABELS } from './workspace-ui'
 
 const RFQ_STATUSES = [
   'new',
@@ -235,7 +238,7 @@ export function Dashboard() {
         </section>
       )}
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {[
           [
             c('طلبات جديدة', 'New requests'),
@@ -255,11 +258,14 @@ export function Dashboard() {
             c('متاحة في الكتالوج العام', 'Visible in public catalog'),
           ],
           [
-            c('الاستفسارات وعروض الأسعار', 'Inquiries & quotations'),
-            reportsQuery.isLoading
-              ? '…'
-              : `${summary?.inquiries ?? 0} / ${summary?.quotations ?? 0}`,
-            c('رسائل العملاء / العروض', 'Inquiries / Quotations'),
+            c('الاستفسارات', 'Inquiries'),
+            reportsQuery.isLoading ? '…' : (summary?.inquiries ?? 0),
+            c('رسائل العملاء', 'Customer messages'),
+          ],
+          [
+            c('عروض الأسعار', 'Quotations'),
+            reportsQuery.isLoading ? '…' : (summary?.quotations ?? 0),
+            c('كل عروض الأسعار', 'All quotations'),
           ],
         ].map(([label, val, note]) => (
           <div className="panel bg-white" key={String(label)}>
@@ -379,7 +385,7 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
             <option value="">{c('كل الحالات', 'All statuses')}</option>
             {RFQ_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {c(...REQUEST_STATUS_LABELS[s])}
               </option>
             ))}
           </select>
@@ -414,29 +420,29 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
         />
       ) : rows.length === 0 ? (
         <EmptyState
-          title={c('لا توجد طلبات عروض أسعار', 'No quote requests yet')}
-          description={c(
+          title={q.trim() || status ? c('لا توجد طلبات مطابقة', 'No matching requests') : c('لا توجد طلبات عروض أسعار', 'No quote requests yet')}
+          description={q.trim() || status ? c('غيّر البحث أو حالة الطلب.', 'Change the search or request status.') : c(
             'ستظهر الطلبات المرسلة من الموقع العام أو المحولة من الاستفسارات هنا فورًا.',
             'Requests submitted from the public website or converted from inquiries appear here.',
           )}
         />
       ) : (
         <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>{c('المرجع', 'Reference')}</th>
-                <th>{c('العميل / الشركة', 'Customer / Company')}</th>
-                <th>{c('الحالة', 'Status')}</th>
-                <th>{c('المسؤول', 'Assignee')}</th>
-                <th>{c('البنود', 'Items')}</th>
-                <th>{c('التاريخ', 'Date')}</th>
+          <table className="data-table admin-responsive-table" role="table">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader">{c('المرجع', 'Reference')}</th>
+                <th role="columnheader">{c('العميل / الشركة', 'Customer / Company')}</th>
+                <th role="columnheader">{c('الحالة', 'Status')}</th>
+                <th role="columnheader">{c('المسؤول', 'Assignee')}</th>
+                <th role="columnheader">{c('البنود', 'Items')}</th>
+                <th role="columnheader">{c('التاريخ', 'Date')}</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
+                <tr role="row" key={r.id}>
+                  <td role="cell" data-label={c('المرجع', 'Reference')}>
                     <Link
                       href={`/admin/quote-requests/${r.id}`}
                       dir="ltr"
@@ -445,7 +451,7 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
                       {r.reference}
                     </Link>
                   </td>
-                  <td>
+                  <td role="cell" data-label={c('العميل / الشركة', 'Customer / Company')}>
                     <strong>
                       {r.customerSnapshot?.company || r.customerSnapshot?.name}
                     </strong>
@@ -454,15 +460,15 @@ export function RequestTable({ compact = false }: { compact?: boolean }) {
                       <span dir="ltr">{r.customerSnapshot?.phone}</span>
                     </small>
                   </td>
-                  <td>
+                  <td role="cell" data-label={c('الحالة', 'Status')}>
                     <RequestStatusBadge status={r.status} />
                   </td>
-                  <td className="text-muted-foreground">
+                  <td role="cell" data-label={c('المسؤول', 'Assignee')} className="text-muted-foreground">
                     {(r.assignedTo && teamMap.get(r.assignedTo)) ||
                       c('غير معيّن', 'Unassigned')}
                   </td>
-                  <td>{r.itemCount ?? r.items?.length ?? 0}</td>
-                  <td className="text-xs text-muted-foreground">
+                  <td role="cell" data-label={c('البنود', 'Items')}>{r.itemCount ?? r.items?.length ?? 0}</td>
+                  <td role="cell" data-label={c('التاريخ', 'Date')} className="text-xs text-muted-foreground">
                     {new Date(r.createdAt).toLocaleDateString(
                       lang === 'ar' ? 'ar-EG' : 'en-EG',
                       { timeZone: 'Africa/Cairo' },
@@ -857,12 +863,7 @@ export function RequestsPage({ id }: { id?: string }) {
               <h2 className="text-xl font-bold">
                 {c('عروض الأسعار المرتبطة', 'Linked quotations')}
               </h2>
-              <Link
-                href={`/admin/quotations/new?requestId=${request.id}`}
-                className="text-sm font-semibold text-primary"
-              >
-                {c('+ مسودة جديدة', '+ New draft')}
-              </Link>
+
             </div>
             {linkedQuotations.length ? (
               <div className="space-y-2">
@@ -878,7 +879,7 @@ export function RequestsPage({ id }: { id?: string }) {
                         {q.revision}
                       </strong>
                       <small className="block text-xs text-muted-foreground">
-                        {q.status} · PDF: {q.pdfStatus}
+                        {c(...QUOTATION_STATUS_LABELS[q.status])} · PDF: {c(...PDF_STATUS_LABELS[q.pdfStatus || 'none'])}
                       </small>
                     </div>
                     <strong dir="ltr" className="font-mono text-sm">
@@ -1332,7 +1333,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
               <option value="">{c('كل الحالات', 'All statuses')}</option>
               {INQUIRY_STATUSES.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {c(INQUIRY_STATUS_LABELS[s].ar, INQUIRY_STATUS_LABELS[s].en)}
                 </option>
               ))}
             </select>
@@ -1355,25 +1356,25 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
             />
           ) : (
             <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>{c('المرجع', 'Reference')}</th>
-                    <th>{c('المرسل', 'Sender')}</th>
-                    <th>{c('الموضوع', 'Subject')}</th>
-                    <th>{c('الحالة', 'Status')}</th>
-                    <th>{c('تحويل RFQ', 'RFQ Conversion')}</th>
-                    <th>{c('التاريخ', 'Date')}</th>
+              <table className="data-table admin-responsive-table" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader">{c('المرجع', 'Reference')}</th>
+                    <th role="columnheader">{c('المرسل', 'Sender')}</th>
+                    <th role="columnheader">{c('الموضوع', 'Subject')}</th>
+                    <th role="columnheader">{c('الحالة', 'Status')}</th>
+                    <th role="columnheader">{c('تحويل RFQ', 'RFQ Conversion')}</th>
+                    <th role="columnheader">{c('التاريخ', 'Date')}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {rows.map((inq) => {
                     const st =
                       INQUIRY_STATUS_LABELS[inq.status] ||
                       INQUIRY_STATUS_LABELS.new
                     return (
-                      <tr key={inq.id}>
-                        <td>
+                      <tr role="row" key={inq.id}>
+                        <td role="cell" data-label={c('المرجع', 'Reference')}>
                           <Link
                             href={`/admin/inquiries/${inq.id}`}
                             dir="ltr"
@@ -1382,7 +1383,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                             {inq.reference}
                           </Link>
                         </td>
-                        <td>
+                        <td role="cell" data-label={c('المرسل', 'Sender')}>
                           <strong>
                             {inq.customerSnapshot?.company ||
                               inq.customerSnapshot?.name}
@@ -1391,11 +1392,11 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                             <span dir="ltr">{inq.customerSnapshot?.phone}</span>
                           </small>
                         </td>
-                        <td>{inq.message}</td>
-                        <td>
+                        <td role="cell" data-label={c('الموضوع', 'Subject')}><p className="line-clamp-2 max-w-sm break-words">{inq.message}</p></td>
+                        <td role="cell" data-label={c('الحالة', 'Status')}>
                           <Badge tone={st.tone}>{c(st.ar, st.en)}</Badge>
                         </td>
-                        <td>
+                        <td role="cell" data-label={c('تحويل RFQ', 'RFQ Conversion')}>
                           {inq.convertedRequestId ? (
                             <Link
                               href={`/admin/quote-requests/${inq.convertedRequestId}`}
@@ -1409,7 +1410,7 @@ export function InquiriesWorkspace({ id }: { id?: string }) {
                             </span>
                           )}
                         </td>
-                        <td className="text-xs text-muted-foreground">
+                        <td role="cell" data-label={c('التاريخ', 'Date')} className="text-xs text-muted-foreground">
                           {new Date(inq.createdAt).toLocaleDateString(
                             lang === 'ar' ? 'ar-EG' : 'en-EG',
                             { timeZone: 'Africa/Cairo' },

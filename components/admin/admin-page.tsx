@@ -347,14 +347,19 @@ function ActivityLog() {
   const { lang } = useLanguage()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const validRange = !from || !to || from <= to
 
   const listPath = buildApiPath('/admin/audit-log', {
     page,
     pageSize: 20,
     q: q.trim() || undefined,
+    from: from || undefined,
+    to: to || undefined,
   })
 
-  const auditQuery = useLiveQuery(listPath, async () => {
+  const auditQuery = useLiveQuery(validRange ? listPath : null, async () => {
     const res = await api<AuditLogRecord[]>(listPath)
     return {
       data: res.data,
@@ -389,23 +394,33 @@ function ActivityLog() {
         </div>
       </div>
       <div className="panel bg-white">
-        <Field
-          label={c(
-            'بحث بالمورد أو العملية أو المعرف',
-            'Search resource, action or ID',
-          )}
-        >
-          <input
-            className="control"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value)
-              setPage(1)
-            }}
-          />
-        </Field>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_10rem_10rem]">
+          <Field
+            label={c(
+              'بحث بالمورد أو العملية أو المعرف',
+              'Search resource, action or ID',
+            )}
+          >
+            <input
+              className="control"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value)
+                setPage(1)
+              }}
+            />
+          </Field>
+          <Field label={c('من تاريخ', 'From date')}>
+            <input type="date" className="control" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1) }} />
+          </Field>
+          <Field label={c('إلى تاريخ', 'To date')}>
+            <input type="date" className="control" value={to} onChange={(e) => { setTo(e.target.value); setPage(1) }} />
+          </Field>
+        </div>
         <div className="mt-5 space-y-4">
-          {auditQuery.isLoading ? (
+          {!validRange ? (
+            <p role="alert" className="text-sm text-red-700">{c('تاريخ النهاية لازم يكون بعد البداية أو في نفس اليوم.', 'End date must be on or after the start date.')}</p>
+          ) : auditQuery.isLoading ? (
             <LoadingState />
           ) : auditQuery.error ? (
             <ErrorState

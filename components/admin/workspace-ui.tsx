@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { Lang } from '@/lib/i18n'
-import type { PublicationStatus } from '@/lib/types'
+import type { PublicationStatus, QuotationStatus } from '@/lib/types'
 
 export const publicationLabels = {
   ar: { published: 'منشور', draft: 'مسودة', archived: 'مؤرشف' },
@@ -78,4 +78,21 @@ export function PublicationPill({
       {publicationLabels[lang][value]}
     </span>
   )
+}
+
+export const PDF_STATUS_LABELS: Record<string, [string, string]> = {
+  none: ['غير متاح', 'Not available'],
+  processing: ['قيد التجهيز', 'Processing'],
+  ready: ['جاهز', 'Ready'],
+  failed: ['تعذّر التجهيز', 'Failed'],
+}
+
+export const QUOTATION_STATUS_LABELS: Record<QuotationStatus, [string, string]> = {
+  draft: ['مسودة', 'Draft'],
+  issued: ['صادر رسميًا', 'Issued'],
+  sent: ['سُجّل تسليمه للعميل', 'Delivery logged'],
+  accepted: ['مقبول من العميل', 'Accepted'],
+  rejected: ['مرفوض', 'Rejected'],
+  expired: ['منتهي الصلاحية', 'Expired'],
+  superseded: ['مستبدل بمراجعة أحدث', 'Superseded'],
 }
