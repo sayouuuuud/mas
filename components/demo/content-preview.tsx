@@ -11,8 +11,8 @@ import {
 import { usePublicBootstrap } from '@/components/demo/demo-provider'
 import type { ContentBlockRecord } from '@/lib/types'
 
-export function usePublicContentBlock(key: string) {
-  return useLiveQuery(`/content/${key}`, async () => {
+export function usePublicContentBlock(key: string | null) {
+  return useLiveQuery(key === null ? null : `/content/${key}`, async () => {
     try {
       const res = await api<ContentBlockRecord>(`/content/${key}`)
       return res.data

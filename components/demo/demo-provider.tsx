@@ -208,8 +208,8 @@ export function useDemo() {
   return context
 }
 
-export function usePublicBootstrap() {
-  return useLiveQuery('/public/bootstrap', async () => {
+export function usePublicBootstrap(enabled = true) {
+  return useLiveQuery(enabled ? '/public/bootstrap' : null, async () => {
     const res = await api<{
       navigation?: NavigationRecord[]
       settings?: SettingsRecord | null
