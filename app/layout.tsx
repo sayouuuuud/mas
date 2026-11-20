@@ -6,6 +6,7 @@ import { LanguageProvider } from '@/components/language-provider'
 import { LANG_COOKIE, type Lang } from '@/lib/i18n'
 import './globals.css'
 import { DemoProvider } from '@/components/demo/demo-provider'
+import { StartupScreen } from '@/components/site/startup-screen'
 
 const siteOrigin = (() => {
   try {
@@ -69,7 +70,10 @@ export default async function RootLayout({
     >
       <body className="font-sans antialiased">
         <LanguageProvider initialLang={lang}>
-          <DemoProvider>{children}</DemoProvider>
+          <DemoProvider>
+            <StartupScreen />
+            {children}
+          </DemoProvider>
         </LanguageProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

@@ -146,6 +146,26 @@ html[lang='en'] {
   padding-inline: clamp(1.5rem, 5vw, 5rem);
 }
 
+/* Let the document remain usable even if the client bundle never runs. */
+@keyframes startup-screen-fail-open {
+  to { visibility: hidden; }
+}
+
+.site-startup-screen {
+  animation: startup-screen-fail-open 0s 4s forwards;
+}
+
+.site-startup-screen[data-ready] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-startup-screen {
+    transition: opacity 180ms ease-out;
+  }
+}
+
 @keyframes hero-enter {
   from {
     opacity: 0;
