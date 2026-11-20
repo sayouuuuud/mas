@@ -101,6 +101,7 @@ export function PublicPage({ path }: { path: string[] }) {
   const { lang } = useLanguage()
   const c = useCopy()
   const [section, slug] = path
+  const mainCategories = categories.filter((category) => !category.parentId)
 
   if (!section) return <HomePage />
 
@@ -200,9 +201,9 @@ export function PublicPage({ path }: { path: string[] }) {
             <LoadingState />
           ) : error ? (
             <ErrorState error={error} onRetry={() => void refresh()} />
-          ) : categories.length ? (
+          ) : mainCategories.length ? (
             <div className="grid gap-6 md:grid-cols-3">
-              {categories.map((cat) => (
+              {mainCategories.map((cat) => (
                 <Link
                   key={cat.id}
                   href={`/categories/${cat.slug || cat.id}`}

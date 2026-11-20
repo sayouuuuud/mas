@@ -112,7 +112,12 @@ export function ResourceWorkspace({
   const [feedback, setFeedback] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
-  const listPath = !id
+  const isCategoryList = section === 'categories' && !id
+  const categoryListQuery = useLiveQuery(
+    isCategoryList ? '/admin/categories?page=1&pageSize=48' : null,
+    () => listAllRecords<CategoryRecord>('categories'),
+  )
+  const listPath = !id && !isCategoryList
     ? buildApiPath(`/admin/${section}`, {
         page,
         pageSize: 15,
@@ -138,7 +143,48 @@ export function ResourceWorkspace({
     return <ResourceEditor section={section} id={id} />
   }
 
-  const rows = listQuery.data?.data || []
+  const activeListQuery = isCategoryList ? categoryListQuery : listQuery
+  const allCategories = [...(categoryListQuery.data || [])].sort(
+    (a, b) =>
+      (a.order ?? 0) - (b.order ?? 0) ||
+      a.name[lang].localeCompare(b.name[lang], lang),
+  )
+  const categoryById = new Map(allCategories.map((category) => [category.id, category]))
+  const childrenByParent = new Map<string, CategoryRecord[]>()
+  for (const category of allCategories) {
+    if (!category.parentId) continue
+    const children = childrenByParent.get(category.parentId) || []
+    children.push(category)
+    childrenByParent.set(category.parentId, children)
+  }
+  const seenCategories = new Set<string>()
+  function categoryBranch(category: CategoryRecord): CategoryRecord[] {
+    if (seenCategories.has(category.id)) return []
+    seenCategories.add(category.id)
+    return [category, ...(childrenByParent.get(category.id) || []).flatMap(categoryBranch)]
+  }
+  const groupedCategories = [
+    ...allCategories.filter((category) => !category.parentId).flatMap(categoryBranch),
+    ...allCategories.flatMap(categoryBranch),
+  ]
+  const search = q.trim().toLowerCase()
+  const matchingIds = new Set(
+    groupedCategories
+      .filter((category) =>
+        [category.name.ar, category.name.en, category.slug].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+      )
+      .map((category) => category.id),
+  )
+  const rows = isCategoryList
+    ? groupedCategories.filter(
+        (category) =>
+          matchingIds.has(category.id) ||
+          (category.parentId && matchingIds.has(category.parentId)) ||
+          childrenByParent.get(category.id)?.some((child) => matchingIds.has(child.id)),
+      )
+    : listQuery.data?.data || []
   const pagination = listQuery.data?.meta || {
     page: 1,
     pageSize: 15,
@@ -170,7 +216,7 @@ export function ResourceWorkspace({
           key.startsWith('/catalog/') ||
           key.startsWith('/content/'),
       )
-      await listQuery.refresh()
+      await activeListQuery.refresh()
       setFeedback(c('تم حذف السجل بنجاح.', 'Record deleted.'))
     } catch (err) {
       setErrorMsg(formatApiError(err, lang))
@@ -276,7 +322,9 @@ export function ResourceWorkspace({
             <Plus className="size-4" />
             {section === 'team'
               ? c('دعوة أدمن جديد', 'Invite Admin')
-              : c('إضافة سجل', 'New record')}
+              : isCategoryList
+                ? c('إضافة تصنيف فرعي', 'Add a subcategory')
+                : c('إضافة سجل', 'New record')}
           </Link>
         </div>
       </div>
@@ -307,12 +355,12 @@ export function ResourceWorkspace({
           </div>
         )}
 
-        {listQuery.isLoading ? (
+        {activeListQuery.isLoading ? (
           <LoadingState />
-        ) : listQuery.error ? (
+        ) : activeListQuery.error ? (
           <ErrorState
-            error={listQuery.error}
-            onRetry={() => void listQuery.refresh()}
+            error={activeListQuery.error}
+            onRetry={() => void activeListQuery.refresh()}
           />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -341,10 +389,23 @@ export function ResourceWorkspace({
               </thead>
               <tbody>
                 {rows.map((row) => {
-                  const rowId = section === 'team' ? row.id : row.id
+                  const rowId = row.id
+                  const parent = isCategoryList ? categoryById.get(row.parentId) : undefined
+                  const isMainCategory = isCategoryList && !row.parentId
                   return (
-                    <tr key={rowId}>
-                      <td className="font-semibold">{displayRowTitle(row)}</td>
+                    <tr key={rowId} className={isMainCategory ? 'bg-muted/70' : undefined}>
+                      <td className="font-semibold">
+                        <div className={parent ? 'border-s-2 ps-3' : undefined}>
+                          {displayRowTitle(row)}
+                          {isCategoryList && (
+                            <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                              {isMainCategory
+                                ? c('تصنيف رئيسي', 'Main category')
+                                : parent?.name[lang] || c('تصنيف فرعي', 'Subcategory')}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td
                         dir="ltr"
                         className="font-mono text-xs text-muted-foreground"
@@ -380,7 +441,7 @@ export function ResourceWorkspace({
           </div>
         )}
 
-        {pagination.total > 0 && (
+        {!isCategoryList && pagination.total > 0 && (
           <Pagination
             page={pagination.page}
             pages={Math.max(1, pagination.totalPages)}
@@ -445,6 +506,10 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
 
   useEffect(() => {
     if (isNew && initializedKey !== `new:${section}`) {
+      const parentId =
+        section === 'categories'
+          ? new URLSearchParams(window.location.search).get('parentId') || ''
+          : ''
       setForm({
         nameAr: '',
         nameEn: '',
@@ -452,7 +517,7 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         key: '',
         code: '',
         family: 'oils',
-        parentId: '',
+        parentId,
         imageMediaId: '',
         logoMediaId: '',
         website: '',
@@ -598,6 +663,15 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
   const contentKey = (form.key || '').trim().toLowerCase()
   const isPrivacyPolicy = contentKey === 'privacy'
 
+  const mainCategories = (categoriesQuery.data || []).filter(
+    (category) => !category.parentId && category.id !== id,
+  ).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const selectedParent = categoriesQuery.data?.find(
+    (category) => category.id === form.parentId,
+  )
+  const isMainCategory = section === 'categories' && !isNew && !record?.parentId &&
+    record?.slug === record?.family
+
   function buildPayload() {
     switch (section) {
       case 'categories':
@@ -608,7 +682,8 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
             ar: form.descriptionAr.trim(),
             en: form.descriptionEn.trim(),
           },
-          family: form.family,
+          family: selectedParent?.family || form.family,
+          featured: Boolean(form.featured),
           parentId: form.parentId || null,
           imageMediaId: form.imageMediaId || null,
           order: Number(form.order || 0),
@@ -797,6 +872,14 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
         setErrorMsg(error)
         return null
       }
+    }
+    if (
+      section === 'categories' &&
+      (isNew || Boolean(record?.parentId)) &&
+      !selectedParent
+    ) {
+      setErrorMsg(c('اختر التصنيف الرئيسي أولًا.', 'Choose a main category first.'))
+      return null
     }
     setBusy(true)
     try {
@@ -1171,7 +1254,10 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                   setForm((prev) => ({
                     ...prev,
                     nameEn: val,
-                    slug: isNew && !prev.slug ? toSlug(val) : prev.slug,
+                    slug:
+                      isNew && (!prev.slug || prev.slug === toSlug(prev.nameEn))
+                        ? toSlug(val)
+                        : prev.slug,
                   }))
                 }}
               />
@@ -1201,37 +1287,32 @@ function ResourceEditor({ section, id }: { section: string; id: string }) {
                   />
                 </Field>
                 {section === 'categories' && (
-                  <>
-                    <Field label={c('العائلة', 'Product family')}>
+                  <Field label={c('التصنيف الرئيسي', 'Main category')}>
+                    {isMainCategory ? (
+                      <input
+                        className="control"
+                        readOnly
+                        value={form[lang === 'ar' ? 'nameAr' : 'nameEn'] || ''}
+                      />
+                    ) : (
                       <select
                         className="control"
-                        value={form.family || 'oils'}
-                        onChange={(e) =>
-                          setForm({ ...form, family: e.target.value })
-                        }
-                      >
-                        <option value="oils">{c('زيوت', 'Oils')}</option>
-                        <option value="grease">{c('شحومات', 'Grease')}</option>
-                        <option value="bearings">
-                          {c('رولمان بلي', 'Bearings')}
-                        </option>
-                      </select>
-                    </Field>
-                    <Field
-                      label={c('التصنيف الأب (اختياري)', 'Parent category')}
-                    >
-                      <RemoteSelect
-                        resource="categories"
+                        required={isNew || Boolean(record?.parentId)}
+                        disabled={categoriesQuery.isLoading}
                         value={form.parentId || ''}
-                        onChange={(parentId: string) => {
-                          markDirty()
-                          setForm({ ...form, parentId })
-                        }}
-                        label={c('التصنيف الأب', 'Parent category')}
-                        filters={{ family: form.family || 'oils' }}
-                      />
-                    </Field>
-                  </>
+                        onChange={(event) => setForm({ ...form, parentId: event.target.value })}
+                      >
+                        <option value="">{c('اختر التصنيف الرئيسي', 'Choose a main category')}</option>
+                        {[...mainCategories, ...(selectedParent?.parentId ? [selectedParent] : [])].map(
+                          (category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name[lang]}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    )}
+                  </Field>
                 )}
                 {section === 'brands' && (
                   <>

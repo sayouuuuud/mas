@@ -1,0 +1,52 @@
+{
+  "oils": [
+    ["engine", "زيوت محركات", "Engine oils"],
+    ["hydraulic", "زيوت هيدروليك", "Hydraulic oils"],
+    ["gear", "زيوت تروس", "Gear oils"],
+    ["industrial", "زيوت صناعية", "Industrial oils"],
+    ["transformer", "زيوت محولات", "Transformer oils"],
+    ["transmission", "سوائل ناقل الحركة", "Transmission fluids"],
+    ["compressor", "زيوت ضواغط", "Compressor oils"],
+    ["turbine", "زيوت توربينات", "Turbine oils"],
+    ["circulating", "زيوت أنظمة التدوير", "Circulating oils"],
+    ["heat-transfer", "زيوت نقل الحرارة", "Heat-transfer oils"],
+    ["refrigeration", "زيوت ضواغط التبريد", "Refrigeration compressor oils"],
+    ["metalworking", "زيوت تشغيل المعادن", "Metalworking oils"],
+    ["slideway", "زيوت مجاري الماكينات", "Slideway oils"],
+    ["process", "زيوت عمليات التصنيع", "Process oils"],
+    ["marine", "زيوت بحرية", "Marine oils"],
+    ["food-grade", "زيوت لمعدات تصنيع الأغذية", "Food-grade lubricating oils"],
+    ["vacuum-pump", "زيوت مضخات التفريغ", "Vacuum pump oils"]
+  ],
+  "grease": [
+    ["lithium", "شحم ليثيوم", "Lithium grease"],
+    ["high-temperature", "شحم حرارة عالية", "High-temperature grease"],
+    ["ep-heavy-duty", "شحم EP للأحمال الثقيلة", "EP heavy-duty grease"],
+    ["lithium-complex", "شحم ليثيوم مركّب", "Lithium complex grease"],
+    ["calcium", "شحم كالسيوم", "Calcium grease"],
+    ["calcium-complex", "شحم كالسيوم مركّب", "Calcium complex grease"],
+    ["calcium-sulfonate", "شحم سلفونات كالسيوم مركّب", "Calcium sulfonate complex grease"],
+    ["aluminum-complex", "شحم ألومنيوم مركّب", "Aluminium complex grease"],
+    ["polyurea", "شحم بولي يوريا", "Polyurea grease"],
+    ["synthetic", "شحم صناعي تخليقي", "Synthetic grease"],
+    ["food-grade", "شحم لمعدات تصنيع الأغذية", "Food-grade grease"],
+    ["low-temperature", "شحم درجات حرارة منخفضة", "Low-temperature grease"],
+    ["moly", "شحم موليبدينوم", "Molybdenum disulfide grease"],
+    ["multipurpose", "شحم متعدد الاستخدامات", "Multipurpose grease"]
+  ],
+  "bearings": [
+    ["ball", "رمان كُروي", "Ball bearings"],
+    ["cylindrical", "رمان أسطواني", "Cylindrical roller bearings"],
+    ["tapered", "رمان مخروطي", "Tapered roller bearings"],
+    ["needle", "رمان إبري", "Needle roller bearings"],
+    ["angular-contact", "رمان كروي بتلامس زاوي", "Angular contact ball bearings"],
+    ["self-aligning-ball", "رمان كروي ذاتي المحاذاة", "Self-aligning ball bearings"],
+    ["spherical-roller", "رمان ببكرات كروية", "Spherical roller bearings"],
+    ["thrust-ball", "رمان دفع كروي", "Thrust ball bearings"],
+    ["thrust-roller", "رمان دفع ببكرات", "Thrust roller bearings"],
+    ["insert", "رمان إدخال للوحدات", "Insert bearings"],
+    ["housed", "وحدات رمان بلي بحامل", "Housed bearing units"],
+    ["plain", "محامل انزلاقية وجلب", "Plain bearings and bushings"],
+    ["linear", "محامل حركة خطية", "Linear bearings"]
+  ]
+}
