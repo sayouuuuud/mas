@@ -112,12 +112,7 @@ export function ResourceWorkspace({
   const [feedback, setFeedback] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
-  const isCategoryList = section === 'categories' && !id
-  const categoryListQuery = useLiveQuery(
-    isCategoryList ? '/admin/categories?page=1&pageSize=48' : null,
-    () => listAllRecords<CategoryRecord>('categories'),
-  )
-  const listPath = !id && !isCategoryList
+  const listPath = !id
     ? buildApiPath(`/admin/${section}`, {
         page,
         pageSize: 15,
@@ -143,48 +138,7 @@ export function ResourceWorkspace({
     return <ResourceEditor section={section} id={id} />
   }
 
-  const activeListQuery = isCategoryList ? categoryListQuery : listQuery
-  const allCategories = [...(categoryListQuery.data || [])].sort(
-    (a, b) =>
-      (a.order ?? 0) - (b.order ?? 0) ||
-      a.name[lang].localeCompare(b.name[lang], lang),
-  )
-  const categoryById = new Map(allCategories.map((category) => [category.id, category]))
-  const childrenByParent = new Map<string, CategoryRecord[]>()
-  for (const category of allCategories) {
-    if (!category.parentId) continue
-    const children = childrenByParent.get(category.parentId) || []
-    children.push(category)
-    childrenByParent.set(category.parentId, children)
-  }
-  const seenCategories = new Set<string>()
-  function categoryBranch(category: CategoryRecord): CategoryRecord[] {
-    if (seenCategories.has(category.id)) return []
-    seenCategories.add(category.id)
-    return [category, ...(childrenByParent.get(category.id) || []).flatMap(categoryBranch)]
-  }
-  const groupedCategories = [
-    ...allCategories.filter((category) => !category.parentId).flatMap(categoryBranch),
-    ...allCategories.flatMap(categoryBranch),
-  ]
-  const search = q.trim().toLowerCase()
-  const matchingIds = new Set(
-    groupedCategories
-      .filter((category) =>
-        [category.name.ar, category.name.en, category.slug].some((value) =>
-          value?.toLowerCase().includes(search),
-        ),
-      )
-      .map((category) => category.id),
-  )
-  const rows = isCategoryList
-    ? groupedCategories.filter(
-        (category) =>
-          matchingIds.has(category.id) ||
-          (category.parentId && matchingIds.has(category.parentId)) ||
-          childrenByParent.get(category.id)?.some((child) => matchingIds.has(child.id)),
-      )
-    : listQuery.data?.data || []
+  const rows = listQuery.data?.data || []
   const pagination = listQuery.data?.meta || {
     page: 1,
     pageSize: 15,
@@ -216,7 +170,7 @@ export function ResourceWorkspace({
           key.startsWith('/catalog/') ||
           key.startsWith('/content/'),
       )
-      await activeListQuery.refresh()
+      await listQuery.refresh()
       setFeedback(c('تم حذف السجل بنجاح.', 'Record deleted.'))
     } catch (err) {
       setErrorMsg(formatApiError(err, lang))
@@ -322,9 +276,7 @@ export function ResourceWorkspace({
             <Plus className="size-4" />
             {section === 'team'
               ? c('دعوة أدمن جديد', 'Invite Admin')
-              : isCategoryList
-                ? c('إضافة تصنيف فرعي', 'Add a subcategory')
-                : c('إضافة سجل', 'New record')}
+              : c('إضافة سجل', 'New record')}
           </Link>
         </div>
       </div>
@@ -355,12 +307,12 @@ export function ResourceWorkspace({
           </div>
         )}
 
-        {activeListQuery.isLoading ? (
+        {listQuery.isLoading ? (
           <LoadingState />
-        ) : activeListQuery.error ? (
+        ) : listQuery.error ? (
           <ErrorState
-            error={activeListQuery.error}
-            onRetry={() => void activeListQuery.refresh()}
+            error={listQuery.error}
+            onRetry={() => void listQuery.refresh()}
           />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -390,22 +342,9 @@ export function ResourceWorkspace({
               <tbody>
                 {rows.map((row) => {
                   const rowId = row.id
-                  const parent = isCategoryList ? categoryById.get(row.parentId) : undefined
-                  const isMainCategory = isCategoryList && !row.parentId
                   return (
-                    <tr key={rowId} className={isMainCategory ? 'bg-muted/70' : undefined}>
-                      <td className="font-semibold">
-                        <div className={parent ? 'border-s-2 ps-3' : undefined}>
-                          {displayRowTitle(row)}
-                          {isCategoryList && (
-                            <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                              {isMainCategory
-                                ? c('تصنيف رئيسي', 'Main category')
-                                : parent?.name[lang] || c('تصنيف فرعي', 'Subcategory')}
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                    <tr key={rowId}>
+                      <td className="font-semibold">{displayRowTitle(row)}</td>
                       <td
                         dir="ltr"
                         className="font-mono text-xs text-muted-foreground"
@@ -441,7 +380,7 @@ export function ResourceWorkspace({
           </div>
         )}
 
-        {!isCategoryList && pagination.total > 0 && (
+        {pagination.total > 0 && (
           <Pagination
             page={pagination.page}
             pages={Math.max(1, pagination.totalPages)}
