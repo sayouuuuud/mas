@@ -94,7 +94,7 @@ async function main() {
       name: company.name,
       email: company.email,
       phone: phones.mobile.href.slice(4),
-      logoMediaId: await asset('/images/logo.png', company.name),
+      logoMediaId: null,
       officePhone: phones.office.href.slice(4),
       fax: '+20248046115',
       whatsapp: '+201004998655',

@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { AdminPage } from '@/components/admin/admin-page'
+import { LoadingState } from '@/components/demo/ui'
 
 export const metadata: Metadata = {
   title: 'M.A.S | لوحة الإدارة',
@@ -64,11 +65,7 @@ export default async function Page({
 
   return (
     <Suspense
-      fallback={
-        <div className="p-12 text-center text-sm text-muted-foreground" role="status">
-          جارٍ تحميل مساحة الإدارة / Loading workspace…
-        </div>
-      }
+      fallback={<LoadingState className="border-0" />}
     >
       <AdminPage key={path.join('/')} path={path} />
     </Suspense>

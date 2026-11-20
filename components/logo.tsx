@@ -14,7 +14,7 @@ export function Logo({
     return (
       <img
         src={logo}
-        alt={company.name.en}
+        alt={company.name.en || 'M.A.S Engineering For Trade'}
         className={cn('h-16 w-auto max-w-52 object-contain', className)}
       />
     )
@@ -26,7 +26,7 @@ export function Logo({
           inverted ? 'text-background' : 'text-primary',
         )}
       >
-        {company.name.en}
+        M.A.S
       </span>
       <span
         className={cn(
@@ -34,7 +34,7 @@ export function Logo({
           inverted ? 'text-background/85' : 'text-muted-foreground',
         )}
       >
-        {company.name.ar}
+        Engineering For Trade
       </span>
     </span>
   )

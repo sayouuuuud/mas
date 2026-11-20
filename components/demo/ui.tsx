@@ -1,6 +1,7 @@
 'use client'
 
 import { PublicLink as Link } from '@/components/demo/public-link'
+import Image from 'next/image'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Inbox,
-  Loader2,
   RefreshCw,
 } from 'lucide-react'
 import { useLanguage } from '@/components/language-provider'
@@ -38,15 +38,27 @@ export function DemoNotice(_props: { admin?: boolean }) {
   return null
 }
 
-export function LoadingState({ label }: { label?: string }) {
+export function LoadingState({
+  label,
+  className,
+}: {
+  label?: string
+  className?: string
+} = {}) {
   const c = useCopy()
   return (
     <div
       role="status"
       aria-live="polite"
-      className="panel flex flex-col items-center justify-center gap-3 py-12 text-center"
+      className={cn(
+        'panel flex flex-col items-center justify-center gap-4 py-12 text-center',
+        className,
+      )}
     >
-      <Loader2 className="size-7 animate-spin text-primary" aria-hidden />
+      <div className="relative grid size-14 shrink-0 place-items-center" aria-hidden="true">
+        <span className="absolute inset-0 rounded-full border-2 border-primary/20 border-t-primary motion-safe:animate-spin" />
+        <Image src="/icon" width={42} height={42} alt="" className="size-[42px]" />
+      </div>
       <p className="text-sm text-muted-foreground">
         {label || c('جارٍ تحميل البيانات…', 'Loading data…')}
       </p>

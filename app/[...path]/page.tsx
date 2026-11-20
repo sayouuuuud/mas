@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { PublicPage } from '@/components/catalog/public-page'
+import { LoadingState } from '@/components/demo/ui'
 
 const SLUG_OR_UUID =
   /^(?:[a-z0-9]+(?:-[a-z0-9]+)*|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
@@ -81,7 +82,7 @@ export default async function Page({
   params: Promise<{ path: string[] }>
 }) {
   const { path: rawPath } = await params
-  const { path } = parseRoute(rawPath)
+  const { locale, path } = parseRoute(rawPath)
   const [section, slug] = path
 
   const validSingle =
@@ -99,9 +100,10 @@ export default async function Page({
   return (
     <Suspense
       fallback={
-        <div className="site-container py-40" role="status">
-          جارٍ تجهيز الصفحة / Loading…
-        </div>
+        <LoadingState
+          className="site-container min-h-72 border-0"
+          label={locale === 'en' ? 'Loading page…' : 'جارٍ تجهيز الصفحة…'}
+        />
       }
     >
       <PublicPage path={path} />
